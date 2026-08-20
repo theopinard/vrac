@@ -1,0 +1,9 @@
+[project]
+name = "simple-substack-republisher"
+version = "0.1.0"
+description = "Republish Substack articles as simple static HTML for Instapaper and Kobo"
+requires-python = ">=3.11"
+dependencies = [
+  "beautifulsoup4==4.13.4",
+  "requests==2.32.4",
+]
