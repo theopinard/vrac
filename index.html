@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kobo Instapaper Image Test</title>
+  <style>
+    body {
+      font-family: Georgia, serif;
+      max-width: 760px;
+      margin: 2rem auto;
+      padding: 0 1rem;
+      line-height: 1.5;
+    }
+    img {
+      display: block;
+      max-width: 100%;
+      height: auto;
+      margin: 1rem 0 2rem;
+    }
+    section {
+      margin-bottom: 3rem;
+    }
+  </style>
+</head>
+<body>
+  <article>
+    <h1>Kobo Instapaper Image Test</h1>
+    <p>This page tests the same ByteByteGo diagram in multiple forms.</p>
+
+    <section>
+      <h2>A — Original Substack CDN</h2>
+      <p>If this is broken on Kobo, it reproduces the original problem.</p>
+      <img src="https://substackcdn.com/image/fetch/$s_!Btgc!,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2F87a3ec64-dd86-41e8-b95f-2efe63b53321_2834x2942.png" alt="A: original Substack CDN image">
+    </section>
+
+    <section>
+      <h2>B — Direct original PNG</h2>
+      <p>This bypasses the Substack image proxy but keeps the original large PNG.</p>
+      <img src="https://substack-post-media.s3.amazonaws.com/public/images/87a3ec64-dd86-41e8-b95f-2efe63b53321_2834x2942.png" alt="B: direct original PNG">
+    </section>
+
+    <section>
+      <h2>C — Resized 1200px JPEG</h2>
+      <p>This should be the safer Kobo-compatible version once hosted publicly.</p>
+      <img src="bytebytego-test-1200.jpg" alt="C: resized 1200 px JPEG">
+    </section>
+
+    <section>
+      <h2>D — Resized 800px JPEG</h2>
+      <p>This is the most conservative version.</p>
+      <img src="bytebytego-test-800.jpg" alt="D: resized 800 px JPEG">
+    </section>
+  </article>
+</body>
+</html>
