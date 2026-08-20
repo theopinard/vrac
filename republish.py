@@ -416,7 +416,11 @@ blockquote {
         article.append(child)
     body.append(article)
 
-    return "<!doctype html>\n" + shell.html.prettify(formatter="minimal") + "\n"
+    return (
+        "<!doctype html>\n"
+        + shell.html.prettify(formatter="minimal").rstrip()
+        + "\n"
+    )
 
 
 def republish(url: str, output_root: Path) -> Path:
