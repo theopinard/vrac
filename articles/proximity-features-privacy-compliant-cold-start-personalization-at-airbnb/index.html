@@ -1,0 +1,1354 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1" name="viewport"/><title>Proximity Features: Privacy-Compliant Cold-Start Personalization at Airbnb</title><style>body {
+  max-width: 760px;
+  margin: 2rem auto;
+  padding: 0 1rem;
+  font-family: Georgia, serif;
+  line-height: 1.55;
+}
+img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 1.5rem auto;
+}
+figure { margin: 2rem 0; }
+figcaption, .article-meta { font-size: 0.9em; }
+table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  margin: 1.5rem 0;
+}
+th, td { padding: 0.25rem 0.5rem; border: 1px solid #bbb; }
+pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+blockquote {
+  margin-left: 0;
+  padding-left: 1rem;
+  border-left: 3px solid #999;
+}
+math[display="block"] { margin: 1rem auto; overflow-x: auto; }</style></head><body><article><h1>Proximity Features: Privacy-Compliant Cold-Start Personalization at Airbnb</h1><p class="article-meta">Wei Jiang, Bin Xu, Hui Gao, Bharathi Thangamani, Weiwei Guo, Sundar Srinivasavaradhan, Tracy Yu, Huiji Gao, Michael Kinoti · arXiv:2607.12246v1 · 14 Jul 2026</p><p class="article-meta">Original: <a href="https://arxiv.org/html/2607.12246v1">arXiv HTML</a> · <a href="https://arxiv.org/pdf/2607.12246v1">PDF</a></p>
+<div id="abstract1"><h2>Abstract</h2>
+<p id="abstract1.1">Personalization in two-sided marketplaces relies heavily on user-level features,
+yet for platforms with infrequent, high-consideration purchases, a large fraction
+of users lack sufficient history for effective recommendation, spanning
+both paid and organic channels.
+At Airbnb, a substantial share of search requests comes from logged-out or
+first-time users, with this challenge especially pronounced on paid-channel
+landing pages, leaving traditional user-level features unavailable for a large
+fraction of traffic. Privacy regulations and
+increasing restrictions on third-party cookies further limit identifier-based
+tracking for non-essential use cases.
+This paper introduces <em id="abstract1.1.1">Proximity Features</em>, a privacy-compliant feature
+system that groups users by geographic proximity using geo-IP data and an
+adaptive clustering algorithm, producing aggregated user-level signals for
+groups of approximately 1,000 nearby users—without requiring a persistent
+individual identifier at inference time. Privacy is preserved by design: the
+pipeline operates on consented, aggregated data only within consent-gated
+privacy controls.</p>
+<p id="abstract1.2">The system is deployed in production at Airbnb, serving multiple surfaces
+including marketing landing pages and destination recommendation, with
+engagement emails integration under way. Online A/B experiments demonstrate statistically significant
+lifts in bookings, with the largest gains observed
+among users with absent or stale history.</p>
+</div>
+<div>
+<h6>Keywords: </h6>cold-start personalization, geo-IP features, privacy-preserving machine learning,
+two-sided marketplace, recommendation systems, marketing personalization
+</div>
+<section id="S1">
+<h2><span>1. </span>Introduction</h2>
+<div id="S1.p1">
+<p id="S1.p1.1">Two-sided marketplaces such as Airbnb depend on personalization to match supply
+with demand effectively. Machine learning models powering search ranking,
+recommendation, and marketing rely on rich user-level features tied to
+individual identifiers. However, a substantial portion of marketplace traffic
+lacks the history needed to compute these features—a challenge known as the
+<em id="S1.p1.1.1">cold-start problem</em>. Throughout this paper, <em id="S1.p1.1.2">user</em> is used as a
+general term encompassing logged-in, logged-out, anonymous users, etc.</p>
+</div>
+<div id="S1.p2">
+<p id="S1.p2.1">At Airbnb, the cold-start problem is pervasive across both paid and organic
+channels. On paid-channel landing pages (e.g., Google, Meta), the majority of
+users are logged out and many are first-time users with no prior Airbnb history.
+Standard <span id="S1.p2.1.1">user_id</span> and cookie-based <span id="S1.p2.1.2">visitor_id</span>
+features are either unavailable (for logged-out users) or too sparse to be useful (for first-time or low-activity users). Throughout this paper, <em id="S1.p2.1.3">cold-start</em> refers to both cases: users for whom individual identifiers are inaccessible and users with insufficient behavioral history.</p>
+</div>
+<div id="S1.p3">
+<p id="S1.p3.1">Compounding this challenge, evolving privacy regulations impose additional
+constraints. Under the General Data Protection Regulation
+(GDPR) <cite>(<a href="#bib.bib23">Voigt and von dem Bussche 2017</a>)</cite>, cookie-tracking requires explicit consent for
+non-essential use cases such as marketing personalization. With increasing
+restrictions on third-party cookies, identifier-based approaches face further
+erosion for anonymous users. Any feature system targeting cold-start users in
+this environment must work <em id="S1.p3.1.1">without individual tracking</em>.</p>
+</div>
+<div id="S1.p4">
+<p id="S1.p4.1">This paper addresses both challenges simultaneously with <em id="S1.p4.1.1">Proximity
+Features</em>, a feature system that leverages aggregated geo-IP signals from a
+local group of nearby users. The key insight is that users from the same
+geographic area exhibit correlated travel preferences—they tend to search for
+and book similar destinations, prefer similar price ranges, and share
+demographic characteristics. By grouping approximately 1,000 users into a
+<em id="S1.p4.1.2">proximity bucket</em> using an adaptive clustering algorithm over geo-IP
+coordinates, Proximity Features constructs rich user-level features immediately
+available for any user whose IP address can be geolocated—regardless of login
+state or prior history. Crucially, the system requires no user-level identifier
+at inference time, making it applicable to anonymous users for whom traditional
+personalization is otherwise unavailable.</p>
+</div>
+<div id="S1.p5">
+<p id="S1.p5.1">The contributions of this paper are as follows:</p>
+<ol id="S1.I1">
+<li id="S1.I1.i1"><span>(1)</span>
+<div id="S1.I1.i1.p1">
+<p id="S1.I1.i1.p1.1"><span id="S1.I1.i1.p1.1.1">New features via proximity key.</span> Proximity Features introduces
+a <em id="S1.I1.i1.p1.1.2">proximity key</em>—a compact identifier for a local geographic group
+of <math alttext="\sim" class="ltx_Math" display="inline" id="S1.I1.i1.p1.m1" intent=":literal"><semantics><mo>∼</mo><annotation encoding="application/x-tex">\sim</annotation></semantics></math>1,000 users—that serves as a privacy-safe analog to
+<span id="S1.I1.i1.p1.1.3">user_id</span> in ML feature pipelines, enabling a new class of
+aggregated user-level features accessible across search ranking,
+recommendation, and marketing surfaces without requiring a persistent
+individual identifier at inference time.</p>
+</div></li>
+<li id="S1.I1.i2"><span>(2)</span>
+<div id="S1.I1.i2.p1">
+<p id="S1.I1.i2.p1.1"><span id="S1.I1.i2.p1.1.1">Cold-start resolution via group aggregation.</span> An adaptive
+geo-IP clustering algorithm constructs proximity buckets at fine granularity
+in dense areas and coarser granularity in sparse areas, aggregating
+user-level signals from nearby users to fill the feature gap for users with
+absent or stale history.</p>
+</div></li>
+<li id="S1.I1.i3"><span>(3)</span>
+<div id="S1.I1.i3.p1">
+<p id="S1.I1.i3.p1.1"><span id="S1.I1.i3.p1.1.1">Privacy-by-design without ID-based tracking.</span> The system
+operates entirely on aggregated, consented geo-IP data. No <span id="S1.I1.i3.p1.1.2">user_id</span>
+or cookie-based <span id="S1.I1.i3.p1.1.3">visitor_id</span> is required at inference time,
+making it resilient to third-party cookie deprecation and designed to
+operate within consent-gated, aggregated processing and deletion controls.</p>
+</div></li>
+</ol>
+<p id="S1.p5.2">The paper presents the core clustering algorithm and production-scale system
+design (Section <a href="#S2"><span>2</span></a>), followed by empirical results from A/B
+experiments across multiple surfaces (Section <a href="#S4"><span>4</span></a>).</p>
+</div>
+</section>
+<section id="S2">
+<h2><span>2. </span>System Design</h2>
+<div id="S2.p1">
+<p id="S2.p1.1">Figure <a href="#acmlabel1"><span>1</span></a> provides an overview of the Proximity Features
+system. Each component is described below.</p>
+</div>
+<figure id="S2.F1"><span><img alt="Figure 1. System architecture. Offline: the adaptive clustering
+algorithm runs once at bootstrap to establish the proximity key partition;
+the IP-to-key mapping, coordinate-to-scalar mapping, and tile-to-bucket-count
+mapping are refreshed daily, and features are aggregated over
+stable keys and stored in a distributed KV store. Online: a
+user’s IP is mapped to a proximity key via a serving API (with on-the-fly
+computation for unseen IPs), and features are fetched for model scoring.
+Engagement emails pass a user ID to the same API, which internally
+resolves it to an IP. System architecture diagram showing the offline pipeline (geo-IP clustering, feature computation, KV store) and online serving path (IP to proximity key lookup, feature fetch, model scoring)." src="figure-1.png"/></span>
+<figcaption><span>Figure 1. </span>System architecture. Offline: the adaptive clustering
+algorithm runs once at bootstrap to establish the proximity key partition;
+the IP-to-key mapping, coordinate-to-scalar mapping, and tile-to-bucket-count
+mapping are refreshed daily, and features are aggregated over
+stable keys and stored in a distributed KV store. Online: a
+user’s IP is mapped to a proximity key via a serving API (with on-the-fly
+computation for unseen IPs), and features are fetched for model scoring.
+Engagement emails pass a user ID to the same API, which internally
+resolves it to an IP.<span id="acmlabel1">System architecture diagram showing the offline pipeline (geo-IP clustering, feature computation, KV store) and online serving path (IP to proximity key lookup, feature fetch, model scoring).</span></figcaption>
+</figure>
+<section id="S2.SS1">
+<h3><span>2.1. </span>Geo-IP Data Source</h3>
+<div id="S2.SS1.p1">
+<p id="S2.SS1.p1.1">Geo-IP databases <cite>(<a href="#bib.bib20">Poese et al. 2011</a>)</cite> map IP addresses to
+latitude/longitude coordinates. A regularly updated geo-IP data source covers
+the vast majority of Airbnb’s global traffic. In our internal analysis,
+city-level agreement is approximately 80%. Most IP addresses map to a single,
+stable latitude/longitude pair, while approximately 15% map to different
+coordinates on different days due to ISP address reassignment.</p>
+</div>
+<div id="S2.SS1.p2">
+<p id="S2.SS1.p2.1">Importantly, coordinates from the geo-IP database are aggregated around the center of population
+rather than precise street-level locations—they cannot be used to identify
+specific addresses or households, even though they include more than two decimal
+places of precision. As a result, multiple IP addresses naturally map to the
+same latitude/longitude pair, typically representing a city center. This
+property is foundational to the privacy design described in
+Section <a href="#S2.SS6"><span>2.6</span></a>.</p>
+</div>
+<div id="S2.SS1.p3">
+<p id="S2.SS1.p3.1">As a data quality measure, bot traffic is filtered prior to clustering. Automated
+crawlers can account for a disproportionate share of requests at certain IP
+addresses, skewing user counts and distorting bucket sizes. Removing
+known-bot traffic ensures that the adaptive clustering algorithm operates on
+a representative distribution of human traffic.</p>
+</div>
+</section>
+<section id="S2.SS2">
+<h3><span>2.2. </span>Proximity Key</h3>
+<div id="S2.SS2.p1">
+<p id="S2.SS2.p1.1">A <em id="S2.SS2.p1.1.1">proximity key</em> uniquely identifies a geographic bucket of users. It
+is constructed from three components:</p>
+<table id="S2.E1">
+<tbody><tr>
+<td rowspan="1"><span>(1)</span></td>
+<td></td>
+<td><math alttext="\text{key}=\text{base64}\bigl(\lfloor\text{lat}\times s\rfloor,\;\lfloor\text{lng}\times s\rfloor,\;h(\text{ip})\bmod b\bigr)" class="ltx_Math" display="block" id="S2.E1.m1" intent=":literal"><semantics><mrow><mtext>key</mtext><mo>=</mo><mrow><mtext>base64</mtext><mo lspace="0em" rspace="0em">​</mo><mrow><mo maxsize="1.200em" minsize="1.200em">(</mo><mrow><mo stretchy="false">⌊</mo><mrow><mtext>lat</mtext><mo lspace="0.222em" rspace="0.222em">×</mo><mi>s</mi></mrow><mo stretchy="false">⌋</mo></mrow><mo>,</mo><mrow><mo stretchy="false">⌊</mo><mrow><mtext>lng</mtext><mo lspace="0.222em" rspace="0.222em">×</mo><mi>s</mi></mrow><mo stretchy="false">⌋</mo></mrow><mo>,</mo><mrow><mrow><mi>h</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mtext>ip</mtext><mo stretchy="false">)</mo></mrow></mrow><mo>mod</mo><mi>b</mi></mrow><mo maxsize="1.200em" minsize="1.200em">)</mo></mrow></mrow></mrow><annotation encoding="application/x-tex">\text{key}=\text{base64}\bigl(\lfloor\text{lat}\times s\rfloor,\;\lfloor\text{lng}\times s\rfloor,\;h(\text{ip})\bmod b\bigr)</annotation></semantics></math></td>
+<td></td></tr></tbody>
+</table>
+<p id="S2.SS2.p1.2">where <math alttext="s" class="ltx_Math" display="inline" id="S2.SS2.p1.m1" intent=":literal"><semantics><mi>s</mi><annotation encoding="application/x-tex">s</annotation></semantics></math> is the <em id="S2.SS2.p1.2.1">proximity scalar</em> controlling geographic tile size, <math alttext="b" class="ltx_Math" display="inline" id="S2.SS2.p1.m2" intent=":literal"><semantics><mi>b</mi><annotation encoding="application/x-tex">b</annotation></semantics></math>
+is the number of IP hash buckets within that tile, and <math alttext="h" class="ltx_Math" display="inline" id="S2.SS2.p1.m3" intent=":literal"><semantics><mi>h</mi><annotation encoding="application/x-tex">h</annotation></semantics></math> is a deterministic
+hash function (<span id="S2.SS2.p1.2.2">xxhash64</span> <cite>(<a href="#bib.bib8">Collet 2012</a>)</cite> is used for consistency between offline and online paths). The key is base64-encoded for compact storage and transmission.</p>
+</div>
+<div id="S2.SS2.p2">
+<p id="S2.SS2.p2.1">For dense locations (Phase 1 of the clustering algorithm), <math alttext="s" class="ltx_Math" display="inline" id="S2.SS2.p2.m1" intent=":literal"><semantics><mi>s</mi><annotation encoding="application/x-tex">s</annotation></semantics></math> corresponds to
+the native precision of the geo-IP coordinates and <math alttext="b&gt;1" class="ltx_Math" display="inline" id="S2.SS2.p2.m2" intent=":literal"><semantics><mrow><mi>b</mi><mo>&gt;</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">b&gt;1</annotation></semantics></math> provides
+sub-location granularity via IP hashing. For sparse locations (Phase 2), <math alttext="s" class="ltx_Math" display="inline" id="S2.SS2.p2.m3" intent=":literal"><semantics><mi>s</mi><annotation encoding="application/x-tex">s</annotation></semantics></math>
+is set to a coarser quantization factor and <math alttext="b=1" class="ltx_Math" display="inline" id="S2.SS2.p2.m4" intent=":literal"><semantics><mrow><mi>b</mi><mo>=</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">b=1</annotation></semantics></math>. The scalar <math alttext="s" class="ltx_Math" display="inline" id="S2.SS2.p2.m5" intent=":literal"><semantics><mi>s</mi><annotation encoding="application/x-tex">s</annotation></semantics></math> and bucket
+count <math alttext="b" class="ltx_Math" display="inline" id="S2.SS2.p2.m6" intent=":literal"><semantics><mi>b</mi><annotation encoding="application/x-tex">b</annotation></semantics></math> are determined per tile by the adaptive clustering algorithm described
+next.</p>
+</div>
+<div id="S2.SS2.p3">
+<p id="S2.SS2.p3.1">The proximity key serves as a privacy-safe analog to <span id="S2.SS2.p3.1.1">user_id</span>: it
+identifies a local geographic area rather than an individual, is small and
+precise for densely populated areas, and coarser for sparse regions. For
+example, in a dense urban area, an IP address maps to a key encoding a
+fine-grained tile with multiple IP hash buckets:
+<span id="S2.SS2.p3.1.2">base64("lat:4071,lng:-7401,bucket:2")</span>.
+In a sparse rural area, the same structure encodes a coarser tile with a
+single bucket:
+<span id="S2.SS2.p3.1.3">base64("lat:39,lng:-105,bucket:0")</span>.
+Any ML model that currently conditions on <span id="S2.SS2.p3.1.4">user_id</span> can condition on
+the proximity key instead to serve anonymous and cold-start users.</p>
+</div>
+</section>
+<section id="S2.SS3">
+<h3><span>2.3. </span>Adaptive Clustering Algorithm</h3>
+<div id="S2.SS3.p1">
+<p id="S2.SS3.p1.1">Proximity bucketing is motivated by the following <em id="S2.SS3.p1.1.1">constrained spatial
+partitioning</em> objective. Let <math alttext="\mathcal{L}=\{(l_{i},g_{i},n_{i})\}_{i=1}^{N}" class="ltx_Math" display="inline" id="S2.SS3.p1.m1" intent=":literal"><semantics><mrow><mi class="ltx_font_mathcaligraphic">ℒ</mi><mo>=</mo><msubsup><mrow><mo stretchy="false">{</mo><mrow><mo stretchy="false">(</mo><msub><mi>l</mi><mi>i</mi></msub><mo>,</mo><msub><mi>g</mi><mi>i</mi></msub><mo>,</mo><msub><mi>n</mi><mi>i</mi></msub><mo stretchy="false">)</mo></mrow><mo stretchy="false">}</mo></mrow><mrow><mi>i</mi><mo>=</mo><mn>1</mn></mrow><mi>N</mi></msubsup></mrow><annotation encoding="application/x-tex">\mathcal{L}=\{(l_{i},g_{i},n_{i})\}_{i=1}^{N}</annotation></semantics></math> be
+the set of <math alttext="N" class="ltx_Math" display="inline" id="S2.SS3.p1.m2" intent=":literal"><semantics><mi>N</mi><annotation encoding="application/x-tex">N</annotation></semantics></math>
+distinct latitude/longitude pairs with their associated user counts. A spatially
+contiguous partition <math alttext="\mathcal{P}=\{B_{1},\ldots,B_{m}\}" class="ltx_Math" display="inline" id="S2.SS3.p1.m3" intent=":literal"><semantics><mrow><mi class="ltx_font_mathcaligraphic">𝒫</mi><mo>=</mo><mrow><mo stretchy="false">{</mo><msub><mi>B</mi><mn>1</mn></msub><mo>,</mo><mi mathvariant="normal">…</mi><mo>,</mo><msub><mi>B</mi><mi>m</mi></msub><mo stretchy="false">}</mo></mrow></mrow><annotation encoding="application/x-tex">\mathcal{P}=\{B_{1},\ldots,B_{m}\}</annotation></semantics></math> of <math alttext="\mathcal{L}" class="ltx_Math" display="inline" id="S2.SS3.p1.m4" intent=":literal"><semantics><mi class="ltx_font_mathcaligraphic">ℒ</mi><annotation encoding="application/x-tex">\mathcal{L}</annotation></semantics></math> is
+sought that maximizes the number of buckets <math alttext="m" class="ltx_Math" display="inline" id="S2.SS3.p1.m5" intent=":literal"><semantics><mi>m</mi><annotation encoding="application/x-tex">m</annotation></semantics></math>—preserving the finest
+geographic granularity—subject to a minimum bucket size constraint:</p>
+<table id="S2.E2">
+<tbody><tr>
+<td rowspan="1"><span>(2)</span></td>
+<td></td>
+<td><math alttext="\max_{|\mathcal{P}|}\quad\text{s.t.}\quad\sum_{i:(l_{i},g_{i},n_{i})\in B_{j}}n_{i}\;\geq\;T\quad\forall\,B_{j}\in\mathcal{P}" class="ltx_math_unparsed" display="block" id="S2.E2.m1" intent=":literal"><semantics><mrow><mi>max</mi><msub><mrow></mrow><mrow><mo stretchy="false">|</mo><mi class="ltx_font_mathcaligraphic">𝒫</mi><mo stretchy="false">|</mo></mrow></msub><mtext>s.t.</mtext><mo movablelimits="false">∑</mo><msub><mrow></mrow><mrow><mi>i</mi><mo lspace="0.278em" rspace="0.278em">:</mo><mrow><mrow><mo stretchy="false">(</mo><msub><mi>l</mi><mi>i</mi></msub><mo>,</mo><msub><mi>g</mi><mi>i</mi></msub><mo>,</mo><msub><mi>n</mi><mi>i</mi></msub><mo stretchy="false">)</mo></mrow><mo>∈</mo><msub><mi>B</mi><mi>j</mi></msub></mrow></mrow></msub><mi>n</mi><msub><mrow></mrow><mi>i</mi></msub><mo rspace="0.558em">≥</mo><mi>T</mi><mo lspace="0.167em" rspace="0.337em">∀</mo><mi>B</mi><msub><mrow></mrow><mi>j</mi></msub><mo>∈</mo><mi class="ltx_font_mathcaligraphic">𝒫</mi></mrow><annotation encoding="application/x-tex">\max_{|\mathcal{P}|}\quad\text{s.t.}\quad\sum_{i:(l_{i},g_{i},n_{i})\in B_{j}}n_{i}\;\geq\;T\quad\forall\,B_{j}\in\mathcal{P}</annotation></semantics></math></td>
+<td></td></tr></tbody>
+</table>
+<p id="S2.SS3.p1.2">where <math alttext="T" class="ltx_Math" display="inline" id="S2.SS3.p1.m6" intent=":literal"><semantics><mi>T</mi><annotation encoding="application/x-tex">T</annotation></semantics></math> is the target bucket size. The spatial contiguity requirement ensures
+that each bucket corresponds to a geographic neighborhood; maximizing <math alttext="m" class="ltx_Math" display="inline" id="S2.SS3.p1.m7" intent=":literal"><semantics><mi>m</mi><annotation encoding="application/x-tex">m</annotation></semantics></math>
+preserves the finest granularity possible. The threshold <math alttext="T\approx 1{,}000" class="ltx_Math" display="inline" id="S2.SS3.p1.m8" intent=":literal"><semantics><mrow><mi>T</mi><mo>≈</mo><mn>1,000</mn></mrow><annotation encoding="application/x-tex">T\approx 1{,}000</annotation></semantics></math> ensures each bucket
+aggregates over sufficiently many users, serving a dual objective: it
+is intended to provide a <math alttext="k" class="ltx_Math" display="inline" id="S2.SS3.p1.m9" intent=":literal"><semantics><mi>k</mi><annotation encoding="application/x-tex">k</annotation></semantics></math>-anonymity-like privacy
+property <cite>(<a href="#bib.bib22">Sweeney 2002</a>)</cite>, and it provides enough observations
+for stable estimation of user-level features (e.g., destination distributions).
+Because the algorithm is greedy, <math alttext="T" class="ltx_Math" display="inline" id="S2.SS3.p1.m10" intent=":literal"><semantics><mi>T</mi><annotation encoding="application/x-tex">T</annotation></semantics></math> is a target rather
+than a strict guarantee—some buckets may be smaller, particularly in
+low-traffic regions assigned at the coarsest resolution.</p>
+</div>
+<div id="S2.SS3.p2">
+<p id="S2.SS3.p2.1">The challenge is that user density varies by orders of magnitude: a single
+coordinate near a major airport may correspond to tens of thousands of users,
+while rural coordinates may have only a handful. Solving
+Equation <a href="#S2.E2"><span>2</span></a> exactly is NP-hard <cite>(<a href="#bib.bib12">Garey and Johnson 1979</a>)</cite>; it is an instance of
+the bin covering problem <cite>(<a href="#bib.bib3">Assmann et al. 1984</a>)</cite>. Rather than pursuing
+theoretical approximation guarantees, a greedy two-phase heuristic is proposed
+that exploits the structure of geo-IP data for computational efficiency and
+practical effectiveness (Algorithm <a href="#algorithm1"><span>1</span></a>).</p>
+</div>
+<figure id="algorithm1">
+<div id="algorithm1.3">
+<div id="algorithm1.3.1">
+<span id="algorithm1.3.1.1"><span id="algorithm1.3.1.1.1">Input:</span> </span>Set of (lat, lng, ip) tuples from consented site visits; target bucket size <math alttext="T" class="ltx_Math" display="inline" id="algorithm1.m1" intent=":literal"><semantics><mi>T</mi><annotation encoding="application/x-tex">T</annotation></semantics></math>; minimum IP count <math alttext="n_{\text{ip}}^{\min}" class="ltx_Math" display="inline" id="algorithm1.m2" intent=":literal"><semantics><msubsup><mi>n</mi><mtext>ip</mtext><mi>min</mi></msubsup><annotation encoding="application/x-tex">n_{\text{ip}}^{\min}</annotation></semantics></math>; scalar range <math alttext="[e_{\min},e_{\max}]" class="ltx_Math" display="inline" id="algorithm1.m3" intent=":literal"><semantics><mrow><mo stretchy="false">[</mo><msub><mi>e</mi><mi>min</mi></msub><mo>,</mo><msub><mi>e</mi><mi>max</mi></msub><mo stretchy="false">]</mo></mrow><annotation encoding="application/x-tex">[e_{\min},e_{\max}]</annotation></semantics></math>; ratio threshold <math alttext="\rho" class="ltx_Math" display="inline" id="algorithm1.m4" intent=":literal"><semantics><mi>ρ</mi><annotation encoding="application/x-tex">\rho</annotation></semantics></math>
+</div>
+<div id="algorithm1.3.2">
+<span id="algorithm1.3.2.1"><span id="algorithm1.3.2.1.1">Output:</span> </span>Proximity key assignment for each (lat, lng) pair
+</div>
+<div id="algorithm1.3.3">
+<span>1</span>
+</div>
+<div id="algorithm1.3.4"><span id="algorithm1.3.4.1">// </span><span id="algorithm1.3.4.2">Phase 1: Dense locations --- zoom in via IP hash buckets </span>
+</div>
+<div id="algorithm1.3.5">
+<span id="algorithm1.3.5.1">foreach</span> <em id="algorithm1.3.5.2">unique (lat, lng) pair</em> <span id="algorithm1.3.5.3">do</span>
+<span>2</span>
+</div>
+<div id="algorithm1.3.6">
+<math alttext="n_{v}\leftarrow" class="ltx_Math" display="inline" id="algorithm1.m5" intent=":literal"><semantics><mrow><msub><mi>n</mi><mi>v</mi></msub><mo stretchy="false">←</mo><mphantom></mphantom></mrow><annotation encoding="application/x-tex">n_{v}\leftarrow</annotation></semantics></math> number of unique users at (lat, lng);
+              <span>3</span>
+</div>
+<div id="algorithm1.3.7"> <span> </span> 
+<math alttext="n_{\text{ip}}\leftarrow" class="ltx_Math" display="inline" id="algorithm1.m6" intent=":literal"><semantics><mrow><msub><mi>n</mi><mtext>ip</mtext></msub><mo stretchy="false">←</mo><mphantom></mphantom></mrow><annotation encoding="application/x-tex">n_{\text{ip}}\leftarrow</annotation></semantics></math> number of unique IP addresses at (lat, lng);
+              <span>4</span>
+</div>
+<div id="algorithm1.3.8"> <span> </span> 
+<span id="algorithm1.3.8.1">if</span> <em id="algorithm1.3.8.2"><math alttext="n_{v}\geq T" class="ltx_Math" display="inline" id="algorithm1.m7" intent=":literal"><semantics><mrow><msub><mi>n</mi><mi>v</mi></msub><mo>≥</mo><mi>T</mi></mrow><annotation encoding="application/x-tex">n_{v}\geq T</annotation></semantics></math> <span id="algorithm1.3.8.2.1">and</span> <math alttext="n_{\text{ip}}\geq n_{\text{ip}}^{\min}" class="ltx_Math" display="inline" id="algorithm1.m8" intent=":literal"><semantics><mrow><msub><mi>n</mi><mtext class="ltx_mathvariant_italic">ip</mtext></msub><mo>≥</mo><msubsup><mi>n</mi><mtext class="ltx_mathvariant_italic">ip</mtext><mi>min</mi></msubsup></mrow><annotation encoding="application/x-tex">n_{\text{ip}}\geq n_{\text{ip}}^{\min}</annotation></semantics></math></em> <span id="algorithm1.3.8.3">then</span>
+<span>5</span>
+</div>
+<div id="algorithm1.3.9"> <span> </span> 
+<math alttext="b\leftarrow\lceil n_{v}/T\rceil" class="ltx_Math" display="inline" id="algorithm1.m9" intent=":literal"><semantics><mrow><mi>b</mi><mo stretchy="false">←</mo><mrow><mo stretchy="false">⌈</mo><mrow><msub><mi>n</mi><mi>v</mi></msub><mo>/</mo><mi>T</mi></mrow><mo stretchy="false">⌉</mo></mrow></mrow><annotation encoding="application/x-tex">b\leftarrow\lceil n_{v}/T\rceil</annotation></semantics></math>;
+              <span>6</span>
+</div>
+<div id="algorithm1.3.10"> <span> </span>  <span> </span> 
+Assign each user to bucket <math alttext="({\text{lat}},\;{\text{lng}},\;h(\text{ip})\bmod b)" class="ltx_Math" display="inline" id="algorithm1.m10" intent=":literal"><semantics><mrow><mo stretchy="false">(</mo><mtext>lat</mtext><mo>,</mo><mtext>lng</mtext><mo>,</mo><mrow><mrow><mi>h</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mtext>ip</mtext><mo stretchy="false">)</mo></mrow></mrow><mo>mod</mo><mi>b</mi></mrow><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">({\text{lat}},\;{\text{lng}},\;h(\text{ip})\bmod b)</annotation></semantics></math>;
+              <span>7</span>
+</div>
+<div id="algorithm1.3.11"> <span> </span>  <span> </span> 
+Mark (lat, lng) as <em id="algorithm1.3.11.1">assigned</em>;
+              <span>8</span>
+</div>
+<div id="algorithm1.3.12"> <span> </span>  <span> </span> 
+
+              <span>9</span>
+</div>
+<div id="algorithm1.3.13"><span id="algorithm1.3.13.1">// </span><span id="algorithm1.3.13.2">Phase 2: Sparse locations --- zoom out via multi-pass coarsening </span>
+</div>
+<div id="algorithm1.3.14">
+<math alttext="R\leftarrow" class="ltx_Math" display="inline" id="algorithm1.m11" intent=":literal"><semantics><mrow><mi>R</mi><mo stretchy="false">←</mo><mphantom></mphantom></mrow><annotation encoding="application/x-tex">R\leftarrow</annotation></semantics></math> all unassigned (lat, lng) pairs;
+              <span>10</span>
+</div>
+<div id="algorithm1.3.15">
+<span id="algorithm1.3.15.1">for</span> <em id="algorithm1.3.15.2"><math alttext="e\leftarrow e_{\max}" class="ltx_Math" display="inline" id="algorithm1.m12" intent=":literal"><semantics><mrow><mi>e</mi><mo stretchy="false">←</mo><msub><mi>e</mi><mi>max</mi></msub></mrow><annotation encoding="application/x-tex">e\leftarrow e_{\max}</annotation></semantics></math> <span id="algorithm1.3.15.2.1">to</span> <math alttext="e_{\min}" class="ltx_Math" display="inline" id="algorithm1.m13" intent=":literal"><semantics><msub><mi>e</mi><mi>min</mi></msub><annotation encoding="application/x-tex">e_{\min}</annotation></semantics></math></em> <span id="algorithm1.3.15.3">do</span>
+<span>11</span>
+</div>
+<div id="algorithm1.3.16">
+<math alttext="s\leftarrow 10^{e}" class="ltx_Math" display="inline" id="algorithm1.m14" intent=":literal"><semantics><mrow><mi>s</mi><mo stretchy="false">←</mo><msup><mn>10</mn><mi>e</mi></msup></mrow><annotation encoding="application/x-tex">s\leftarrow 10^{e}</annotation></semantics></math>;
+              <span>12</span>
+</div>
+<div id="algorithm1.3.17"> <span> </span> 
+Quantize each <math alttext="(lat,lng)\in R" class="ltx_Math" display="inline" id="algorithm1.m15" intent=":literal"><semantics><mrow><mrow><mo stretchy="false">(</mo><mrow><mi>l</mi><mo lspace="0em" rspace="0em">​</mo><mi>a</mi><mo lspace="0em" rspace="0em">​</mo><mi>t</mi></mrow><mo>,</mo><mrow><mi>l</mi><mo lspace="0em" rspace="0em">​</mo><mi>n</mi><mo lspace="0em" rspace="0em">​</mo><mi>g</mi></mrow><mo stretchy="false">)</mo></mrow><mo>∈</mo><mi>R</mi></mrow><annotation encoding="application/x-tex">(lat,lng)\in R</annotation></semantics></math> to tile <math alttext="(\lfloor lat\cdot s\rfloor,\;\lfloor lng\cdot s\rfloor)" class="ltx_Math" display="inline" id="algorithm1.m16" intent=":literal"><semantics><mrow><mo stretchy="false">(</mo><mrow><mo stretchy="false">⌊</mo><mrow><mrow><mi>l</mi><mo lspace="0em" rspace="0em">​</mo><mi>a</mi><mo lspace="0em" rspace="0em">​</mo><mi>t</mi></mrow><mo lspace="0.222em" rspace="0.222em">⋅</mo><mi>s</mi></mrow><mo stretchy="false">⌋</mo></mrow><mo rspace="0.447em">,</mo><mrow><mo stretchy="false">⌊</mo><mrow><mrow><mi>l</mi><mo lspace="0em" rspace="0em">​</mo><mi>n</mi><mo lspace="0em" rspace="0em">​</mo><mi>g</mi></mrow><mo lspace="0.222em" rspace="0.222em">⋅</mo><mi>s</mi></mrow><mo stretchy="false">⌋</mo></mrow><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">(\lfloor lat\cdot s\rfloor,\;\lfloor lng\cdot s\rfloor)</annotation></semantics></math>;
+              <span>13</span>
+</div>
+<div id="algorithm1.3.18"> <span> </span> 
+Compute <math alttext="n_{v}" class="ltx_Math" display="inline" id="algorithm1.m17" intent=":literal"><semantics><msub><mi>n</mi><mi>v</mi></msub><annotation encoding="application/x-tex">n_{v}</annotation></semantics></math> per quantized tile;
+              <span>14</span>
+</div>
+<div id="algorithm1.3.19"> <span> </span> 
+<math alttext="r\leftarrow" class="ltx_Math" display="inline" id="algorithm1.m18" intent=":literal"><semantics><mrow><mi>r</mi><mo stretchy="false">←</mo><mphantom></mphantom></mrow><annotation encoding="application/x-tex">r\leftarrow</annotation></semantics></math> fraction of tiles with <math alttext="n_{v}\geq T" class="ltx_Math" display="inline" id="algorithm1.m19" intent=":literal"><semantics><mrow><msub><mi>n</mi><mi>v</mi></msub><mo>≥</mo><mi>T</mi></mrow><annotation encoding="application/x-tex">n_{v}\geq T</annotation></semantics></math>;
+              <span>15</span>
+</div>
+<div id="algorithm1.3.20"> <span> </span> 
+<span id="algorithm1.3.20.1">if</span> <em id="algorithm1.3.20.2"><math alttext="r\geq\rho" class="ltx_Math" display="inline" id="algorithm1.m20" intent=":literal"><semantics><mrow><mi>r</mi><mo>≥</mo><mi>ρ</mi></mrow><annotation encoding="application/x-tex">r\geq\rho</annotation></semantics></math> <span id="algorithm1.3.20.2.1">or</span> <math alttext="e=e_{\min}" class="ltx_Math" display="inline" id="algorithm1.m21" intent=":literal"><semantics><mrow><mi>e</mi><mo>=</mo><msub><mi>e</mi><mi>min</mi></msub></mrow><annotation encoding="application/x-tex">e=e_{\min}</annotation></semantics></math></em> <span id="algorithm1.3.20.3">then</span>
+<span>16</span>
+</div>
+<div id="algorithm1.3.21"> <span> </span> 
+<span id="algorithm1.3.21.1">foreach</span> <em id="algorithm1.3.21.2">tile with <math alttext="n_{v}\geq T" class="ltx_Math" display="inline" id="algorithm1.m22" intent=":literal"><semantics><mrow><msub><mi>n</mi><mi>v</mi></msub><mo>≥</mo><mi>T</mi></mrow><annotation encoding="application/x-tex">n_{v}\geq T</annotation></semantics></math> <span id="algorithm1.3.21.2.1">(</span>or all remaining tiles if <math alttext="e=e_{\min}" class="ltx_Math" display="inline" id="algorithm1.m23" intent=":literal"><semantics><mrow><mi>e</mi><mo>=</mo><msub><mi>e</mi><mi>min</mi></msub></mrow><annotation encoding="application/x-tex">e=e_{\min}</annotation></semantics></math><span id="algorithm1.3.21.2.2">)</span></em> <span id="algorithm1.3.21.3">do</span>
+<span>17</span>
+</div>
+<div id="algorithm1.3.22"> <span> </span>  <span> </span> 
+Assign all (lat, lng) in tile with scalar <math alttext="s" class="ltx_Math" display="inline" id="algorithm1.m24" intent=":literal"><semantics><mi>s</mi><annotation encoding="application/x-tex">s</annotation></semantics></math> and <math alttext="b=1" class="ltx_Math" display="inline" id="algorithm1.m25" intent=":literal"><semantics><mrow><mi>b</mi><mo>=</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">b=1</annotation></semantics></math>;
+              <span>18</span>
+</div>
+<div id="algorithm1.3.23"> <span> </span>  <span> </span>  <span> </span> 
+<math alttext="R\leftarrow R\setminus\text{assigned pairs}" class="ltx_Math" display="inline" id="algorithm1.m26" intent=":literal"><semantics><mrow><mi>R</mi><mo stretchy="false">←</mo><mrow><mi>R</mi><mo>∖</mo><mtext>assigned pairs</mtext></mrow></mrow><annotation encoding="application/x-tex">R\leftarrow R\setminus\text{assigned pairs}</annotation></semantics></math>;
+              <span>19</span>
+</div>
+<div id="algorithm1.3.24"> <span> </span>  <span> </span> 
+<span id="algorithm1.3.24.1">if</span> <em id="algorithm1.3.24.2"><math alttext="R=\emptyset" class="ltx_Math" display="inline" id="algorithm1.m27" intent=":literal"><semantics><mrow><mi>R</mi><mo>=</mo><mi mathvariant="normal">∅</mi></mrow><annotation encoding="application/x-tex">R=\emptyset</annotation></semantics></math></em> <span id="algorithm1.3.24.3">then</span> <span id="algorithm1.3.24.4">break</span>;
+              <span>20</span>
+</div>
+<div id="algorithm1.3.25"> <span> </span>  <span> </span> 
+
+</div>
+</div>
+<figcaption><span><span id="algorithm1.4">Algorithm 1</span> </span>Adaptive Proximity Clustering</figcaption>
+</figure>
+<section id="S2.SS3.SSS0.Px1">
+<h4>Phase 1: Dense locations (refinement).</h4>
+<div id="S2.SS3.SSS0.Px1.p1">
+<p id="S2.SS3.SSS0.Px1.p1.1">For latitude/longitude pairs with <math alttext="\geq T" class="ltx_Math" display="inline" id="S2.SS3.SSS0.Px1.p1.m1" intent=":literal"><semantics><mrow><mphantom></mphantom><mo>≥</mo><mi>T</mi></mrow><annotation encoding="application/x-tex">\geq T</annotation></semantics></math> unique users <em id="S2.SS3.SSS0.Px1.p1.1.1">and</em>
+<math alttext="\geq n_{\text{ip}}^{\min}" class="ltx_Math" display="inline" id="S2.SS3.SSS0.Px1.p1.m2" intent=":literal"><semantics><mrow><mphantom></mphantom><mo>≥</mo><msubsup><mi>n</mi><mtext>ip</mtext><mi>min</mi></msubsup></mrow><annotation encoding="application/x-tex">\geq n_{\text{ip}}^{\min}</annotation></semantics></math> unique IP addresses, the location is <em id="S2.SS3.SSS0.Px1.p1.1.2">refined</em>
+by subdividing using IP hash buckets. The number of buckets is set to
+<math alttext="b=\lceil n_{\text{users}}/T\rceil" class="ltx_Math" display="inline" id="S2.SS3.SSS0.Px1.p1.m3" intent=":literal"><semantics><mrow><mi>b</mi><mo>=</mo><mrow><mo stretchy="false">⌈</mo><mrow><msub><mi>n</mi><mtext>users</mtext></msub><mo>/</mo><mi>T</mi></mrow><mo stretchy="false">⌉</mo></mrow></mrow><annotation encoding="application/x-tex">b=\lceil n_{\text{users}}/T\rceil</annotation></semantics></math>, targeting buckets of
+approximately <math alttext="T" class="ltx_Math" display="inline" id="S2.SS3.SSS0.Px1.p1.m4" intent=":literal"><semantics><mi>T</mi><annotation encoding="application/x-tex">T</annotation></semantics></math> users each. These locations retain the original
+(full-precision) latitude/longitude as their tile coordinates, with the IP
+bucket index providing sub-tile granularity. This phase maximizes geographic granularity for dense locations by retaining
+native coordinate precision; the target of approximately <math alttext="T" class="ltx_Math" display="inline" id="S2.SS3.SSS0.Px1.p1.m5" intent=":literal"><semantics><mi>T</mi><annotation encoding="application/x-tex">T</annotation></semantics></math> users per bucket
+is best-effort, as hash-based assignment does not guarantee perfectly uniform
+distribution.</p>
+</div>
+</section>
+<section id="S2.SS3.SSS0.Px2">
+<h4>Phase 2: Sparse locations (coarsening).</h4>
+<div id="S2.SS3.SSS0.Px2.p1">
+<p id="S2.SS3.SSS0.Px2.p1.1">For the remaining locations, a multi-pass coarsening procedure is applied,
+analogous to adaptive mesh refinement <cite>(<a href="#bib.bib5">Berger and Oliger 1984</a>)</cite>, where
+resolution is reduced until sufficient mass accumulates in each cell. The
+algorithm iterates over decreasing scalar values <math alttext="s=10^{e}" class="ltx_Math" display="inline" id="S2.SS3.SSS0.Px2.p1.m1" intent=":literal"><semantics><mrow><mi>s</mi><mo>=</mo><msup><mn>10</mn><mi>e</mi></msup></mrow><annotation encoding="application/x-tex">s=10^{e}</annotation></semantics></math> for
+<math alttext="e\in\{e_{\max},e_{\max}-1,\ldots,e_{\min}\}" class="ltx_Math" display="inline" id="S2.SS3.SSS0.Px2.p1.m2" intent=":literal"><semantics><mrow><mi>e</mi><mo>∈</mo><mrow><mo stretchy="false">{</mo><mrow><msub><mi>e</mi><mi>max</mi></msub><mo>,</mo><mrow><msub><mi>e</mi><mi>max</mi></msub><mo>−</mo><mn>1</mn></mrow><mo>,</mo><mi mathvariant="normal">…</mi><mo>,</mo><msub><mi>e</mi><mi>min</mi></msub></mrow><mo stretchy="false">}</mo></mrow></mrow><annotation encoding="application/x-tex">e\in\{e_{\max},e_{\max}-1,\ldots,e_{\min}\}</annotation></semantics></math>. At each pass, all remaining coordinates are quantized by <math alttext="s" class="ltx_Math" display="inline" id="S2.SS3.SSS0.Px2.p1.m3" intent=":literal"><semantics><mi>s</mi><annotation encoding="application/x-tex">s</annotation></semantics></math> and the number of
+unique users per quantized tile is computed. When the fraction of qualifying tiles (those with
+<math alttext="n_{v}\geq T" class="ltx_Math" display="inline" id="S2.SS3.SSS0.Px2.p1.m4" intent=":literal"><semantics><mrow><msub><mi>n</mi><mi>v</mi></msub><mo>≥</mo><mi>T</mi></mrow><annotation encoding="application/x-tex">n_{v}\geq T</annotation></semantics></math>) meets the ratio threshold <math alttext="\rho" class="ltx_Math" display="inline" id="S2.SS3.SSS0.Px2.p1.m5" intent=":literal"><semantics><mi>ρ</mi><annotation encoding="application/x-tex">\rho</annotation></semantics></math>, they are <em id="S2.SS3.SSS0.Px2.p1.1.1">assigned</em> at
+this scalar level, and their constituent coordinates are removed from
+subsequent passes. This continues until all coordinates are assigned or the
+minimum scalar <math alttext="e_{\min}" class="ltx_Math" display="inline" id="S2.SS3.SSS0.Px2.p1.m6" intent=":literal"><semantics><msub><mi>e</mi><mi>min</mi></msub><annotation encoding="application/x-tex">e_{\min}</annotation></semantics></math> is reached.</p>
+</div>
+<div id="S2.SS3.SSS0.Px2.p2">
+<p id="S2.SS3.SSS0.Px2.p2.1">The result is an adaptive resolution map: urban centers receive fine-grained
+tiles (high <math alttext="s" class="ltx_Math" display="inline" id="S2.SS3.SSS0.Px2.p2.m1" intent=":literal"><semantics><mi>s</mi><annotation encoding="application/x-tex">s</annotation></semantics></math>), while rural areas are grouped into coarser tiles (low <math alttext="s" class="ltx_Math" display="inline" id="S2.SS3.SSS0.Px2.p2.m2" intent=":literal"><semantics><mi>s</mi><annotation encoding="application/x-tex">s</annotation></semantics></math>).
+No IP bucketing is applied for sparse locations (<math alttext="b=1" class="ltx_Math" display="inline" id="S2.SS3.SSS0.Px2.p2.m3" intent=":literal"><semantics><mrow><mi>b</mi><mo>=</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">b=1</annotation></semantics></math>). The greedy
+fine-to-coarse strategy ensures that each assigned tile satisfies the bucket
+size constraint at the finest resolution possible, capturing the same design
+tradeoff as Equation <a href="#S2.E2"><span>2</span></a>: maximizing geographic granularity
+subject to bucket-size constraints.</p>
+</div>
+</section>
+<section id="S2.SS3.SSS0.Px3">
+<h4>Complexity.</h4>
+<div id="S2.SS3.SSS0.Px3.p1">
+<p id="S2.SS3.SSS0.Px3.p1.1">Each pass requires a single group-by aggregation over the remaining data. With
+<math alttext="k" class="ltx_Math" display="inline" id="S2.SS3.SSS0.Px3.p1.m1" intent=":literal"><semantics><mi>k</mi><annotation encoding="application/x-tex">k</annotation></semantics></math> passes (<math alttext="k\leq e_{\max}-e_{\min}+1" class="ltx_Math" display="inline" id="S2.SS3.SSS0.Px3.p1.m2" intent=":literal"><semantics><mrow><mi>k</mi><mo>≤</mo><mrow><mrow><msub><mi>e</mi><mi>max</mi></msub><mo>−</mo><msub><mi>e</mi><mi>min</mi></msub></mrow><mo>+</mo><mn>1</mn></mrow></mrow><annotation encoding="application/x-tex">k\leq e_{\max}-e_{\min}+1</annotation></semantics></math>, typically <math alttext="\leq 10" class="ltx_Math" display="inline" id="S2.SS3.SSS0.Px3.p1.m3" intent=":literal"><semantics><mrow><mphantom></mphantom><mo>≤</mo><mn>10</mn></mrow><annotation encoding="application/x-tex">\leq 10</annotation></semantics></math>), the total
+cost is <math alttext="O(kN)" class="ltx_Math" display="inline" id="S2.SS3.SSS0.Px3.p1.m4" intent=":literal"><semantics><mrow><mi>O</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mrow><mi>k</mi><mo lspace="0em" rspace="0em">​</mo><mi>N</mi></mrow><mo stretchy="false">)</mo></mrow></mrow><annotation encoding="application/x-tex">O(kN)</annotation></semantics></math> where <math alttext="N" class="ltx_Math" display="inline" id="S2.SS3.SSS0.Px3.p1.m5" intent=":literal"><semantics><mi>N</mi><annotation encoding="application/x-tex">N</annotation></semantics></math> is the number of distinct latitude/longitude pairs.
+Because coordinates from the geo-IP database are pre-aggregated around population centers, <math alttext="N" class="ltx_Math" display="inline" id="S2.SS3.SSS0.Px3.p1.m6" intent=":literal"><semantics><mi>N</mi><annotation encoding="application/x-tex">N</annotation></semantics></math> is
+orders of magnitude smaller than the number of raw IP addresses—substantially
+cheaper than general spatial clustering
+algorithms <cite>(<a href="#bib.bib10">Ester et al. 1996</a>; <a href="#bib.bib4">Bentley 1975</a>)</cite>.</p>
+</div>
+</section>
+<section id="S2.SS3.SSS0.Px4">
+<h4>Parameter selection.</h4>
+<div id="S2.SS3.SSS0.Px4.p1">
+<p id="S2.SS3.SSS0.Px4.p1.1">The algorithm is governed by a small set of parameters: target bucket size <math alttext="T" class="ltx_Math" display="inline" id="S2.SS3.SSS0.Px4.p1.m1" intent=":literal"><semantics><mi>T</mi><annotation encoding="application/x-tex">T</annotation></semantics></math>,
+minimum IP count <math alttext="n_{\text{ip}}^{\min}" class="ltx_Math" display="inline" id="S2.SS3.SSS0.Px4.p1.m2" intent=":literal"><semantics><msubsup><mi>n</mi><mtext>ip</mtext><mi>min</mi></msubsup><annotation encoding="application/x-tex">n_{\text{ip}}^{\min}</annotation></semantics></math>, scalar range <math alttext="[e_{\min},e_{\max}]" class="ltx_Math" display="inline" id="S2.SS3.SSS0.Px4.p1.m3" intent=":literal"><semantics><mrow><mo stretchy="false">[</mo><msub><mi>e</mi><mi>min</mi></msub><mo>,</mo><msub><mi>e</mi><mi>max</mi></msub><mo stretchy="false">]</mo></mrow><annotation encoding="application/x-tex">[e_{\min},e_{\max}]</annotation></semantics></math>,
+and ratio threshold <math alttext="\rho" class="ltx_Math" display="inline" id="S2.SS3.SSS0.Px4.p1.m4" intent=":literal"><semantics><mi>ρ</mi><annotation encoding="application/x-tex">\rho</annotation></semantics></math>. Exact production settings are omitted because they
+were tuned on proprietary traffic distributions and are tightly coupled to
+Airbnb-specific site visit volume. Illustrative values such as
+<math alttext="T\approx 1{,}000" class="ltx_Math" display="inline" id="S2.SS3.SSS0.Px4.p1.m5" intent=":literal"><semantics><mrow><mi>T</mi><mo>≈</mo><mn>1,000</mn></mrow><annotation encoding="application/x-tex">T\approx 1{,}000</annotation></semantics></math> and <math alttext="n_{\text{ip}}^{\min}=100" class="ltx_Math" display="inline" id="S2.SS3.SSS0.Px4.p1.m6" intent=":literal"><semantics><mrow><msubsup><mi>n</mi><mtext>ip</mtext><mi>min</mi></msubsup><mo>=</mo><mn>100</mn></mrow><annotation encoding="application/x-tex">n_{\text{ip}}^{\min}=100</annotation></semantics></math> are provided only to
+convey the operating regime, not as universal or production defaults. A grid of
+candidate values was evaluated using offline destination prediction accuracy
+(Recall@<math alttext="k" class="ltx_Math" display="inline" id="S2.SS3.SSS0.Px4.p1.m7" intent=":literal"><semantics><mi>k</mi><annotation encoding="application/x-tex">k</annotation></semantics></math>), selecting the combination that maximized predictive signal while
+maintaining the bucket size target. This empirical tuning is part of the greedy
+design: rather than solving the partitioning problem exactly, the heuristic is
+parameterized and values are selected that perform best in practice.</p>
+</div>
+</section>
+<section id="S2.SS3.SSS0.Px5">
+<h4>Key stability.</h4>
+<div id="S2.SS3.SSS0.Px5.p1">
+<p id="S2.SS3.SSS0.Px5.p1.1">Proximity records are stable at multiple levels. Latitude/longitude coordinates
+from the geo-IP database are inherently stable, as they are anchored to
+population centers rather than individual addresses. The IP-to-coordinate
+mapping is also mostly stable: the majority of IP addresses resolve to the same
+coordinates over time, with only a small fraction shifting due to ISP address
+reassignment. Together, these properties mean that proximity keys change
+infrequently—the same key assignment can serve production traffic for years
+without re-clustering. The key partition used throughout this paper was
+bootstrapped on 2023 site visit data and has remained in production without
+re-clustering since. The daily batch pipeline handles incremental changes
+(new IPs, occasional coordinate shifts, etc.) by refreshing the IP-to-key mapping,
+the coordinate-to-scalar mapping, and the tile-to-bucket-count mapping.
+Features, by contrast, are refreshed daily, reflecting evolving user signals
+over the stable key partition. This decoupling of keys and features minimizes
+maintenance overhead while keeping signals fresh.</p>
+</div>
+<div id="S2.SS3.SSS0.Px5.p2">
+<p id="S2.SS3.SSS0.Px5.p2.1">Proximity keys are also robust to IP address reassignment. Since proximity
+features represent aggregate group signals rather than individual behavior,
+geographic consistency at the group level is what matters—not per-IP
+stability. An IP that shifts from a suburban area to a nearby city center is
+reassigned to the corresponding proximity bucket; its signals enrich
+both buckets over time. The only failure case would be a gross misassignment
+(e.g., an IP in Los Angeles resolving to New York), which is rare and mitigated
+by the geo-IP data quality checks described above.</p>
+</div>
+</section>
+</section>
+<section id="S2.SS4">
+<h3><span>2.4. </span>Feature Computation</h3>
+<div id="S2.SS4.p1">
+<p id="S2.SS4.p1.1">Features are computed daily over each proximity bucket and stored in a
+distributed key-value store. They fall into three categories:
+<span id="S2.SS4.p1.1.1">short-term engagement</span> (7/28/56-day windows: top destinations, room
+types, median price, search parameters);
+<span id="S2.SS4.p1.1.2">long-term booking patterns</span> (28/90/365-day windows: booked
+destinations, listing attributes, travel party characteristics); and
+<span id="S2.SS4.p1.1.3">demographics</span> (birth decade distribution, bucket size, geographic
+metadata).</p>
+</div>
+<div id="S2.SS4.p2">
+<p id="S2.SS4.p2.1">Short-term features additionally capture search intent signals: typical values
+for party size, trip duration, listing prices, and travel distance. Long-term
+features include travel party attributes such as the fraction of bookings
+involving pets, families, or groups—signals otherwise unavailable for
+cold-start users. Multiple aggregation windows are retained rather than
+collapsed into a single value, allowing downstream models to select the time
+horizon most predictive for their task, as validated by the offline recall
+results in Section <a href="#S4"><span>4</span></a>.</p>
+</div>
+</section>
+<section id="S2.SS5">
+<h3><span>2.5. </span>Serving</h3>
+<div id="S2.SS5.p1">
+<p id="S2.SS5.p1.1">Proximity features support both online and offline consumption via a unified
+serving API. For real-time surfaces, the <span id="S2.SS5.p1.1.1">client_ip</span> of the visiting
+user, as sourced from the CDN, is resolved to a proximity key—first via a
+daily batch mapping, falling back to on-the-fly
+key computation for unseen IPs—and the corresponding features are fetched from
+the KV store. The API is a <em id="S2.SS5.p1.1.2">soft dependency</em>: models proceed with a
+degraded feature vector if the lookup exceeds a 60ms timeout. For batch channels
+(e.g., engagement emails), callers pass a <span id="S2.SS5.p1.1.3">user_id</span>; the API resolves it
+to a recent IP and follows the same flow.</p>
+</div>
+<div id="S2.SS5.p2">
+<p id="S2.SS5.p2.1">For unseen IPs, the on-the-fly algorithm computes a proximity key in real time
+without requiring a full re-clustering: (1) the IP is geolocated to
+(lat, lng); (2) the proximity scalar <math alttext="s" class="ltx_Math" display="inline" id="S2.SS5.p2.m1" intent=":literal"><semantics><mi>s</mi><annotation encoding="application/x-tex">s</annotation></semantics></math> for that coordinate is fetched
+from the KV store; (3) if no scalar exists, a default of <math alttext="s{=}1" class="ltx_Math" display="inline" id="S2.SS5.p2.m2" intent=":literal"><semantics><mrow><mi>s</mi><mo>=</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">s{=}1</annotation></semantics></math> is
+used; (4) the quantized geo tile is computed; (5) the bucket count <math alttext="b" class="ltx_Math" display="inline" id="S2.SS5.p2.m3" intent=":literal"><semantics><mi>b</mi><annotation encoding="application/x-tex">b</annotation></semantics></math> for that
+tile is fetched from the KV store; and (6) the key is computed as:</p>
+<table id="S2.Ex1">
+<tbody><tr>
+<td></td>
+<td><math alttext="\text{base64}\bigl(\lfloor\text{lat}{\cdot}s\rfloor,\;\lfloor\text{lng}{\cdot}s\rfloor,\;h(\text{ip})\bmod b\bigr)." class="ltx_Math" display="block" id="S2.Ex1.m1" intent=":literal"><semantics><mrow><mrow><mtext>base64</mtext><mo lspace="0em" rspace="0em">​</mo><mrow><mo maxsize="1.200em" minsize="1.200em">(</mo><mrow><mo stretchy="false">⌊</mo><mrow><mtext>lat</mtext><mo lspace="0.222em" rspace="0.222em">⋅</mo><mi>s</mi></mrow><mo stretchy="false">⌋</mo></mrow><mo>,</mo><mrow><mo stretchy="false">⌊</mo><mrow><mtext>lng</mtext><mo lspace="0.222em" rspace="0.222em">⋅</mo><mi>s</mi></mrow><mo stretchy="false">⌋</mo></mrow><mo>,</mo><mrow><mrow><mi>h</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mtext>ip</mtext><mo stretchy="false">)</mo></mrow></mrow><mo>mod</mo><mi>b</mi></mrow><mo maxsize="1.200em" minsize="1.200em">)</mo></mrow></mrow><mo lspace="0em">.</mo></mrow><annotation encoding="application/x-tex">\text{base64}\bigl(\lfloor\text{lat}{\cdot}s\rfloor,\;\lfloor\text{lng}{\cdot}s\rfloor,\;h(\text{ip})\bmod b\bigr).</annotation></semantics></math></td>
+<td></td></tr></tbody>
+</table>
+<p id="S2.SS5.p2.2">This mirrors the offline key construction (Equation <a href="#S2.E1"><span>1</span></a>) exactly,
+ensuring new IPs always receive a valid, consistent proximity key. If the bucket count lookup misses, the API returns no proximity key and the
+model proceeds via the soft dependency mechanism; this occurs in fewer than
+0.5% of requests in practice.</p>
+</div>
+</section>
+<section id="S2.SS6">
+<h3><span>2.6. </span>Privacy Design</h3>
+<div id="S2.SS6.p1">
+<p id="S2.SS6.p1.1">Proximity Features achieve privacy through layered obfuscation, beginning with
+data selection. The input dataset for the clustering algorithm excludes users
+who did not provide consent, respecting user choice from the outset.</p>
+</div>
+<div id="S2.SS6.p2">
+<p id="S2.SS6.p2.1">At the geolocation layer, the latitude and longitude coordinates from the geo-IP database
+are already aggregated around population centers—they cannot identify
+specific addresses or households, even though they include more than two decimal
+places of precision. As a result, multiple IP addresses naturally map to the
+same latitude/longitude pair, typically representing a city center.</p>
+</div>
+<div id="S2.SS6.p3">
+<p id="S2.SS6.p3.1">Note that users connecting via VPN are assigned to the proximity bucket of the
+VPN exit node rather than their physical location; this reflects a deliberate
+user choice and is consistent with the system’s privacy-respecting design.</p>
+</div>
+<div id="S2.SS6.p4">
+<p id="S2.SS6.p4.1">Building on this inherent coarseness, the adaptive clustering algorithm applies
+additional aggregation to form local groups targeting approximately 1,000 users.
+All modeling is performed at this group level: the features
+associated with a proximity key reflect the collective patterns of the group,
+not the actions of any individual. This ensures that individual user behavior
+is masked within the aggregate, avoiding individual tracking entirely.</p>
+</div>
+<div id="S2.SS6.p5">
+<p id="S2.SS6.p5.1">Beyond the algorithmic design, the system enforces operational safeguards:</p>
+<ul id="S2.I1">
+<li id="S2.I1.i1"><span>•</span>
+<div id="S2.I1.i1.p1">
+<p id="S2.I1.i1.p1.1"><span id="S2.I1.i1.p1.1.1">No persistent individual identifier at inference.</span> The
+real-time serving path requires only <span id="S2.I1.i1.p1.1.2">client_ip</span>—no persistent
+user ID or cookie-based ID is needed. (Offline callers may pass a
+<span id="S2.I1.i1.p1.1.3">user_id</span>, which the API resolves to an IP internally.)</p>
+</div></li>
+<li id="S2.I1.i2"><span>•</span>
+<div id="S2.I1.i2.p1">
+<p id="S2.I1.i2.p1.1"><span id="S2.I1.i2.p1.1.1">Consent-gated pipeline.</span> Both the clustering input data and the
+feature computation pipeline are integrated with a consent management
+framework, ensuring only consented data is used throughout.</p>
+</div></li>
+<li id="S2.I1.i3"><span>•</span>
+<div id="S2.I1.i3.p1">
+<p id="S2.I1.i3.p1.1"><span id="S2.I1.i3.p1.1.1">Privacy and data-governance controls.</span> PII tables have short
+retention windows, and non-PII tables undergo regular selective deletion in
+accordance with data governance policies.</p>
+</div></li>
+</ul>
+</div>
+</section>
+</section>
+<section id="S3">
+<h2><span>3. </span>Applications</h2>
+<div id="S3.p1">
+<p id="S3.p1.1">Proximity Features are designed as a reusable feature layer that can be
+integrated into any ML model receiving user traffic. Two launched applications
+and one offline use case are described below.</p>
+</div>
+<section id="S3.SS1">
+<h3><span>3.1. </span>Marketing Landing Pages</h3>
+<div id="S3.SS1.p1">
+<p id="S3.SS1.p1.1">The term Marketing Landing Pages refers to pages where users arrive from external
+channels such as paid advertising (e.g., Google and Meta ads) and organic
+search, landing on customized pages displaying personalized listing
+recommendations. These pages have the highest cold-start rate across Airbnb
+surfaces, and the listing recommender operated with severely sparse feature
+vectors for the majority of traffic prior to proximity features.</p>
+</div>
+<div id="S3.SS1.p2">
+<p id="S3.SS1.p2.1">By incorporating proximity features, the model gains access to the booking and
+browsing patterns of nearby users, enabling meaningful personalization even
+for completely anonymous traffic. This application was launched across two
+marketing-entry surfaces in December 2024 and January 2025. For external
+presentation, these two separate experiments are grouped under the label
+<em id="S3.SS1.p2.1.1">Marketing Landing Pages</em> because they share a similar cold-start listing
+recommendation setting. The A/B results in Table <a href="#S4.T2"><span>2</span></a> report aggregate lift
+across both surfaces.</p>
+</div>
+</section>
+<section id="S3.SS2">
+<h3><span>3.2. </span>Destination Recommendation</h3>
+<div id="S3.SS2.p1">
+<p id="S3.SS2.p1.1">The Airbnb homepage features a destination suggestion module (AutoSuggest) that
+recommends travel destinations as users interact with the search bar. This
+module is powered by a destination intent model that predicts which destinations
+a user is likely to book.</p>
+</div>
+<div id="S3.SS2.p2">
+<p id="S3.SS2.p2.1">The baseline model (V1) relied on 15 features derived from user search and
+booking history. For logged-out or first-time users, these features were
+empty, and the model fell back to a static list of globally popular
+destinations—the same recommendations regardless of the user’s location or
+context.</p>
+</div>
+<div id="S3.SS2.p3">
+<p id="S3.SS2.p3.1">The updated model (V2) incorporates 26 features (13 new, 2 removed), including proximity
+features such as the most-booked destinations and most-viewed locations by
+nearby users. With these signals, the model replaces generic recommendations
+with location-aware suggestions. For example, a user from Seoul now sees
+destinations popular among nearby travelers (e.g., Jeju Island, Osaka) rather
+than a global default list.</p>
+</div>
+<div id="S3.SS2.p4">
+<p id="S3.SS2.p4.1">Figure <a href="#acmlabel2"><span>2</span></a> illustrates this effect for two logged-out
+users. Separately, architectural improvements made V2 37% smaller than V1 in
+parameter count, reducing inference latency; this is orthogonal to the
+proximity feature contribution. This application was launched in
+March 2026.</p>
+</div>
+<figure id="S3.F2">
+<div id="S3.F2.2"><span><span><img alt="Figure 2. Qualitative comparison of destination suggestions for logged-out
+users. Without proximity features, the model returns a static global
+list; with them, suggestions reflect local travel patterns. Side-by-side comparison of destination suggestions with and without proximity features for two logged-out users, showing location-aware recommendations replacing generic global defaults." src="figure-2.png"/></span>
+</span></div>
+<figcaption><span>Figure 2. </span>Qualitative comparison of destination suggestions for logged-out
+users. Without proximity features, the model returns a static global
+list; with them, suggestions reflect local travel patterns.<span id="acmlabel2">Side-by-side comparison of destination suggestions with and without proximity features for two logged-out users, showing location-aware recommendations replacing generic global defaults.</span></figcaption>
+</figure>
+</section>
+<section id="S3.SS3">
+<h3><span>3.3. </span>Engagement Emails</h3>
+<div id="S3.SS3.p1">
+<p id="S3.SS3.p1.1">Beyond real-time surfaces, proximity features are being integrated into
+offline batch use cases. In engagement email campaigns, Airbnb sends
+personalized listing and destination recommendations to users. The serving
+infrastructure is in place: each recipient’s <span id="S3.SS3.p1.1.1">user_id</span> can be passed
+to the same serving API, which internally resolves it to the most recently
+logged IP address and retrieves the corresponding proximity key and features
+(Section <a href="#S2"><span>2</span></a>). Experiment integration is currently underway to
+validate the lift for users with limited booking history.</p>
+</div>
+</section>
+</section>
+<section id="S4">
+<h2><span>4. </span>Experiments</h2>
+<div id="S4.p1">
+<p id="S4.p1.1">Proximity Features are evaluated through both offline metrics and online A/B
+experiments across production surfaces.</p>
+</div>
+<section id="S4.SS1">
+<h3><span>4.1. </span>Offline Evaluation</h3>
+<div id="S4.SS1.p1">
+<p id="S4.SS1.p1.1">To assess the predictive signal of proximity features in isolation, the top-<math alttext="k" class="ltx_Math" display="inline" id="S4.SS1.p1.m1" intent=":literal"><semantics><mi>k</mi><annotation encoding="application/x-tex">k</annotation></semantics></math>
+destinations are extracted from proximity feature histograms (booked and viewed
+geos at various time windows) and Recall@<math alttext="k" class="ltx_Math" display="inline" id="S4.SS1.p1.m2" intent=":literal"><semantics><mi>k</mi><annotation encoding="application/x-tex">k</annotation></semantics></math> is measured against actual bookings
+in a subsequent 90-day period.</p>
+</div>
+<section id="S4.SS1.SSS0.Px1">
+<h4>Setup.</h4>
+<div id="S4.SS1.SSS0.Px1.p1">
+<p id="S4.SS1.SSS0.Px1.p1.1">User–feature snapshots are sampled from a 90-day observation
+period. Each feature has its own aggregation window (e.g., 7-day, 28-day, or
+365-day), reflecting different time horizons. Booking labels are sourced from
+the subsequent 90 days.
+Results are reported for <em id="S4.SS1.SSS0.Px1.p1.1.1">low-activity</em> users—those with limited booking
+history—the primary target population for proximity features.</p>
+</div>
+<figure id="S4.T1">
+<figcaption><span>Table 1. </span>Recall@<math alttext="k" class="ltx_Math" display="inline" id="S4.T1.m2" intent=":literal"><semantics><mi>k</mi><annotation encoding="application/x-tex">k</annotation></semantics></math> (%) for destination prediction using proximity features
+on low-activity users across different aggregation windows. No comparative
+baseline is included; the evaluation isolates proximity feature signal in
+the cold-start setting.</figcaption>
+<table id="S4.T1.2">
+<thead>
+<tr id="S4.T1.2.1">
+<th id="S4.T1.2.1.1">Feature</th>
+<th id="S4.T1.2.1.2">R@1</th>
+<th id="S4.T1.2.1.3">R@3</th>
+<th id="S4.T1.2.1.4">R@5</th></tr>
+</thead>
+<tbody>
+<tr id="S4.T1.2.2">
+<th id="S4.T1.2.2.1">Booked geos (365d)</th>
+<td id="S4.T1.2.2.2">12.06</td>
+<td id="S4.T1.2.2.3">22.88</td>
+<td id="S4.T1.2.2.4">29.14</td></tr>
+<tr id="S4.T1.2.3">
+<th id="S4.T1.2.3.1">Booked geos (90d)</th>
+<td id="S4.T1.2.3.2">11.91</td>
+<td id="S4.T1.2.3.3">22.20</td>
+<td id="S4.T1.2.3.4">28.25</td></tr>
+<tr id="S4.T1.2.4">
+<th id="S4.T1.2.4.1">Viewed geos (28d)</th>
+<td id="S4.T1.2.4.2">11.90</td>
+<td id="S4.T1.2.4.3">22.96</td>
+<td id="S4.T1.2.4.4">29.31</td></tr>
+<tr id="S4.T1.2.5">
+<th id="S4.T1.2.5.1">Viewed geos (7d)</th>
+<td id="S4.T1.2.5.2">11.81</td>
+<td id="S4.T1.2.5.3">23.12</td>
+<td id="S4.T1.2.5.4">30.03</td></tr>
+</tbody>
+</table>
+</figure>
+<div id="S4.SS1.SSS0.Px1.p2">
+<p id="S4.SS1.SSS0.Px1.p2.1">Table <a href="#S4.T1"><span>1</span></a> shows that proximity features alone achieve Recall@5
+of approximately 29–30% for geo-level destination prediction among low-activity
+users, indicating strong geographic signal. Notably, short-term viewed-geo features (7-day window)
+perform comparably to long-term booked-geo features (365-day window),
+suggesting that recent browsing activity within a proximity bucket carries
+substantial predictive value.</p>
+</div>
+<div id="S4.SS1.SSS0.Px1.p3">
+<p id="S4.SS1.SSS0.Px1.p3.1">In an offline ablation for the Destination Intent Model V2
+(Section <a href="#S3"><span>3</span></a>), adding proximity features yielded an
+approximately 2% relative improvement in Top-3 accuracy.</p>
+</div>
+</section>
+</section>
+<section id="S4.SS2">
+<h3><span>4.2. </span>Online A/B Experiments</h3>
+<div id="S4.SS2.p1">
+<p id="S4.SS2.p1.1">Results are reported from production A/B experiments, each comparing a model
+with proximity features (treatment) against the same model without them
+(control). All experiments ran for sufficient duration to reach statistical
+significance at the 95% confidence level. Notably, the results below span
+December 2024 through March 2026, all using the same proximity key assignment,
+empirically validating the temporal stability of the key partition.</p>
+</div>
+<figure id="S4.T2">
+<figcaption><span>Table 2. </span>Online A/B experiment results across production surfaces.</figcaption>
+<table id="S4.T2.2">
+<tbody>
+<tr id="S4.T2.2.1">
+<td id="S4.T2.2.1.1">Surface</td>
+<td id="S4.T2.2.1.2">Metric</td>
+<td id="S4.T2.2.1.3">Lift</td></tr>
+<tr id="S4.T2.2.2">
+<td id="S4.T2.2.2.1">Marketing Landing Pages</td>
+<td id="S4.T2.2.2.2">Global Bookings</td>
+<td id="S4.T2.2.2.3">+0.011%</td></tr>
+<tr id="S4.T2.2.3">
+<td id="S4.T2.2.3.1">Marketing Landing Pages</td>
+<td id="S4.T2.2.3.2">First-time Bookers</td>
+<td id="S4.T2.2.3.3">+2.0%</td></tr>
+<tr id="S4.T2.2.4">
+<td id="S4.T2.2.4.1">Marketing Landing Pages</td>
+<td id="S4.T2.2.4.2">Searchers w/ Dates</td>
+<td id="S4.T2.2.4.3">+0.054%</td></tr>
+<tr id="S4.T2.2.5">
+<td id="S4.T2.2.5.1">AutoSuggest</td>
+<td id="S4.T2.2.5.2">Global Bookings</td>
+<td id="S4.T2.2.5.3">+0.16%</td></tr>
+<tr id="S4.T2.2.6">
+<td id="S4.T2.2.6.1">AutoSuggest</td>
+<td id="S4.T2.2.6.2">First-time Bookings</td>
+<td id="S4.T2.2.6.3">+0.33%</td></tr>
+</tbody>
+</table>
+</figure>
+<div id="S4.SS2.p2">
+<p id="S4.SS2.p2.1">Table <a href="#S4.T2"><span>2</span></a> summarizes the results. On marketing landing pages, proximity features produced a +0.011% lift in
+global bookings and increased first-time bookers by +2.0%, confirming
+effectiveness for the cold-start population. Searchers with dates—a key
+engagement metric indicating users progressing further in the booking
+funnel—increased by +0.054%.</p>
+</div>
+<div id="S4.SS2.p3">
+<p id="S4.SS2.p3.1">On AutoSuggest, the Destination Intent Model V2 with proximity features
+achieved a +0.16% lift in global bookings and +0.33% in first-time bookings. This represents the largest booking lift from proximity features across all
+production applications to date.</p>
+</div>
+</section>
+<section id="S4.SS3">
+<h3><span>4.3. </span>Analysis</h3>
+<div id="S4.SS3.p1">
+<p id="S4.SS3.p1.1">The following analysis focuses on the AutoSuggest experiment, which provides the
+richest cohort-level breakdown. Three cohorts reflect booking history at
+assignment time: <em id="S4.SS3.p1.1.1">Never-Booked</em> (no prior bookings, reported separately
+from assignment-date New-Guest users; users may still book during the experiment), <em id="S4.SS3.p1.1.2">Active</em> (booked within the past year), and
+<em id="S4.SS3.p1.1.3">Dormant</em> (booked previously but not within the past year).
+<em id="S4.SS3.p1.1.4">New-Guest</em> is an assignment-date booking-event cohort for users who also
+have no prior bookings and whose first-ever booking occurs on the assignment date.</p>
+</div>
+<section id="S4.SS3.SSS0.Px1">
+<h4>Cohort effects.</h4>
+<div id="S4.SS3.SSS0.Px1.p1">
+<p id="S4.SS3.SSS0.Px1.p1.1">The directionally largest booking lifts were observed among
+<em id="S4.SS3.SSS0.Px1.p1.1.1">Never-Booked</em> and <em id="S4.SS3.SSS0.Px1.p1.1.2">Dormant</em> user cohorts (Figure <a href="#acmlabel3"><span>3</span></a>).
+The three largest cohorts (Never-Booked, Active, Dormant) show consistent positive
+directional lifts (+0.15–0.33%) in global bookings, though individually below the 95%
+significance threshold due to limited subgroup power. Even Active users benefit directionally, as infrequent booking behavior keeps
+individual history sparse. The New-Guest cohort
+(<math alttext="&lt;" class="ltx_Math" display="inline" id="S4.SS3.SSS0.Px1.p1.m1" intent=":literal"><semantics><mo>&lt;</mo><annotation encoding="application/x-tex">&lt;</annotation></semantics></math>1% of experiment traffic, <math alttext="-0.04\%" class="ltx_Math" display="inline" id="S4.SS3.SSS0.Px1.p1.m2" intent=":literal"><semantics><mrow><mo>−</mo><mrow><mn>0.04</mn><mo>%</mo></mrow></mrow><annotation encoding="application/x-tex">-0.04\%</annotation></semantics></math>, <math alttext="p=0.78" class="ltx_Math" display="inline" id="S4.SS3.SSS0.Px1.p1.m3" intent=":literal"><semantics><mrow><mi>p</mi><mo>=</mo><mn>0.78</mn></mrow><annotation encoding="application/x-tex">p=0.78</annotation></semantics></math>) is the smallest and shows a near-zero,
+non-significant result, consistent with insufficient power rather than a true
+negative effect. Separately, the +0.33% first-time bookings lift (Table <a href="#S4.T2"><span>2</span></a>)
+is an experiment-level outcome metric capturing first-ever bookings among
+users with no prior bookings at assignment, whether reported as assignment-date
+New-Guest users or as Never-Booked users who book later in the experiment window.
+The gains are concentrated among users with absent or stale history—most
+clearly Never-Booked and Dormant users—for whom the baseline model could only
+serve a static list of popular destinations. Proximity features fill this gap by
+providing location-aware signals derived from nearby users, enabling personalized
+recommendations from the first interaction.
+These results are consistent with the design hypothesis that proximity features provide the most incremental value where user-level features are absent or stale.</p>
+</div>
+<figure id="S4.F3">
+<div>
+<div><span><img alt="Figure 3. Booking lift by user cohort in the AutoSuggest experiment, with
+traffic share and p-value. The directionally largest gains are among Never-Booked and
+Dormant users. The New-Guest cohort ( &lt; &lt; 1% of traffic, p = 0.78 p=0.78 ) shows a near-zero non-significant result. Bar chart showing booking lift by user cohort (Never-Booked, Dormant, Active, New-Guest) with a companion table showing traffic share and p-value for each cohort." src="figure-3.png"/></span></div><div></div><div>
+<table id="S4.F3.2">
+<thead>
+<tr id="S4.F3.2.1">
+<th id="S4.F3.2.1.1"><span id="S4.F3.2.1.1.1">Cohort</span></th>
+<th id="S4.F3.2.1.2"><span id="S4.F3.2.1.2.1">Traffic Share</span></th>
+<th id="S4.F3.2.1.3"><span id="S4.F3.2.1.3.1">P-Value</span></th></tr>
+</thead>
+<tbody>
+<tr id="S4.F3.2.2">
+<th id="S4.F3.2.2.1"><span id="S4.F3.2.2.1.1">Never-Booked</span></th>
+<td id="S4.F3.2.2.2"><span id="S4.F3.2.2.2.1">65%</span></td>
+<td id="S4.F3.2.2.3"><span id="S4.F3.2.2.3.1">0.17</span></td></tr>
+<tr id="S4.F3.2.3">
+<th id="S4.F3.2.3.1"><span id="S4.F3.2.3.1.1">Dormant</span></th>
+<td id="S4.F3.2.3.2"><span id="S4.F3.2.3.2.1">11%</span></td>
+<td id="S4.F3.2.3.3"><span id="S4.F3.2.3.3.1">0.11</span></td></tr>
+<tr id="S4.F3.2.4">
+<th id="S4.F3.2.4.1"><span id="S4.F3.2.4.1.1">Active</span></th>
+<td id="S4.F3.2.4.2"><span id="S4.F3.2.4.2.1">23%</span></td>
+<td id="S4.F3.2.4.3"><span id="S4.F3.2.4.3.1">0.16</span></td></tr>
+<tr id="S4.F3.2.5">
+<th id="S4.F3.2.5.1"><span id="S4.F3.2.5.1.1">New-Guest</span></th>
+<td id="S4.F3.2.5.2"><math alttext="{&lt;}1\%" class="ltx_Math" display="inline" id="S4.F3.m1" intent=":literal"><semantics><mrow><mphantom></mphantom><mo mathsize="0.900em">&lt;</mo><mrow><mn mathsize="0.900em">1</mn><mo>%</mo></mrow></mrow><annotation encoding="application/x-tex">{&lt;}1\%</annotation></semantics></math></td>
+<td id="S4.F3.2.5.3"><span id="S4.F3.2.5.3.1">0.78</span></td></tr>
+</tbody>
+</table></div></div>
+<figcaption><span>Figure 3. </span>Booking lift by user cohort in the AutoSuggest experiment, with
+traffic share and p-value. The directionally largest gains are among Never-Booked and
+Dormant users. The New-Guest cohort (<math alttext="&lt;" class="ltx_Math" display="inline" id="S4.F3.m4" intent=":literal"><semantics><mo>&lt;</mo><annotation encoding="application/x-tex">&lt;</annotation></semantics></math>1% of traffic,
+<math alttext="p=0.78" class="ltx_Math" display="inline" id="S4.F3.m5" intent=":literal"><semantics><mrow><mi>p</mi><mo>=</mo><mn>0.78</mn></mrow><annotation encoding="application/x-tex">p=0.78</annotation></semantics></math>) shows a near-zero non-significant result.<span id="acmlabel3">Bar chart showing booking lift by user cohort (Never-Booked, Dormant, Active, New-Guest) with a companion table showing traffic share and p-value for each cohort.</span></figcaption>
+</figure>
+</section>
+<section id="S4.SS3.SSS0.Px2">
+<h4>Impression distribution shift.</h4>
+<div id="S4.SS3.SSS0.Px2.p1">
+<p id="S4.SS3.SSS0.Px2.p1.1">The treatment arm also surfaced specific international
+destinations (e.g., Kuala Lumpur, Seoul, Jeju Island, Dubai) that the baseline
+model rarely recommended. This indicates that proximity features enable the
+model to produce more diverse, location-relevant recommendations rather than
+falling back to generic defaults. The shift also reflects a reduction in
+popularity bias <cite>(<a href="#bib.bib2">Abdollahpouri et al. 2019</a>)</cite>: rather than defaulting to
+globally popular destinations, the model surfaces destinations that are locally
+relevant to the user’s geographic context. This is a direct consequence of
+replacing a static global prior with group-level signals derived from nearby
+users.</p>
+</div>
+</section>
+</section>
+</section>
+<section id="S5">
+<h2><span>5. </span>Related Work</h2>
+<section id="S5.SS0.SSS0.Px1">
+<h4>Spatial indexing and geo bucketing.</h4>
+<div id="S5.SS0.SSS0.Px1.p1">
+<p id="S5.SS0.SSS0.Px1.p1.1">Geohash <cite>(<a href="#bib.bib18">Niemeyer 2008</a>)</cite>, Google S2 <cite>(<a href="#bib.bib13">Google 2017</a>)</cite>, and Uber
+H3 <cite>(<a href="#bib.bib6">Brodsky 2018</a>)</cite> provide hierarchical spatial indexing at fixed
+resolutions. While computationally efficient, fixed-resolution schemes cannot
+adapt to the extreme variation in user density across geographies: a single
+cell may contain millions of users in a city center and only a handful in a
+rural area. KD-trees <cite>(<a href="#bib.bib4">Bentley 1975</a>)</cite> offer adaptive
+partitioning but require <math alttext="O(n\log n)" class="ltx_Math" display="inline" id="S5.SS0.SSS0.Px1.p1.m1" intent=":literal"><semantics><mrow><mi>O</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mrow><mi>n</mi><mo lspace="0.167em" rspace="0em">​</mo><mrow><mi>log</mi><mo lspace="0.167em">⁡</mo><mi>n</mi></mrow></mrow><mo stretchy="false">)</mo></mrow></mrow><annotation encoding="application/x-tex">O(n\log n)</annotation></semantics></math> construction and are designed for point
+queries rather than group-level feature aggregation.
+Quadtrees <cite>(<a href="#bib.bib11">Finkel and Bentley 1974</a>)</cite> recursively subdivide space into cells of
+varying size, and the Phase 2 coarsening is similar in spirit—but operates on
+a discrete set of power-of-ten scalars rather than recursive bisection. The
+approach also draws on the principle of adaptive mesh
+refinement <cite>(<a href="#bib.bib5">Berger and Oliger 1984</a>)</cite>—adjusting resolution to local
+density—while operating on a discrete geographic grid with <math alttext="O(kN)" class="ltx_Math" display="inline" id="S5.SS0.SSS0.Px1.p1.m2" intent=":literal"><semantics><mrow><mi>O</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mrow><mi>k</mi><mo lspace="0em" rspace="0em">​</mo><mi>N</mi></mrow><mo stretchy="false">)</mo></mrow></mrow><annotation encoding="application/x-tex">O(kN)</annotation></semantics></math> cost.</p>
+</div>
+</section>
+<section id="S5.SS0.SSS0.Px2">
+<h4>Cold-start recommendation.</h4>
+<div id="S5.SS0.SSS0.Px2.p1">
+<p id="S5.SS0.SSS0.Px2.p1.1">The cold-start problem is well-studied in recommender
+systems <cite>(<a href="#bib.bib21">Schein et al. 2002</a>; <a href="#bib.bib16">Lam et al. 2008</a>)</cite>. Common approaches include
+content-based filtering <cite>(<a href="#bib.bib19">Pazzani and Billsus 2007</a>)</cite>, hybrid
+models <cite>(<a href="#bib.bib7">Burke 2002</a>)</cite>, and demographic-based
+approaches that leverage user attributes when behavioral data is
+sparse. In the marketplace setting,
+<cite><a href="#bib.bib15">Haldar et al. 2020</a></cite> describe Airbnb’s approach to improving deep
+learning for search ranking, and <cite><a href="#bib.bib14">Grbovic and Cheng 2018</a></cite> address real-time
+personalization using embeddings. Proximity Features are complementary: they provide a group-level signal layer
+that can augment any of these approaches when individual-level data is
+unavailable.</p>
+</div>
+</section>
+<section id="S5.SS0.SSS0.Px3">
+<h4>Privacy-preserving ML</h4>
+<div id="S5.SS0.SSS0.Px3.p1">
+<p id="S5.SS0.SSS0.Px3.p1.1">Federated learning <cite>(<a href="#bib.bib17">McMahan et al. 2017</a>)</cite> and differential
+privacy <cite>(<a href="#bib.bib9">Dwork et al. 2006</a>)</cite> enable model training without exposing
+individual data. Proximity Features take a different approach: rather than modifying the training
+procedure, features are constructed over aggregated groups so that individual
+behavior is masked by design. As discussed in Section <a href="#S2.SS3"><span>2.3</span></a>, the target bucket size <math alttext="T" class="ltx_Math" display="inline" id="S5.SS0.SSS0.Px3.p1.m1" intent=":literal"><semantics><mi>T</mi><annotation encoding="application/x-tex">T</annotation></semantics></math>
+is motivated by <math alttext="k" class="ltx_Math" display="inline" id="S5.SS0.SSS0.Px3.p1.m2" intent=":literal"><semantics><mi>k</mi><annotation encoding="application/x-tex">k</annotation></semantics></math>-anonymity <cite>(<a href="#bib.bib22">Sweeney 2002</a>)</cite>: each proximity
+bucket is intended to aggregate <math alttext="\sim" class="ltx_Math" display="inline" id="S5.SS0.SSS0.Px3.p1.m3" intent=":literal"><semantics><mo>∼</mo><annotation encoding="application/x-tex">\sim</annotation></semantics></math>1,000 users, making it difficult to isolate
+any individual’s contribution to the feature vector.</p>
+</div>
+</section>
+<section id="S5.SS0.SSS0.Px4">
+<h4>Geo-IP in industry.</h4>
+<div id="S5.SS0.SSS0.Px4.p1">
+<p id="S5.SS0.SSS0.Px4.p1.1">IP-based geolocation has been used for coarse personalization (e.g., content
+localization, ad targeting). Prior work on IP geolocation focuses on the
+accuracy and reliability of country/city-level database
+mappings <cite>(<a href="#bib.bib20">Poese et al. 2011</a>)</cite>, rather than using geo-IP as a basis for
+aggregating user-level features for ML. Proximity Features extend this line
+of work by operating at sub-city granularity, dynamically adapting resolution
+to local user density, and computing rich aggregated user-level features over
+geographic groups—purpose-built for ML model serving in a two-sided
+marketplace at production scale.</p>
+</div>
+</section>
+</section>
+<section id="S6">
+<h2><span>6. </span>Conclusion</h2>
+<div id="S6.p1">
+<p id="S6.p1.1">This paper presented Proximity Features, a privacy-compliant feature system for
+cold-start personalization in two-sided marketplaces. The system uses an
+adaptive geo-IP clustering algorithm to group users into proximity buckets
+targeting approximately 1,000 individuals, computes aggregated user-level
+features over these groups, and serves them in real time as a soft dependency
+for downstream ML models.</p>
+</div>
+<div id="S6.p2">
+<p id="S6.p2.1">Deployed at Airbnb across marketing landing pages and homepage destination
+recommendation (AutoSuggest), with serving infrastructure for engagement emails already in place and experiment integration under way, the system
+produces statistically significant booking lifts on each online surface. The strongest
+gains are among Never-Booked and Dormant users—the population where
+traditional user-level features provide the least signal. The system operates
+entirely on aggregated, consent-gated data and requires no persistent
+individual identifier at inference time, making it resilient to increasing
+restrictions on third-party cookies and designed to operate within evolving
+privacy regulations.</p>
+</div>
+<div id="S6.p3">
+<p id="S6.p3.1">Several limitations are worth noting. In sparse regions, the coarsening
+algorithm produces larger buckets at the cost of geographic precision,
+which may reduce feature relevance for rural users. In our internal analysis,
+geo-IP accuracy is inherently bounded at approximately 80% city-level
+agreement, meaning a
+fraction of users receive features from a geographically incorrect bucket.
+These limitations are
+largely inherited from the underlying geo-IP data source and are
+mitigated by the aggregate nature of the features: individual
+misassignments have minimal impact on group-level signal quality.</p>
+</div>
+<div id="S6.p4">
+<p id="S6.p4.1">Beyond the surfaces described in this paper, Proximity Features function as a
+reusable feature layer applicable to any model that receives user traffic
+with cold-start characteristics. From a two-sided marketplace perspective,
+improved demand-side personalization directly benefits supply by reducing
+supply-demand mismatch for hosts in high-demand areas. Future directions include hierarchical proximity keys—assigning each IP to
+multiple keys at different geographic resolutions to provide multi-scale
+features for different use cases, versioned key partitions to
+gracefully handle natural shifts in the geo-IP database over time, expanding
+destination recommendation to additional surfaces such as Nearby Search,
+integration with marketing attribution models, and real-time proximity key
+updates to capture intra-day traffic patterns.</p>
+</div>
+</section>
+<section id="bib">
+<h2>References</h2>
+<ul>
+<li id="bib.bib1"><span>(1)</span>
+<span>
+</span></li>
+<li id="bib.bib2"><span>Abdollahpouri et al<span id="bib.bib2.2">.</span> (2019)</span>
+<span>
+Himan Abdollahpouri, Robin
+Burke, and Bamshad Mobasher.
+2019.
+
+</span>
+<span>Managing Popularity Bias in Recommender Systems
+with Personalized Re-ranking. In <em id="bib.bib2.3">Proceedings of
+the 32nd International Florida Artificial Intelligence Research Society
+Conference (FLAIRS)</em>.
+
+</span>
+<span>
+</span></li>
+<li id="bib.bib3"><span>Assmann et al<span id="bib.bib3.2">.</span> (1984)</span>
+<span>
+Susan F. Assmann, David S.
+Johnson, Daniel J. Kleitman, and Joseph
+Y.-T. Leung. 1984.
+
+</span>
+<span>On a Dual Version of the One-Dimensional Bin
+Packing Problem.
+
+</span>
+<span><em id="bib.bib3.3">Journal of Algorithms</em> 5,
+4 (1984), 502–525.
+
+</span>
+<span>
+<a href="https://doi.org/10.1016/0196-6774(84)90004-X">https://doi.org/10.1016/0196-6774(84)90004-X</a>
+</span></li>
+<li id="bib.bib4"><span>Bentley (1975)</span>
+<span>
+Jon Louis Bentley.
+1975.
+
+</span>
+<span>Multidimensional Binary Search Trees Used for
+Associative Searching.
+
+</span>
+<span><em id="bib.bib4.1">Commun. ACM</em> 18,
+9 (1975), 509–517.
+
+</span>
+<span>
+<a href="https://doi.org/10.1145/361002.361007">https://doi.org/10.1145/361002.361007</a>
+</span></li>
+<li id="bib.bib5"><span>Berger and Oliger (1984)</span>
+<span>
+Marsha J. Berger and
+Joseph Oliger. 1984.
+
+</span>
+<span>Adaptive Mesh Refinement for Hyperbolic Partial
+Differential Equations.
+
+</span>
+<span><em id="bib.bib5.1">J. Comput. Phys.</em> 53,
+3 (1984), 484–512.
+
+</span>
+<span>
+<a href="https://doi.org/10.1016/0021-9991(84)90073-1">https://doi.org/10.1016/0021-9991(84)90073-1</a>
+</span></li>
+<li id="bib.bib6"><span>Brodsky (2018)</span>
+<span>
+Isaac Brodsky.
+2018.
+
+</span>
+<span>H3: Uber’s Hexagonal Hierarchical Spatial Index.
+
+</span>
+<span><a href="https://eng.uber.com/h3/">https://eng.uber.com/h3/</a>.
+
+</span>
+<span>
+</span>
+<span>Uber Engineering Blog.
+
+</span></li>
+<li id="bib.bib7"><span>Burke (2002)</span>
+<span>
+Robin Burke.
+2002.
+
+</span>
+<span>Hybrid Recommender Systems: Survey and
+Experiments.
+
+</span>
+<span><em id="bib.bib7.1">User Modeling and User-Adapted Interaction</em>
+12, 4 (2002),
+331–370.
+
+</span>
+<span>
+<a href="https://doi.org/10.1023/A:1021240730564">https://doi.org/10.1023/A:1021240730564</a>
+</span></li>
+<li id="bib.bib8"><span>Collet (2012)</span>
+<span>
+Yann Collet.
+2012.
+
+</span>
+<span>xxHash: Extremely Fast Hash Algorithm.
+
+</span>
+<span><a href="https://github.com/Cyan4973/xxHash">https://github.com/Cyan4973/xxHash</a>.
+
+</span>
+<span>
+</span>
+<span>Accessed: 2026-04-01.
+
+</span></li>
+<li id="bib.bib9"><span>Dwork et al<span id="bib.bib9.2">.</span> (2006)</span>
+<span>
+Cynthia Dwork, Frank
+McSherry, Kobbi Nissim, and Adam
+Smith. 2006.
+
+</span>
+<span>Calibrating Noise to Sensitivity in Private Data
+Analysis. In <em id="bib.bib9.3">Proceedings of the 3rd Theory of
+Cryptography Conference (TCC)</em>. 265–284.
+
+</span>
+<span>
+<a href="https://doi.org/10.1007/11681878_14">https://doi.org/10.1007/11681878_14</a>
+</span></li>
+<li id="bib.bib10"><span>Ester et al<span id="bib.bib10.2">.</span> (1996)</span>
+<span>
+Martin Ester, Hans-Peter
+Kriegel, Jörg Sander, and Xiaowei
+Xu. 1996.
+
+</span>
+<span>A Density-Based Algorithm for Discovering Clusters
+in Large Spatial Databases with Noise. In
+<em id="bib.bib10.3">Proceedings of the 2nd International Conference on
+Knowledge Discovery and Data Mining (KDD)</em>. 226–231.
+
+</span>
+<span>
+</span></li>
+<li id="bib.bib11"><span>Finkel and Bentley (1974)</span>
+<span>
+Raphael A. Finkel and
+Jon Louis Bentley. 1974.
+
+</span>
+<span>Quad Trees: A Data Structure for Retrieval on
+Composite Keys.
+
+</span>
+<span><em id="bib.bib11.1">Acta Informatica</em> 4,
+1 (1974), 1–9.
+
+</span>
+<span>
+<a href="https://doi.org/10.1007/BF00288933">https://doi.org/10.1007/BF00288933</a>
+</span></li>
+<li id="bib.bib12"><span>Garey and Johnson (1979)</span>
+<span>
+Michael R. Garey and
+David S. Johnson. 1979.
+
+</span>
+<span><em id="bib.bib12.1">Computers and Intractability: A Guide to
+the Theory of NP-Completeness</em>.
+
+</span>
+<span>W. H. Freeman.
+
+</span>
+<span>
+</span></li>
+<li id="bib.bib13"><span>Google (2017)</span>
+<span>
+Google. 2017.
+
+</span>
+<span>S2 Geometry Library.
+
+</span>
+<span><a href="https://s2geometry.io/">https://s2geometry.io/</a>.
+
+</span>
+<span>
+</span>
+<span>Accessed: 2026-04-01.
+
+</span></li>
+<li id="bib.bib14"><span>Grbovic and Cheng (2018)</span>
+<span>
+Mihajlo Grbovic and
+Haibin Cheng. 2018.
+
+</span>
+<span>Real-time Personalization using Embeddings for
+Search Ranking at Airbnb. In <em id="bib.bib14.1">Proceedings of the
+24th ACM SIGKDD International Conference on Knowledge Discovery and Data
+Mining</em>. 311–320.
+
+</span>
+<span>
+<a href="https://doi.org/10.1145/3219819.3219885">https://doi.org/10.1145/3219819.3219885</a>
+</span></li>
+<li id="bib.bib15"><span>Haldar et al<span id="bib.bib15.2">.</span> (2020)</span>
+<span>
+Malay Haldar, Mustafa
+Abdool, Prashant Ramanathan, Tao Xu,
+Sagar Yang, Huizhong Duan,
+Qing Zhang, Nick Barber,
+Hemant Jain, and Ankan Saha.
+2020.
+
+</span>
+<span>Improving Deep Learning for Airbnb Search. In
+<em id="bib.bib15.3">Proceedings of the 26th ACM SIGKDD International
+Conference on Knowledge Discovery and Data Mining</em>.
+2822–2830.
+
+</span>
+<span>
+<a href="https://doi.org/10.1145/3394486.3403303">https://doi.org/10.1145/3394486.3403303</a>
+</span></li>
+<li id="bib.bib16"><span>Lam et al<span id="bib.bib16.2">.</span> (2008)</span>
+<span>
+Xuan Nhat Lam, Thuc Vu,
+Trong Duc Le, and Anh Duc Duong.
+2008.
+
+</span>
+<span>Addressing Cold-Start Problem in Recommendation
+Systems. In <em id="bib.bib16.3">Proceedings of the 2nd International
+Conference on Ubiquitous Information Management and Communication</em>.
+208–211.
+
+</span>
+<span>
+<a href="https://doi.org/10.1145/1352793.1352837">https://doi.org/10.1145/1352793.1352837</a>
+</span></li>
+<li id="bib.bib17"><span>McMahan et al<span id="bib.bib17.2">.</span> (2017)</span>
+<span>
+Brendan McMahan, Eider
+Moore, Daniel Ramage, Seth Hampson,
+and Blaise Agüera y Arcas.
+2017.
+
+</span>
+<span>Communication-Efficient Learning of Deep Networks
+from Decentralized Data. In <em id="bib.bib17.3">Proceedings of the
+20th International Conference on Artificial Intelligence and Statistics
+(AISTATS)</em>. 1273–1282.
+
+</span>
+<span>
+</span></li>
+<li id="bib.bib18"><span>Niemeyer (2008)</span>
+<span>
+Gustavo Niemeyer.
+2008.
+
+</span>
+<span>Geohash.
+
+</span>
+<span><a href="https://en.wikipedia.org/wiki/Geohash">https://en.wikipedia.org/wiki/Geohash</a>.
+
+</span>
+<span>
+</span>
+<span>Accessed: 2026-04-01.
+
+</span></li>
+<li id="bib.bib19"><span>Pazzani and Billsus (2007)</span>
+<span>
+Michael J. Pazzani and
+Daniel Billsus. 2007.
+
+</span>
+<span>Content-Based Recommendation Systems.
+
+</span>
+<span>In <em id="bib.bib19.1">The Adaptive Web</em>.
+Springer, 325–341.
+
+</span>
+<span>
+<a href="https://doi.org/10.1007/978-3-540-72079-9_10">https://doi.org/10.1007/978-3-540-72079-9_10</a>
+</span></li>
+<li id="bib.bib20"><span>Poese et al<span id="bib.bib20.2">.</span> (2011)</span>
+<span>
+Ingmar Poese, Steve
+Uhlig, Mohamed Ali Kaafar, Benoit
+Donnet, and Bamba Gueye.
+2011.
+
+</span>
+<span>IP Geolocation Databases: Unreliable?
+
+</span>
+<span><em id="bib.bib20.3">ACM SIGCOMM Computer Communication Review</em>
+41, 2 (2011),
+53–56.
+
+</span>
+<span>
+<a href="https://doi.org/10.1145/1971162.1971171">https://doi.org/10.1145/1971162.1971171</a>
+</span></li>
+<li id="bib.bib21"><span>Schein et al<span id="bib.bib21.2">.</span> (2002)</span>
+<span>
+Andrew I. Schein,
+Alexandrin Popescul, Lyle H. Ungar, and
+David M. Pennock. 2002.
+
+</span>
+<span>Methods and Metrics for Cold-Start
+Recommendations. In <em id="bib.bib21.3">Proceedings of the 25th Annual
+International ACM SIGIR Conference on Research and Development in Information
+Retrieval</em>. 253–260.
+
+</span>
+<span>
+<a href="https://doi.org/10.1145/564376.564421">https://doi.org/10.1145/564376.564421</a>
+</span></li>
+<li id="bib.bib22"><span>Sweeney (2002)</span>
+<span>
+Latanya Sweeney.
+2002.
+
+</span>
+<span><math alttext="k" class="ltx_Math" display="inline" id="bib.bib22.m1" intent=":literal"><semantics><mi>k</mi><annotation encoding="application/x-tex">k</annotation></semantics></math>-Anonymity: A Model for Protecting Privacy.
+
+</span>
+<span><em id="bib.bib22.1">International Journal of Uncertainty,
+Fuzziness and Knowledge-Based Systems</em> 10,
+5 (2002), 557–570.
+
+</span>
+<span>
+<a href="https://doi.org/10.1142/S0218488502001648">https://doi.org/10.1142/S0218488502001648</a>
+</span></li>
+<li id="bib.bib23"><span>Voigt and von dem Bussche (2017)</span>
+<span>
+Paul Voigt and Axel
+von dem Bussche. 2017.
+
+</span>
+<span><em id="bib.bib23.1">The EU General Data Protection Regulation
+(GDPR): A Practical Guide</em>.
+
+</span>
+<span>Springer.
+
+</span>
+<span>
+<a href="https://doi.org/10.1007/978-3-319-57959-7">https://doi.org/10.1007/978-3-319-57959-7</a>
+</span></li>
+</ul>
+</section>
+</article></body></html>
