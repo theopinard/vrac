@@ -130,7 +130,7 @@ blockquote {
    <p>
     The diagram below shows where each of these five things sits inside the model.
    </p>
-   <img alt="" src="https://substackcdn.com/image/fetch/$s_!Btgc!,w_1456,c_limit,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2F87a3ec64-dd86-41e8-b95f-2efe63b53321_2834x2942.png"/>
+   <img alt="" src="https://substackcdn.com/image/fetch/$s_!Btgc!,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2F87a3ec64-dd86-41e8-b95f-2efe63b53321_2834x2942.png"/>
    <h2>
     Groundwork
    </h2>
@@ -198,7 +198,7 @@ blockquote {
    <p>
     See the diagram below:
    </p>
-   <img alt="" src="https://substackcdn.com/image/fetch/$s_!LGyB!,w_1456,c_limit,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2Fa1d2fc17-29cf-4f2f-901c-54590d0c22cc_2834x2324.png"/>
+   <img alt="" src="https://substackcdn.com/image/fetch/$s_!LGyB!,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2Fa1d2fc17-29cf-4f2f-901c-54590d0c22cc_2834x2324.png"/>
    <p>
     Let’s understand this via a simple example:
    </p>
@@ -308,14 +308,14 @@ blockquote {
    <p>
     Thinking Machines uses a method introduced by Wang and colleagues, which was also adopted by DeepSeek [1][8][9]. This method removes the conflict entirely by keeping a separate bias value for each expert, which is just a small number added to that expert’s score. The trick is where the bias gets applied.
    </p>
-   <img alt="" src="https://substackcdn.com/image/fetch/$s_!dEzn!,w_1456,c_limit,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2F7f9dbcb8-842e-4e86-b5c5-b457f94b0447_3654x1536.png"/>
+   <img alt="" src="https://substackcdn.com/image/fetch/$s_!dEzn!,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2F7f9dbcb8-842e-4e86-b5c5-b457f94b0447_3654x1536.png"/>
    <p>
     Let us walk through a token arriving at a layer in this setup. Consider that the router produces these sigmoid scores for four of the experts.
    </p>
    <p>
     Expert 47 has been overloaded recently, so its bias has drifted down to −0.15. This drops its selection score below expert 88’s, and expert 88 takes the slot instead. The bias changed which expert got picked. When expert 88’s output is combined into the final result, it is weighted by 0.80, its original router score, with the bias left out. In other words, the bias affects selection only. It never touches the weighting, and it is updated by a simple counting rule that runs outside backpropagation entirely. The main goal is to nudge down busy experts while giving a chance to the quieter experts.
    </p>
-   <img alt="" src="https://substackcdn.com/image/fetch/$s_!M1sm!,w_1456,c_limit,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2Fdecf4d2f-7ba4-44c3-b40c-2feefed68ee2_2280x1116.png"/>
+   <img alt="" src="https://substackcdn.com/image/fetch/$s_!M1sm!,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2Fdecf4d2f-7ba4-44c3-b40c-2feefed68ee2_2280x1116.png"/>
    <p>
     The result is that expert usage stays balanced, and the training objective receives no competing gradient at all.
    </p>
@@ -392,7 +392,7 @@ blockquote {
    <p>
     See the diagram below that tries to show this setup in a simplistic manner:
    </p>
-   <img alt="" src="https://substackcdn.com/image/fetch/$s_!zXGJ!,w_1456,c_limit,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2F8e9cb247-2d0b-4f03-9b09-e3560ec015ea_3292x1938.png"/>
+   <img alt="" src="https://substackcdn.com/image/fetch/$s_!zXGJ!,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2F8e9cb247-2d0b-4f03-9b09-e3560ec015ea_3292x1938.png"/>
    <p>
     There is one practical consequence of this approach. Long-context models often handle the general content of a large document well, but can still miss one specific detail buried in the middle.
    </p>
@@ -429,7 +429,7 @@ blockquote {
    <p>
     Thinking Machines states that this performed better and extrapolated better to longer sequences than RoPE in their testing [1].
    </p>
-   <img alt="" src="https://substackcdn.com/image/fetch/$s_!SfIp!,w_1456,c_limit,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2F4c2d7ec9-2491-4cf9-86fe-a75b3ac8ac84_3024x1536.png"/>
+   <img alt="" src="https://substackcdn.com/image/fetch/$s_!SfIp!,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2F4c2d7ec9-2491-4cf9-86fe-a75b3ac8ac84_3024x1536.png"/>
    <h2>
     Convolutions
    </h2>
@@ -439,7 +439,7 @@ blockquote {
    <p>
     A convolution here means combining each position in the sequence with a few positions immediately before it. Inkling uses a window of four [7], so the numbers at position 100 get mixed with the numbers at positions 97, 98, and 99, using a small set of learned weights. Position 101 does the same with 98, 99, and 100. It is a cheap, fixed, strictly local operation.
    </p>
-   <img alt="" src="https://substackcdn.com/image/fetch/$s_!YHQe!,w_1456,c_limit,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2Fc05ab48f-6b5b-4d1e-abbd-3e3bf500507e_2624x1680.png"/>
+   <img alt="" src="https://substackcdn.com/image/fetch/$s_!YHQe!,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2Fc05ab48f-6b5b-4d1e-abbd-3e3bf500507e_2624x1680.png"/>
    <p>
     To understand better, consider the two tokens that make up “New York.” The second token means something quite different on its own than it does following the first. Attention can learn to make that connection, and it has to learn it, because attention starts as a general comparison mechanism with no built-in preference for nearby tokens over distant ones. A convolution supplies that local mixing directly through its structure, without any training required to discover that neighbours matter.
    </p>
@@ -502,7 +502,7 @@ blockquote {
    <p>
     See the diagram below:
    </p>
-   <img alt="" src="https://substackcdn.com/image/fetch/$s_!EKSy!,w_1456,c_limit,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2F075f9d40-31ba-40ac-81b6-4295735cf4a7_2998x2026.png"/>
+   <img alt="" src="https://substackcdn.com/image/fetch/$s_!EKSy!,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2F075f9d40-31ba-40ac-81b6-4295735cf4a7_2998x2026.png"/>
    <p>
     One point of confusion can be that the launch announcement labels this as an encoder-free architecture [1], while the model card describes images as being encoded via a hierarchical patch encoder [2]. Both descriptions are accurate. Encoder-free here means there is no large, separately pretrained encoder network, rather than meaning there is no processing at all.
    </p>
@@ -542,7 +542,7 @@ blockquote {
    <p>
     Across many attempts, the connection between the message and the profitable length was learned.
    </p>
-   <img alt="" src="https://substackcdn.com/image/fetch/$s_!HytB!,w_1456,c_limit,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2F36881c12-5c86-4d0f-9645-b92eec74296f_3470x2286.png"/>
+   <img alt="" src="https://substackcdn.com/image/fetch/$s_!HytB!,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2F36881c12-5c86-4d0f-9645-b92eec74296f_3470x2286.png"/>
    <p>
     Here are some key points about limits:
    </p>

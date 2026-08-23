@@ -241,13 +241,32 @@ def copy_children(source: Tag, destination: Tag, output: BeautifulSoup) -> None:
             destination.append(cleaned)
 
 
+def is_substack_image_url(url: str) -> bool:
+    parsed = urlparse(url)
+    if parsed.hostname == "substackcdn.com":
+        return parsed.path.startswith("/image/fetch/")
+    return (
+        parsed.hostname == "substack-post-media.s3.amazonaws.com"
+        and parsed.path.startswith("/public/images/")
+    )
+
+
+def preferred_figure_image_src(source: Tag, source_image: Tag) -> str:
+    image_link = source.find("a", href=True)
+    if image_link:
+        href = str(image_link["href"])
+        if is_substack_image_url(href):
+            return href
+    return str(source_image["src"])
+
+
 def clean_figure(source: Tag, output: BeautifulSoup) -> Tag | None:
     source_image = source.find("img")
     if not source_image or not source_image.get("src"):
         return None
 
     image = output.new_tag("img")
-    image["src"] = source_image["src"]
+    image["src"] = preferred_figure_image_src(source, source_image)
     if source_image.get("alt"):
         image["alt"] = source_image["alt"]
     else:
