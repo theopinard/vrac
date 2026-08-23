@@ -246,20 +246,22 @@ def clean_figure(source: Tag, output: BeautifulSoup) -> Tag | None:
     if not source_image or not source_image.get("src"):
         return None
 
-    figure = output.new_tag("figure")
     image = output.new_tag("img")
     image["src"] = source_image["src"]
     if source_image.get("alt"):
         image["alt"] = source_image["alt"]
     else:
         image["alt"] = ""
-    figure.append(image)
 
     source_caption = source.find("figcaption")
-    if source_caption and source_caption.get_text(" ", strip=True):
-        caption = output.new_tag("figcaption")
-        copy_children(source_caption, caption, output)
-        figure.append(caption)
+    if not source_caption or not source_caption.get_text(" ", strip=True):
+        return image
+
+    figure = output.new_tag("figure")
+    figure.append(image)
+    caption = output.new_tag("figcaption")
+    copy_children(source_caption, caption, output)
+    figure.append(caption)
     return figure
 
 
