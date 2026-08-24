@@ -5,6 +5,7 @@ description = "Republish Substack and arXiv articles as simple static HTML for I
 requires-python = ">=3.11"
 dependencies = [
   "beautifulsoup4==4.13.4",
+  "pillow==11.3.0",
   "pymupdf==1.26.4",
   "requests==2.32.4",
 ]

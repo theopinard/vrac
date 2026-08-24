@@ -54,8 +54,8 @@ class ArxivMarkupTests(unittest.TestCase):
     def test_visual_figures_have_only_direct_images_and_caption(self) -> None:
         soup = BeautifulSoup(
             """
-            <article><figure id="f1"><div><span><img src="figure-1.png"
-            alt="diagram"></span></div><div><img src="table-1.png"
+            <article><figure id="f1"><div><span><img src="figure-1.jpg"
+            alt="diagram"></span></div><div><img src="table-1.jpg"
             alt="table"></div><figcaption>Figure 1.</figcaption></figure></article>
             """,
             "html.parser",
@@ -88,7 +88,7 @@ class ArxivMarkupTests(unittest.TestCase):
 
     def test_generated_images_get_absolute_urls_and_keep_dimensions(self) -> None:
         soup = BeautifulSoup(
-            '<article><figure><img src="figure-1.png" alt="diagram" '
+            '<article><figure><img src="figure-1.jpg" alt="diagram" '
             'width="1200" height="650"></figure></article>',
             "html.parser",
         )
@@ -103,7 +103,7 @@ class ArxivMarkupTests(unittest.TestCase):
         assert image is not None
         self.assertEqual(
             image["src"],
-            "https://example.test/articles/paper/figure-1.png",
+            "https://example.test/articles/paper/figure-1.jpg",
         )
         self.assertEqual(image["width"], "1200")
         self.assertEqual(image["height"], "650")

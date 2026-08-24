@@ -452,7 +452,7 @@ def render_svg_figures(
         figure_number = number_match.group("number")
         page, clip = figure_clip(document, svg, figure_number)
 
-        filename = f"figure-{ordinal}.png"
+        filename = f"figure-{ordinal}.jpg"
         zoom = min(4.0, 1198.0 / clip.width)
         pixmap = page.get_pixmap(
             matrix=pymupdf.Matrix(zoom, zoom),
@@ -460,7 +460,14 @@ def render_svg_figures(
             colorspace=pymupdf.csRGB,
             alpha=False,
         )
-        pixmap.save(asset_directory / filename)
+        pixmap.pil_save(
+            asset_directory / filename,
+            format="JPEG",
+            quality=88,
+            progressive=False,
+            optimize=False,
+            subsampling=2,
+        )
 
         image = BeautifulSoup("", "html.parser").new_tag("img")
         image["src"] = filename
@@ -578,7 +585,7 @@ def render_data_tables(
         caption = figure.find("figcaption") if figure else None
         caption_text = caption.get_text(" ", strip=True) if caption else "Data table"
         page, clip = table_clip(document, table)
-        filename = f"table-{ordinal}.png"
+        filename = f"table-{ordinal}.jpg"
         zoom = min(4.0, 1198.0 / clip.width)
         pixmap = page.get_pixmap(
             matrix=pymupdf.Matrix(zoom, zoom),
@@ -586,7 +593,14 @@ def render_data_tables(
             colorspace=pymupdf.csRGB,
             alpha=False,
         )
-        pixmap.save(asset_directory / filename)
+        pixmap.pil_save(
+            asset_directory / filename,
+            format="JPEG",
+            quality=88,
+            progressive=False,
+            optimize=False,
+            subsampling=2,
+        )
         image = BeautifulSoup("", "html.parser").new_tag("img")
         image["src"] = filename
         image["alt"] = re.sub(r"\s+", " ", caption_text)[:240]
@@ -667,7 +681,7 @@ def sanitize_article(article: Tag, source_url: str, asset_base_url: str) -> None
         src = str(image["src"])
         image["src"] = (
             urljoin(asset_base_url, src)
-            if re.fullmatch(r"(?:figure|table)-\d+\.png", src)
+            if re.fullmatch(r"(?:figure|table)-\d+\.jpe?g", src)
             else urljoin(source_url, src)
         )
 
@@ -838,6 +852,9 @@ def republish(
         html = render_page(metadata, article, source)
 
         output_directory.mkdir(parents=True, exist_ok=True)
+        for pattern in ("figure-*.png", "figure-*.jpg", "table-*.png", "table-*.jpg"):
+            for stale_asset in output_directory.glob(pattern):
+                stale_asset.unlink()
         for asset in asset_directory.iterdir():
             shutil.copy2(asset, output_directory / asset.name)
         output_path = output_directory / "index.html"
