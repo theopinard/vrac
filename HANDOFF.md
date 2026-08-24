@@ -1,23 +1,27 @@
-# Kobo + Instapaper + Substack republisher handoff
+# Kobo + Instapaper article republisher handoff
 
 ## Purpose of this document
 
 This is the working context for a follow-up session. It combines the earlier ChatGPT investigation with the implementation and experiments performed in Codex.
 
-The project began by debugging why diagrams from complex Substack/ByteByteGo articles became broken-image icons on a Kobo Clara after the article was saved through Instapaper. It has now established a working republishing pipeline for the validation article, although the exact internal Instapaper/Kobo failure mechanism is not fully proven.
+The project began by debugging why diagrams from complex Substack/ByteByteGo articles became broken-image icons on a Kobo Clara after the article was saved through Instapaper. It now has two working republishing pipelines: one for Substack articles and one for arXiv papers with semantic HTML. Both have been validated through the full GitHub Pages → Instapaper → Kobo Clara path.
 
 ## Current status at a glance
 
 - Repository: `theopinard/vrac`
 - Local repository: `/home/theodore/github/vrac`
 - GitHub Pages root: <https://theopinard.github.io/vrac/>
-- Source article: <https://blog.bytebytego.com/p/the-new-american-ai-model-designed>
-- Clean generated J article: <https://theopinard.github.io/vrac/articles/the-new-american-ai-model-designed/>
-- Current published commit: `7c7ee5a` (`Prefer full-resolution Substack image links`)
+- Substack validation source: <https://blog.bytebytego.com/p/the-new-american-ai-model-designed>
+- Clean generated Substack article: <https://theopinard.github.io/vrac/articles/the-new-american-ai-model-designed/>
+- arXiv validation source: <https://arxiv.org/abs/2607.12246v1>
+- Clean generated arXiv article: <https://theopinard.github.io/vrac/articles/proximity-features-privacy-compliant-cold-start-personalization-at-airbnb/>
+- Current published commit: `f4ad6d6` (`Convert arXiv assets to baseline JPEG`)
 - GitHub Pages publishes the repository root from `origin/main`.
 - Local checkout is currently on `add-instapaper-image-tag`. This branch contains the latest commits and points at the same commit as `origin/main`; the local `main` branch is stale at the initial commit.
-- The latest J revision is published, HTTP-verified, and Kobo-validated: all article pictures render successfully.
-- The confirmed successful strategy is clean static article HTML, bare `<img>` elements for uncaptained images, and full-resolution enclosing Substack image-link URLs for real diagrams.
+- The latest Substack revision is published, HTTP-verified, and Kobo-validated: all article pictures render successfully.
+- The Substack strategy is clean static HTML, bare `<img>` elements for uncaptained images, and full-resolution enclosing Substack image-link URLs for real diagrams.
+- The arXiv strategy is semantic arXiv HTML plus figures/tables cropped from the matching PDF and encoded as baseline, non-progressive RGB JPEGs.
+- The final arXiv page contains six direct, absolute JPEG image tags: three diagrams and three formatted tables. This version is Kobo-validated.
 
 ## Original problem
 
@@ -291,6 +295,187 @@ Original Substack article
 ```
 
 The experiments support an interaction between Instapaper's extraction of the complex original Substack document, repeated image containers, and the transformed nested image sources. They do not establish one single internal Kobo or Instapaper defect with certainty. The important engineering result is that the current normalizer removes the problematic combination without converting or rehosting images.
+
+## arXiv republisher
+
+The second tool is [republish_arxiv.py](republish_arxiv.py). It is separate from the Substack extractor because the source and image pipelines are fundamentally different.
+
+Run it with an arXiv abstract, HTML, or PDF URL:
+
+```bash
+uv sync
+uv run python republish_arxiv.py "https://arxiv.org/abs/2607.12246v1"
+```
+
+An unversioned URL is resolved and pinned to the latest available version for that run. The tool accepts modern and legacy arXiv identifiers, rejects non-arXiv hosts, and requires arXiv semantic HTML. It deliberately fails rather than attempting generic PDF layout reconstruction when semantic HTML is unavailable.
+
+For the validation paper it writes:
+
+```text
+articles/proximity-features-privacy-compliant-cold-start-personalization-at-airbnb/
+  index.html
+  figure-1.jpg
+  figure-2.jpg
+  figure-3.jpg
+  table-1.jpg
+  table-2.jpg
+  table-3.jpg
+```
+
+The implementation:
+
+1. Normalizes and versions the input arXiv URL.
+2. Fetches the matching semantic HTML and PDF revision.
+3. Uses the semantic HTML for title, all authors, abstract, sections, paragraphs, lists, links, citations, algorithms, captions, references, and reading order.
+4. Locates each inline SVG figure in the exact PDF using its numbered caption, text labels, column bounds, and vector-drawing bounds.
+5. Locates each real data table in the PDF using its caption and cell labels.
+6. Renders diagram/table crops on white at no more than 1199px width.
+7. Encodes every crop as 8-bit RGB JFIF baseline JPEG, quality 88, non-progressive.
+8. Replaces presentational equation tables with simple MathML blocks.
+9. Emits direct `<figure><img ...><figcaption>...</figcaption></figure>` structures without nested arXiv spans/divs around images.
+10. Uses absolute GitHub Pages image URLs, with explicit width and height. Forks can override the default base using `--public-articles-url`.
+11. Removes scripts, SVG, HTML data tables, `<picture>`, `<source>`, `srcset`, and lazy-loading markup from the output.
+12. Downloads the source PDF only into temporary storage; it is not committed.
+
+arXiv support added these dependencies to the uv project:
+
+- `pymupdf==1.26.4` for PDF inspection and rasterization;
+- `pillow==11.3.0` for explicit baseline/non-progressive JPEG encoding.
+
+There is still intentionally no `requirements.txt`.
+
+## arXiv validation paper and results
+
+Validation source:
+
+<https://arxiv.org/abs/2607.12246v1>
+
+Title:
+
+```text
+Proximity Features: Privacy-Compliant Cold-Start Personalization at Airbnb
+```
+
+Published page:
+
+<https://theopinard.github.io/vrac/articles/proximity-features-privacy-compliant-cold-start-personalization-at-airbnb/>
+
+The original is an untagged, two-column, eight-page PDF. Its text is extractable, but `pdfimages` finds no raster images: its three diagrams/charts are PDF vector drawing commands. arXiv's semantic HTML contains exactly three article SVGs, semantic tables/algorithms/references, and MathML expressions.
+
+The final generated page retains the complete readable paper through References. It contains:
+
+- three diagram JPEGs;
+- three formatted data-table JPEGs;
+- zero SVG elements;
+- zero HTML `<table>` elements;
+- zero `<picture>`, `<source>`, `srcset`, scripts, or lazy-loading attributes;
+- 94 retained MathML expressions outside the rasterized figure/table contents;
+- six direct image children of semantic `<figure>` elements;
+- absolute public image URLs and explicit image dimensions.
+
+The final assets are:
+
+| Asset | Dimensions | Encoding |
+| --- | ---: | --- |
+| `figure-1.jpg` | 1199×651 | RGB baseline JPEG, quality 88 |
+| `figure-2.jpg` | 994×545 | RGB baseline JPEG, quality 88 |
+| `figure-3.jpg` | 1001×435 | RGB baseline JPEG, quality 88 |
+| `table-1.jpg` | 677×278 | RGB baseline JPEG, quality 88 |
+| `table-2.jpg` | 909×341 | RGB baseline JPEG, quality 88 |
+| `table-3.jpg` | 581×258 | RGB baseline JPEG, quality 88 |
+
+All public HTML/image files were downloaded after deployment and compared byte-for-byte with their committed local versions.
+
+## arXiv failure sequence and confirmed fix
+
+### Initial arXiv version
+
+Commit:
+
+- `5132718` — `Add arXiv paper republisher`
+
+Behavior:
+
+- PDF vector figures were rasterized to local 8-bit RGB, non-interlaced PNGs.
+- The article retained complex LaTeXML wrappers around the images.
+- Data tables remained semantic HTML tables.
+
+Kobo result:
+
+- All pictures were broken.
+- Tables appeared as unformatted/raw cell text.
+
+### Simplified figures and rasterized tables
+
+Commit:
+
+- `9995a20` — `Simplify arXiv figures and rasterize tables`
+
+Behavior:
+
+- Diagram images became direct children of `<figure>`.
+- The three data tables were cropped from the PDF and converted to PNG images.
+- Equation-layout tables became simple math blocks.
+- No SVG or HTML data tables remained.
+
+Kobo result:
+
+- All pictures were still broken.
+
+This ruled out the remaining LaTeXML image wrappers and raw HTML table formatting as sufficient explanations.
+
+### Absolute image URLs and dimensions
+
+Commit:
+
+- `109de40` — `Use absolute arXiv image URLs`
+
+Behavior:
+
+- All six images used complete `https://theopinard.github.io/...` URLs.
+- All `<img>` tags included explicit width and height.
+- Markup remained direct and minimal.
+
+Kobo result:
+
+- All pictures were still broken.
+
+This ruled out relative URL resolution as the primary cause.
+
+### Baseline JPEG conversion — confirmed success
+
+Commit:
+
+- `f4ad6d6` — `Convert arXiv assets to baseline JPEG`
+
+Behavior:
+
+- All six generated PNGs were replaced by JFIF baseline JPEGs.
+- Encoding is 8-bit RGB, quality 88, non-progressive, with a white background.
+- PyMuPDF's direct JPEG writer was not used because inspection showed that it emitted progressive JPEGs. Pillow is used with `progressive=False` and `optimize=False` to guarantee the required profile.
+- Absolute URLs, explicit dimensions, and direct figure/image markup were retained.
+
+Kobo result:
+
+- **Success: every diagram and formatted table renders through Instapaper on the Kobo Clara.**
+
+This is the strongest controlled conclusion for the arXiv path because the immediately preceding absolute/direct PNG version failed and the baseline JPEG version succeeded. It does not mean that Kobo rejects every PNG—the earlier Substack diagnostics include working PNGs. It establishes that conservative baseline JPEG is the reliable output format for PDF-derived arXiv figures and tables in this workflow.
+
+The working arXiv path is therefore:
+
+```text
+arXiv URL
+  -> resolve exact version
+  -> semantic arXiv HTML for reading structure
+  -> matching PDF for diagram/table crops
+  -> baseline RGB JPEG assets
+  -> clean static GitHub Pages article
+  -> save fresh URL to Instapaper
+  -> sync to Kobo Clara
+  -> complete text, diagrams, and formatted tables render
+```
+
+The test suite currently has nine tests covering arXiv URL forms/version handling, invalid input, direct visual markup, equation-table simplification, and absolute generated image URLs/dimensions.
 
 ## The nine real diagrams in order
 
