@@ -8,6 +8,7 @@ from republish_arxiv import (
     normalize_visual_figures,
     parse_arxiv_url,
     resolved_identifier,
+    sanitize_article,
 )
 
 
@@ -84,6 +85,28 @@ class ArxivMarkupTests(unittest.TestCase):
         self.assertIsNone(article.table)
         self.assertIsNotNone(article.math)
         self.assertIn("(1)", article.get_text(" ", strip=True))
+
+    def test_generated_images_get_absolute_urls_and_keep_dimensions(self) -> None:
+        soup = BeautifulSoup(
+            '<article><figure><img src="figure-1.png" alt="diagram" '
+            'width="1200" height="650"></figure></article>',
+            "html.parser",
+        )
+        article = soup.article
+        assert article is not None
+        sanitize_article(
+            article,
+            "https://arxiv.org/html/2607.12246v1",
+            "https://example.test/articles/paper/",
+        )
+        image = article.img
+        assert image is not None
+        self.assertEqual(
+            image["src"],
+            "https://example.test/articles/paper/figure-1.png",
+        )
+        self.assertEqual(image["width"], "1200")
+        self.assertEqual(image["height"], "650")
 
 
 if __name__ == "__main__":

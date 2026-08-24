@@ -47,6 +47,10 @@ The command writes the page and its figure assets beneath:
 articles/<paper-title-slug>/
 ```
 
+Generated image tags use absolute GitHub Pages URLs by default so Instapaper
+does not have to resolve nested relative paths. Forks can change the base with
+`--public-articles-url`.
+
 This command requires network access and supports only papers for which arXiv
 provides semantic HTML. It does not perform OCR or generic PDF layout
 reconstruction.

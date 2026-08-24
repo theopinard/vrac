@@ -134,7 +134,7 @@ experiments across multiple surfaces (Section <a href="#S4"><span>4</span></a>)
 <p id="S2.p1.1">Figure <a href="#acmlabel1"><span>1</span></a> provides an overview of the Proximity Features
 system. Each component is described below.</p>
 </div>
-<figure id="S2.F1"><img alt="Figure 1. System architecture. Offline: the adaptive clustering algorithm runs once at bootstrap to establish the proximity key partition; the IP-to-key mapping, coordinate-to-scalar mapping, and tile-to-bucket-count mapping are refreshed d" src="figure-1.png"/><figcaption><span>Figure 1. </span>System architecture. Offline: the adaptive clustering
+<figure id="S2.F1"><img alt="Figure 1. System architecture. Offline: the adaptive clustering algorithm runs once at bootstrap to establish the proximity key partition; the IP-to-key mapping, coordinate-to-scalar mapping, and tile-to-bucket-count mapping are refreshed d" height="651" src="https://theopinard.github.io/vrac/articles/proximity-features-privacy-compliant-cold-start-personalization-at-airbnb/figure-1.png" width="1199"/><figcaption><span>Figure 1. </span>System architecture. Offline: the adaptive clustering
 algorithm runs once at bootstrap to establish the proximity key partition;
 the IP-to-key mapping, coordinate-to-scalar mapping, and tile-to-bucket-count
 mapping are refreshed daily, and features are aggregated over
@@ -591,7 +591,7 @@ parameter count, reducing inference latency; this is orthogonal to the
 proximity feature contribution. This application was launched in
 March 2026.</p>
 </div>
-<figure id="S3.F2"><img alt="Figure 2. Qualitative comparison of destination suggestions for logged-out users. Without proximity features, the model returns a static global list; with them, suggestions reflect local travel patterns. Side-by-side comparison of destinati" src="figure-2.png"/><figcaption><span>Figure 2. </span>Qualitative comparison of destination suggestions for logged-out
+<figure id="S3.F2"><img alt="Figure 2. Qualitative comparison of destination suggestions for logged-out users. Without proximity features, the model returns a static global list; with them, suggestions reflect local travel patterns. Side-by-side comparison of destinati" height="545" src="https://theopinard.github.io/vrac/articles/proximity-features-privacy-compliant-cold-start-personalization-at-airbnb/figure-2.png" width="994"/><figcaption><span>Figure 2. </span>Qualitative comparison of destination suggestions for logged-out
 users. Without proximity features, the model returns a static global
 list; with them, suggestions reflect local travel patterns.<span id="acmlabel2">Side-by-side comparison of destination suggestions with and without proximity features for two logged-out users, showing location-aware recommendations replacing generic global defaults.</span></figcaption></figure>
 </section>
@@ -633,7 +633,7 @@ the subsequent 90 days.
 Results are reported for <em id="S4.SS1.SSS0.Px1.p1.1.1">low-activity</em> users—those with limited booking
 history—the primary target population for proximity features.</p>
 </div>
-<figure id="S4.T1"><img alt="Table 1. Recall@ k k (%) for destination prediction using proximity features on low-activity users across different aggregation windows. No comparative baseline is included; the evaluation isolates proximity feature signal in the cold-start" src="table-1.png"/><figcaption><span>Table 1. </span>Recall@<math alttext="k" class="ltx_Math" display="inline" id="S4.T1.m2" intent=":literal"><semantics><mi>k</mi><annotation encoding="application/x-tex">k</annotation></semantics></math> (%) for destination prediction using proximity features
+<figure id="S4.T1"><img alt="Table 1. Recall@ k k (%) for destination prediction using proximity features on low-activity users across different aggregation windows. No comparative baseline is included; the evaluation isolates proximity feature signal in the cold-start" height="278" src="https://theopinard.github.io/vrac/articles/proximity-features-privacy-compliant-cold-start-personalization-at-airbnb/table-1.png" width="677"/><figcaption><span>Table 1. </span>Recall@<math alttext="k" class="ltx_Math" display="inline" id="S4.T1.m2" intent=":literal"><semantics><mi>k</mi><annotation encoding="application/x-tex">k</annotation></semantics></math> (%) for destination prediction using proximity features
 on low-activity users across different aggregation windows. No comparative
 baseline is included; the evaluation isolates proximity feature signal in
 the cold-start setting.</figcaption></figure>
@@ -662,7 +662,7 @@ significance at the 95% confidence level. Notably, the results below span
 December 2024 through March 2026, all using the same proximity key assignment,
 empirically validating the temporal stability of the key partition.</p>
 </div>
-<figure id="S4.T2"><img alt="Table 2. Online A/B experiment results across production surfaces." src="table-2.png"/><figcaption><span>Table 2. </span>Online A/B experiment results across production surfaces.</figcaption></figure>
+<figure id="S4.T2"><img alt="Table 2. Online A/B experiment results across production surfaces." height="341" src="https://theopinard.github.io/vrac/articles/proximity-features-privacy-compliant-cold-start-personalization-at-airbnb/table-2.png" width="909"/><figcaption><span>Table 2. </span>Online A/B experiment results across production surfaces.</figcaption></figure>
 <div id="S4.SS2.p2">
 <p id="S4.SS2.p2.1">Table <a href="#S4.T2"><span>2</span></a> summarizes the results. On marketing landing pages, proximity features produced a +0.011% lift in
 global bookings and increased first-time bookers by +2.0%, confirming
@@ -709,7 +709,7 @@ providing location-aware signals derived from nearby users, enabling personalize
 recommendations from the first interaction.
 These results are consistent with the design hypothesis that proximity features provide the most incremental value where user-level features are absent or stale.</p>
 </div>
-<figure id="S4.F3"><img alt="Figure 3. Booking lift by user cohort in the AutoSuggest experiment, with traffic share and p-value. The directionally largest gains are among Never-Booked and Dormant users. The New-Guest cohort ( &lt; &lt; 1% of traffic, p = 0.78 p=0.78 ) shows" src="figure-3.png"/><img alt="Figure 3. Booking lift by user cohort in the AutoSuggest experiment, with traffic share and p-value. The directionally largest gains are among Never-Booked and Dormant users. The New-Guest cohort ( &lt; &lt; 1% of traffic, p = 0.78 p=0.78 ) shows" src="table-3.png"/><figcaption><span>Figure 3. </span>Booking lift by user cohort in the AutoSuggest experiment, with
+<figure id="S4.F3"><img alt="Figure 3. Booking lift by user cohort in the AutoSuggest experiment, with traffic share and p-value. The directionally largest gains are among Never-Booked and Dormant users. The New-Guest cohort ( &lt; &lt; 1% of traffic, p = 0.78 p=0.78 ) shows" height="435" src="https://theopinard.github.io/vrac/articles/proximity-features-privacy-compliant-cold-start-personalization-at-airbnb/figure-3.png" width="1001"/><img alt="Figure 3. Booking lift by user cohort in the AutoSuggest experiment, with traffic share and p-value. The directionally largest gains are among Never-Booked and Dormant users. The New-Guest cohort ( &lt; &lt; 1% of traffic, p = 0.78 p=0.78 ) shows" height="258" src="https://theopinard.github.io/vrac/articles/proximity-features-privacy-compliant-cold-start-personalization-at-airbnb/table-3.png" width="581"/><figcaption><span>Figure 3. </span>Booking lift by user cohort in the AutoSuggest experiment, with
 traffic share and p-value. The directionally largest gains are among Never-Booked and
 Dormant users. The New-Guest cohort (<math alttext="&lt;" class="ltx_Math" display="inline" id="S4.F3.m4" intent=":literal"><semantics><mo>&lt;</mo><annotation encoding="application/x-tex">&lt;</annotation></semantics></math>1% of traffic,
 <math alttext="p=0.78" class="ltx_Math" display="inline" id="S4.F3.m5" intent=":literal"><semantics><mrow><mi>p</mi><mo>=</mo><mn>0.78</mn></mrow><annotation encoding="application/x-tex">p=0.78</annotation></semantics></math>) shows a near-zero non-significant result.<span id="acmlabel3">Bar chart showing booking lift by user cohort (Never-Booked, Dormant, Active, New-Guest) with a companion table showing traffic share and p-value for each cohort.</span></figcaption></figure>

@@ -55,6 +55,7 @@ USER_AGENT = (
     "Mozilla/5.0 (compatible; ArxivKoboRepublisher/1.0; "
     "+https://github.com/theopinard/vrac)"
 )
+DEFAULT_PUBLIC_ARTICLES_URL = "https://theopinard.github.io/vrac/articles/"
 
 
 @dataclass(frozen=True)
@@ -76,6 +77,11 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=Path(__file__).resolve().parent / "articles",
         help="Directory that will contain <title-slug>/index.html and figures",
+    )
+    parser.add_argument(
+        "--public-articles-url",
+        default=DEFAULT_PUBLIC_ARTICLES_URL,
+        help="Public base URL used to make generated image URLs absolute",
     )
     return parser.parse_args()
 
@@ -459,6 +465,8 @@ def render_svg_figures(
         image = BeautifulSoup("", "html.parser").new_tag("img")
         image["src"] = filename
         image["alt"] = caption_text or f"Figure {figure_number}"
+        image["width"] = str(pixmap.width)
+        image["height"] = str(pixmap.height)
         svg.replace_with(image)
     return len(svgs)
 
@@ -582,6 +590,8 @@ def render_data_tables(
         image = BeautifulSoup("", "html.parser").new_tag("img")
         image["src"] = filename
         image["alt"] = re.sub(r"\s+", " ", caption_text)[:240]
+        image["width"] = str(pixmap.width)
+        image["height"] = str(pixmap.height)
         table.replace_with(image)
     return len(tables)
 
@@ -623,13 +633,17 @@ def normalize_visual_figures(article: Tag) -> None:
             simple_image["alt"] = re.sub(
                 r"\s+", " ", str(image.get("alt", ""))
             )[:240]
+            if image.get("width"):
+                simple_image["width"] = str(image["width"])
+            if image.get("height"):
+                simple_image["height"] = str(image["height"])
             normalized.append(simple_image)
         if caption:
             normalized.append(caption.extract())
         figure.replace_with(normalized)
 
 
-def sanitize_article(article: Tag, source_url: str) -> None:
+def sanitize_article(article: Tag, source_url: str, asset_base_url: str) -> None:
     for selector in (
         "h1.ltx_title_document",
         ".ltx_authors",
@@ -652,7 +666,7 @@ def sanitize_article(article: Tag, source_url: str) -> None:
     for image in article.find_all("img", src=True):
         src = str(image["src"])
         image["src"] = (
-            src
+            urljoin(asset_base_url, src)
             if re.fullmatch(r"(?:figure|table)-\d+\.png", src)
             else urljoin(source_url, src)
         )
@@ -673,6 +687,10 @@ def sanitize_article(article: Tag, source_url: str) -> None:
         if element.name == "img":
             allowed["src"] = str(element.get("src", ""))
             allowed["alt"] = str(element.get("alt", ""))
+            if element.get("width"):
+                allowed["width"] = str(element["width"])
+            if element.get("height"):
+                allowed["height"] = str(element["height"])
         if element.name == "ol" and element.get("start"):
             allowed["start"] = str(element["start"])
         if element.name in {"th", "td"}:
@@ -776,7 +794,11 @@ math[display="block"] { margin: 1rem auto; overflow-x: auto; }
     return "<!doctype html>\n" + shell.html.decode(formatter="minimal") + "\n"
 
 
-def republish(url: str, output_root: Path) -> Path:
+def republish(
+    url: str,
+    output_root: Path,
+    public_articles_url: str = DEFAULT_PUBLIC_ARTICLES_URL,
+) -> Path:
     source = fetch_arxiv_source(url)
     soup = BeautifulSoup(source.html, "html.parser")
     metadata = extract_metadata(soup, source.resolved_id)
@@ -789,6 +811,7 @@ def republish(url: str, output_root: Path) -> Path:
         raise ValueError("Could not copy the semantic arXiv article")
 
     slug = slug_from_title(metadata["title"])
+    asset_base_url = urljoin(public_articles_url.rstrip("/") + "/", slug + "/")
     output_directory = output_root / slug
     with tempfile.TemporaryDirectory(prefix="arxiv-republish-") as temporary:
         temporary_directory = Path(temporary)
@@ -809,7 +832,7 @@ def republish(url: str, output_root: Path) -> Path:
             print("warning: the article contained no data tables", file=sys.stderr)
         normalize_equation_tables(article)
         normalize_visual_figures(article)
-        sanitize_article(article, source.html_url)
+        sanitize_article(article, source.html_url, asset_base_url)
         if article.find("svg"):
             raise ValueError("An SVG remained after figure conversion")
         html = render_page(metadata, article, source)
@@ -825,7 +848,11 @@ def republish(url: str, output_root: Path) -> Path:
 def main() -> int:
     args = parse_args()
     try:
-        output_path = republish(args.url, args.output_root)
+        output_path = republish(
+            args.url,
+            args.output_root,
+            args.public_articles_url,
+        )
     except (requests.RequestException, pymupdf.FileDataError, ValueError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
