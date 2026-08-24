@@ -434,6 +434,52 @@ def figure_clip(
     return page, clip
 
 
+def object_figure_clip(
+    document: pymupdf.Document,
+    figure_number: str,
+) -> tuple[pymupdf.Page, pymupdf.Rect]:
+    """Locate a PDF figure represented by an external SVG object in arXiv HTML."""
+    page, _caption_match, lane = find_caption_page(document, figure_number)
+    content_bounds = pymupdf.Rect(
+        max(page.rect.x0 + 18, lane.x0 - 4),
+        lane.y1 + 1,
+        min(page.rect.x1 - 18, lane.x1 + 4),
+        page.rect.y1 - 36,
+    )
+    drawings = [
+        pymupdf.Rect(drawing["rect"])
+        for drawing in page.get_drawings()
+        if pymupdf.Rect(drawing["rect"]).intersects(content_bounds)
+    ]
+    if not drawings:
+        raise ValueError(
+            f"Could not locate the PDF artwork for Figure {figure_number}"
+        )
+
+    drawing_bounds = union_rect(drawings)
+    labeled_plot_bounds = pymupdf.Rect(
+        content_bounds.x0,
+        max(content_bounds.y0, drawing_bounds.y0 - 20),
+        content_bounds.x1,
+        min(content_bounds.y1, drawing_bounds.y1 + 25),
+    )
+    text_blocks = [
+        pymupdf.Rect(block[:4])
+        for block in page.get_text("blocks")
+        if pymupdf.Rect(block[:4]).intersects(labeled_plot_bounds)
+    ]
+    content = union_rect(drawings + text_blocks)
+    clip = pymupdf.Rect(
+        max(content_bounds.x0, content.x0 - 6),
+        max(content_bounds.y0, content.y0 - 6),
+        min(content_bounds.x1, content.x1 + 6),
+        min(content_bounds.y1, content.y1 + 6),
+    )
+    if clip.is_empty or clip.width < 50 or clip.height < 30:
+        raise ValueError(f"Computed an invalid PDF crop for Figure {figure_number}")
+    return page, clip
+
+
 def render_svg_figures(
     article: Tag,
     document: pymupdf.Document,
@@ -476,6 +522,55 @@ def render_svg_figures(
         image["height"] = str(pixmap.height)
         svg.replace_with(image)
     return len(svgs)
+
+
+def render_object_figures(
+    article: Tag,
+    document: pymupdf.Document,
+    asset_directory: Path,
+    starting_ordinal: int,
+) -> int:
+    objects = [
+        element
+        for element in article.find_all("object")
+        if str(element.get("type", "")).lower() == "image/svg+xml"
+    ]
+    for offset, element in enumerate(objects):
+        figure = element.find_parent("figure")
+        if figure is None:
+            raise ValueError("Found an article SVG object outside a figure")
+        caption = figure.find("figcaption")
+        caption_text = caption.get_text(" ", strip=True) if caption else ""
+        number_match = FIGURE_NUMBER_PATTERN.search(caption_text)
+        if not number_match:
+            raise ValueError("Could not identify the caption for an SVG object figure")
+        figure_number = number_match.group("number")
+        page, clip = object_figure_clip(document, figure_number)
+
+        filename = f"figure-{starting_ordinal + offset}.jpg"
+        zoom = min(4.0, 1198.0 / clip.width)
+        pixmap = page.get_pixmap(
+            matrix=pymupdf.Matrix(zoom, zoom),
+            clip=clip,
+            colorspace=pymupdf.csRGB,
+            alpha=False,
+        )
+        pixmap.pil_save(
+            asset_directory / filename,
+            format="JPEG",
+            quality=88,
+            progressive=False,
+            optimize=False,
+            subsampling=2,
+        )
+
+        image = BeautifulSoup("", "html.parser").new_tag("img")
+        image["src"] = filename
+        image["alt"] = caption_text or f"Figure {figure_number}"
+        image["width"] = str(pixmap.width)
+        image["height"] = str(pixmap.height)
+        element.replace_with(image)
+    return len(objects)
 
 
 def visible_cell_text(cell: Tag) -> str:
@@ -535,6 +630,12 @@ def table_clip(
             else min(candidates, key=lambda rectangle: rectangle.y0)
         )
         matches.append(choice)
+        if not before_caption and len(label) > 120:
+            matches.extend(
+                rectangle
+                for rectangle in candidates
+                if choice.y0 < rectangle.y0 <= choice.y1 + 30
+            )
 
     if len(matches) < 3:
         raise ValueError(f"Could not map the data for {kind} {number} into the PDF")
@@ -837,6 +938,12 @@ def republish(
             if len(document) == 0:
                 raise ValueError("The downloaded PDF contains no pages")
             rendered = render_svg_figures(article, document, asset_directory)
+            rendered += render_object_figures(
+                article,
+                document,
+                asset_directory,
+                starting_ordinal=rendered + 1,
+            )
             rendered_tables = render_data_tables(
                 article, document, asset_directory
             )
@@ -847,7 +954,7 @@ def republish(
         normalize_equation_tables(article)
         normalize_visual_figures(article)
         sanitize_article(article, source.html_url, asset_base_url)
-        if article.find("svg"):
+        if article.find("svg") or article.find("object", type="image/svg+xml"):
             raise ValueError("An SVG remained after figure conversion")
         html = render_page(metadata, article, source)
 

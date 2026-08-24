@@ -1,0 +1,758 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1" name="viewport"/><title>SPLADE: Sparse Lexical and Expansion Model for First Stage Ranking</title><style>body {
+  max-width: 760px;
+  margin: 2rem auto;
+  padding: 0 1rem;
+  font-family: Georgia, serif;
+  line-height: 1.55;
+}
+img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 1.5rem auto;
+}
+figure { margin: 2rem 0; }
+figcaption, .article-meta { font-size: 0.9em; }
+pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+blockquote {
+  margin-left: 0;
+  padding-left: 1rem;
+  border-left: 3px solid #999;
+}
+math[display="block"] { margin: 1rem auto; overflow-x: auto; }</style></head><body><article><h1>SPLADE: Sparse Lexical and Expansion Model for First Stage Ranking</h1><p class="article-meta">Thibault Formal, Benjamin Piwowarski, Stéphane Clinchant · arXiv:2107.05720v1 · 12 Jul 2021</p><p class="article-meta">Original: <a href="https://arxiv.org/html/2107.05720v1">arXiv HTML</a> · <a href="https://arxiv.org/pdf/2107.05720v1">PDF</a></p>
+<div id="p1">
+<p id="p1.1">*[inlinelist,1]label=),itemjoin=, ,itemjoin*=, and</p>
+</div>
+<div id="abstract1"><h2>Abstract</h2>
+<p id="abstract1.1">In neural Information Retrieval, ongoing research is directed towards improving the first retriever in ranking pipelines. Learning dense embeddings to conduct retrieval using efficient approximate nearest neighbors methods has proven to work well. Meanwhile, there has been a growing interest in learning <em id="abstract1.1.1">sparse</em> representations for documents and queries, that could inherit from the desirable properties of bag-of-words models such as the exact matching of terms and the efficiency of inverted indexes. In this work, we present a new first-stage ranker based on explicit sparsity regularization and a log-saturation effect on term weights, leading to highly sparse representations and competitive results with respect to state-of-the-art dense and sparse methods. Our approach is simple, trained end-to-end in a single stage. We also explore the trade-off between effectiveness and efficiency, by controlling the contribution of the sparsity regularization.</p>
+</div>
+<div>
+<h6>Keywords: </h6>neural networks, indexing, sparse representations, regularization
+</div>
+<section id="S1">
+<h2><span>1. </span>Introduction</h2>
+<div id="S1.p1">
+<p id="S1.p1.1">The release of large pre-trained language models like BERT <cite>(<a href="#bib.bib8">Devlin
+et al. 2018</a>)</cite> has shaken-up Natural Language Processing and Information Retrieval.
+These models have shown a strong ability to adapt to various tasks by simple fine-tuning. At the beginning of 2019, <span id="S1.p1.1.1">Nogueira and Cho</span> <cite>(<a href="#bib.bib18">Nogueira and Cho 2019</a>)</cite> achieved state-of-the-art results – by a large margin – on the MS MARCO passage re-ranking task, paving the way for LM-based neural ranking models. Because of strict efficiency requirements, these models have initially been used as re-rankers in a two-stage ranking pipeline, where first-stage retrieval – or candidate generation – is conducted with bag-of-words models (e.g. BM25) that rely on inverted indexes. While BOW models remain strong baselines <cite>(<a href="#bib.bib28">Yang
+et al. 2019</a>)</cite>, they suffer from the long standing vocabulary mismatch problem, where relevant documents might not contain terms that appear in the query. Thus, there have been attempts to substitute standard BOW approaches by learned (neural) rankers. Designing such models poses several challenges regarding efficiency and scalability: therefore there is a need for methods where most of the computation can be done offline and online inference is fast.
+Dense retrieval with approximate nearest neighbors search has shown impressive results <cite>(<a href="#bib.bib27">Xiong et al. 2021</a>; <a href="#bib.bib16">Lin et al. 2020</a>; <a href="#bib.bib9">Ding et al. 2020</a>)</cite>, but is still combined with BOW models because of its inability to explicitly model term matching. Hence, there has recently been a growing interest in learning <em id="S1.p1.1.2">sparse representations</em> for queries and documents <cite>(<a href="#bib.bib29">Zamani et al. 2018</a>; <a href="#bib.bib5">Dai and Callan 2019</a>; <a href="#bib.bib20">Nogueira
+et al. 2019</a>; <a href="#bib.bib30">Zhao et al. 2020</a>; <a href="#bib.bib2">Bai et al. 2020</a>)</cite>. By doing so, models can inherit from the desirable properties of BOW models like exact-match of (possibly latent) terms, efficiency of inverted indexes and interpretability. Additionally, by modeling implicit or explicit (latent, contextualized) <em id="S1.p1.1.3">expansion</em> mechanisms – similarly to standard expansion models in IR – these models can reduce the vocabulary mismatch.</p>
+</div>
+<div id="S1.p2">
+<p id="S1.p2.1">The contributions of this paper are threefold:
+
+<span id="S1.I1">
+<span id="S1.I1.i1"><span>(1)</span> <span id="S1.I1.i1.2">we build upon SparTerm <cite>(<a href="#bib.bib2">Bai et al. 2020</a>)</cite>, and show that a mild tuning of hyperparameters brings improvements that largely outperform the results reported in the original paper;
+</span></span>
+<span id="S1.I1.i2"><span>(2)</span> <span id="S1.I1.i2.2">we propose the SParse Lexical AnD Expansion (SPLADE) model, based on a logarithmic activation and sparse regularization. SPLADE performs an efficient document expansion <cite>(<a href="#bib.bib2">Bai et al. 2020</a>; <a href="#bib.bib17">MacAvaney et al. 2020</a>)</cite>, with competitive results with respect to complex training pipelines for dense models like ANCE <cite>(<a href="#bib.bib27">Xiong et al. 2021</a>)</cite>;
+</span></span>
+<span id="S1.I1.i3"><span>(3)</span> <span id="S1.I1.i3.2">finally, we show how the sparsity regularization can be controlled to influence the trade-off between efficiency (in terms of the number of floating-point operations) and effectiveness.</span></span>
+</span></p>
+</div>
+</section>
+<section id="S2">
+<h2><span>2. </span>Related Works</h2>
+<div id="S2.p1">
+<p id="S2.p1.1">Dense retrieval based on BERT Siamese models <cite>(<a href="#bib.bib23">Reimers and
+Gurevych 2019</a>)</cite> has become the standard approach for candidate generation in Question Answering and IR <cite>(<a href="#bib.bib11">Guu
+et al. 2020</a>; <a href="#bib.bib13">Karpukhin et al. 2020</a>; <a href="#bib.bib26">Xiong et al. 2020</a>; <a href="#bib.bib16">Lin et al. 2020</a>; <a href="#bib.bib9">Ding et al. 2020</a>)</cite>. While the backbone of these models remains the same, recent works highlight the critical aspects of the training strategy to obtain state-of-the-art results, ranging from improved negative sampling <cite>(<a href="#bib.bib26">Xiong et al. 2020</a>; <a href="#bib.bib9">Ding et al. 2020</a>)</cite> to distillation <cite>(<a href="#bib.bib12">Hofstätter et al. 2020</a>; <a href="#bib.bib16">Lin et al. 2020</a>)</cite>. ColBERT <cite>(<a href="#bib.bib14">Khattab and
+Zaharia 2020</a>)</cite> pushes things further: the postponed token-level interactions allow to efficiently apply the model for first-stage retrieval, benefiting of the effectiveness of modeling fine-grained interactions, at the cost of storing embeddings for each (sub)term – raising concerns about the actual scalability of the approach for large collections.
+To the best of our knowledge, very few studies have discussed the impact of using <em id="S2.p1.1.1">approximate</em> nearest neighbors (ANN) search on IR metrics <cite>(<a href="#bib.bib3">Boytsov 2018</a>; <a href="#bib.bib24">Tu
+et al. 2020</a>)</cite>.
+Due to the moderate size of the MS MARCO collection, results are usually reported with an <em id="S2.p1.1.2">exact</em>, brute-force search, therefore giving no indication on the effective computing cost.</p>
+</div>
+<div id="S2.p2">
+<p id="S2.p2.1">An alternative to dense indexes is term-based ones.
+Building on standard BOW models, <span id="S2.p2.1.1">Zamani et al.</span> first introduced SNRM <cite>(<a href="#bib.bib29">Zamani et al. 2018</a>)</cite>: the model embeds documents and queries in a sparse high-dimensional latent space by means of <math alttext="\ell_{1}" class="ltx_Math" display="inline" id="S2.p2.m1" intent=":literal"><semantics><msub><mi mathvariant="normal">ℓ</mi><mn>1</mn></msub><annotation encoding="application/x-tex">\ell_{1}</annotation></semantics></math> regularization on representations.
+However, SNRM effectiveness remains limited and its efficiency has been questioned <cite>(<a href="#bib.bib21">Paria et al. 2020</a>)</cite>.
+More recently, there have been attempts to transfer the knowledge from pre-trained LM to sparse approaches.
+Based on BERT, DeepCT <cite>(<a href="#bib.bib5">Dai and Callan 2019</a>; <a href="#bib.bib6">Dai and Callan 2020a</a>; <a href="#bib.bib7">Dai and Callan 2020b</a>)</cite> focused on learning contextualized term weights in the full vocabulary space – akin to BOW term weights. However, as the vocabulary associated with a document remains the same, this type of approach does not solve the vocabulary mismatch, as acknowledged by the use of query expansion for retrieval <cite>(<a href="#bib.bib5">Dai and Callan 2019</a>)</cite>.
+A first solution to this problem consists in expanding documents using generative approaches such as doc2query <cite>(<a href="#bib.bib20">Nogueira
+et al. 2019</a>)</cite> and docTTTTTquery <cite>(<a href="#bib.bib19">Nogueira and Lin 2019</a>)</cite> to predict expansion words for documents. The document expansion adds new terms to documents – hence fighting the vocabulary mismatch – as well as repeats existing terms, implicitly performing re-weighting by boosting important terms. These methods are however limited by the way they are trained (predicting queries), which is indirect in nature and limit their progress.
+A second solution to this problem, that has been chosen by recent works such as <cite>(<a href="#bib.bib2">Bai et al. 2020</a>; <a href="#bib.bib17">MacAvaney et al. 2020</a>; <a href="#bib.bib30">Zhao et al. 2020</a>)</cite>, is to estimate the importance of each term of the vocabulary <em id="S2.p2.1.2">implied by</em> each term of the document, i.e. to compute an interaction matrix between the document or query tokens and all the tokens from the vocabulary. This is followed by an aggregation mechanism (roughly sum for SparTerm <cite>(<a href="#bib.bib2">Bai et al. 2020</a>)</cite>, max for EPIC <cite>(<a href="#bib.bib17">MacAvaney et al. 2020</a>)</cite> and SPARTA <cite>(<a href="#bib.bib30">Zhao et al. 2020</a>)</cite>), that allows to compute an importance weight for each term of the vocabulary, for the full document or query.
+However, EPIC and SPARTA (document) representations are not sparse enough by construction – unless resorting on top-<math alttext="k" class="ltx_Math" display="inline" id="S2.p2.m2" intent=":literal"><semantics><mi>k</mi><annotation encoding="application/x-tex">k</annotation></semantics></math> pooling – contrary to SparTerm, for which fast retrieval is thus possible. Furthermore, the latter does not include (like SNRM) an <em id="S2.p2.1.3">explicit</em> sparsity regularization, which hinders its performance. Our SPLADE model relies on such regularization, as well as other key changes, that boost both the efficiency and the effectiveness of this type of models.</p>
+</div>
+</section>
+<section id="S3">
+<h2><span>3. </span>Sparse Lexical representations for first-stage ranking</h2>
+<div id="S3.p1">
+<p id="S3.p1.1">In this section, we first describe in details the SparTerm model <cite>(<a href="#bib.bib2">Bai et al. 2020</a>)</cite>, before presenting our model named SPLADE.</p>
+</div>
+<section id="S3.SS1">
+<h3><span>3.1. </span>SparTerm</h3>
+<div id="S3.SS1.p1">
+<p id="S3.SS1.p1.1">SparTerm predicts term importance – in BERT WordPiece vocabulary (<math alttext="|V|=30522" class="ltx_Math" display="inline" id="S3.SS1.p1.m1" intent=":literal"><semantics><mrow><mrow><mo stretchy="false">|</mo><mi>V</mi><mo stretchy="false">|</mo></mrow><mo>=</mo><mn>30522</mn></mrow><annotation encoding="application/x-tex">|V|=30522</annotation></semantics></math>) – based on the logits of the Masked Language Model (MLM) layer. More precisely, let us consider an input query or document sequence (after WordPiece tokenization) <math alttext="t=(t_{1},t_{2},...,t_{N})" class="ltx_Math" display="inline" id="S3.SS1.p1.m2" intent=":literal"><semantics><mrow><mi>t</mi><mo>=</mo><mrow><mo stretchy="false">(</mo><msub><mi>t</mi><mn>1</mn></msub><mo>,</mo><msub><mi>t</mi><mn>2</mn></msub><mo>,</mo><mi mathvariant="normal">…</mi><mo>,</mo><msub><mi>t</mi><mi>N</mi></msub><mo stretchy="false">)</mo></mrow></mrow><annotation encoding="application/x-tex">t=(t_{1},t_{2},...,t_{N})</annotation></semantics></math>, and its corresponding BERT embeddings <math alttext="(h_{1},h_{2},...,h_{N})" class="ltx_Math" display="inline" id="S3.SS1.p1.m3" intent=":literal"><semantics><mrow><mo stretchy="false">(</mo><msub><mi>h</mi><mn>1</mn></msub><mo>,</mo><msub><mi>h</mi><mn>2</mn></msub><mo>,</mo><mi mathvariant="normal">…</mi><mo>,</mo><msub><mi>h</mi><mi>N</mi></msub><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">(h_{1},h_{2},...,h_{N})</annotation></semantics></math>. We consider the importance <math alttext="w_{ij}" class="ltx_Math" display="inline" id="S3.SS1.p1.m4" intent=":literal"><semantics><msub><mi>w</mi><mrow><mi>i</mi><mo lspace="0em" rspace="0em">​</mo><mi>j</mi></mrow></msub><annotation encoding="application/x-tex">w_{ij}</annotation></semantics></math> of the token <math alttext="j" class="ltx_Math" display="inline" id="S3.SS1.p1.m5" intent=":literal"><semantics><mi>j</mi><annotation encoding="application/x-tex">j</annotation></semantics></math> (vocabulary) for a token <math alttext="i" class="ltx_Math" display="inline" id="S3.SS1.p1.m6" intent=":literal"><semantics><mi>i</mi><annotation encoding="application/x-tex">i</annotation></semantics></math> (of the input sequence):</p>
+<p><math alttext="w_{ij}=\text{transform}(h_{i})^{T}E_{j}+b_{j}\quad j\in\{1,...,|V|\}" class="ltx_Math" display="block" id="S3.E1.m1" intent=":literal"><semantics><mrow><mrow><msub><mi>w</mi><mrow><mi>i</mi><mo lspace="0em" rspace="0em">​</mo><mi>j</mi></mrow></msub><mo>=</mo><mrow><mrow><mtext>transform</mtext><mo lspace="0em" rspace="0em">​</mo><msup><mrow><mo stretchy="false">(</mo><msub><mi>h</mi><mi>i</mi></msub><mo stretchy="false">)</mo></mrow><mi>T</mi></msup><mo lspace="0em" rspace="0em">​</mo><msub><mi>E</mi><mi>j</mi></msub></mrow><mo>+</mo><msub><mi>b</mi><mi>j</mi></msub></mrow></mrow><mspace style="width:1em;" width="1em"></mspace><mrow><mi>j</mi><mo>∈</mo><mrow><mo stretchy="false">{</mo><mn>1</mn><mo>,</mo><mi mathvariant="normal">…</mi><mo>,</mo><mrow><mo stretchy="false">|</mo><mi>V</mi><mo stretchy="false">|</mo></mrow><mo stretchy="false">}</mo></mrow></mrow></mrow><annotation encoding="application/x-tex">w_{ij}=\text{transform}(h_{i})^{T}E_{j}+b_{j}\quad j\in\{1,...,|V|\}</annotation></semantics></math> (1)</p>
+<p id="S3.SS1.p1.2">where <math alttext="E_{j}" class="ltx_Math" display="inline" id="S3.SS1.p1.m7" intent=":literal"><semantics><msub><mi>E</mi><mi>j</mi></msub><annotation encoding="application/x-tex">E_{j}</annotation></semantics></math> denotes the BERT input embedding for token <math alttext="j" class="ltx_Math" display="inline" id="S3.SS1.p1.m8" intent=":literal"><semantics><mi>j</mi><annotation encoding="application/x-tex">j</annotation></semantics></math>, <math alttext="b_{j}" class="ltx_Math" display="inline" id="S3.SS1.p1.m9" intent=":literal"><semantics><msub><mi>b</mi><mi>j</mi></msub><annotation encoding="application/x-tex">b_{j}</annotation></semantics></math> is a token-level bias, and transform<math alttext="(.)" class="ltx_math_unparsed" display="inline" id="S3.SS1.p1.m10" intent=":literal"><semantics><mrow><mo stretchy="false">(</mo><mo lspace="0em" rspace="0.167em">.</mo><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">(.)</annotation></semantics></math> is a linear layer with GeLU activation and LayerNorm. Note that Eq. <a href="#S3.E1"><span>1</span></a> is equivalent to the MLM prediction, thus it can be also be initialized from a pre-trained MLM model. The final representation is then obtained by summing importance predictors over the input sequence tokens, after applying ReLU to ensure the positivity of term weights:</p>
+<p><math alttext="w_{j}=g_{j}\times\sum_{i\in t}\text{ReLU}(w_{ij})" class="ltx_Math" display="block" id="S3.E2.m1" intent=":literal"><semantics><mrow><msub><mi>w</mi><mi>j</mi></msub><mo>=</mo><mrow><msub><mi>g</mi><mi>j</mi></msub><mo lspace="0.222em" rspace="0.055em">×</mo><mrow><munder><mo movablelimits="false">∑</mo><mrow><mi>i</mi><mo>∈</mo><mi>t</mi></mrow></munder><mrow><mtext>ReLU</mtext><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><msub><mi>w</mi><mrow><mi>i</mi><mo lspace="0em" rspace="0em">​</mo><mi>j</mi></mrow></msub><mo stretchy="false">)</mo></mrow></mrow></mrow></mrow></mrow><annotation encoding="application/x-tex">w_{j}=g_{j}\times\sum_{i\in t}\text{ReLU}(w_{ij})</annotation></semantics></math> (2)</p>
+<p id="S3.SS1.p1.3">where <math alttext="g_{j}" class="ltx_Math" display="inline" id="S3.SS1.p1.m11" intent=":literal"><semantics><msub><mi>g</mi><mi>j</mi></msub><annotation encoding="application/x-tex">g_{j}</annotation></semantics></math> is a binary mask (gating) described latter.
+The above equation can be seen as a form of query/document <em id="S3.SS1.p1.3.1">expansion</em>, as observed in <cite>(<a href="#bib.bib2">Bai et al. 2020</a>; <a href="#bib.bib17">MacAvaney et al. 2020</a>)</cite>, since for each token of the vocabulary the model predicts a new weight <math alttext="w_{j}" class="ltx_Math" display="inline" id="S3.SS1.p1.m12" intent=":literal"><semantics><msub><mi>w</mi><mi>j</mi></msub><annotation encoding="application/x-tex">w_{j}</annotation></semantics></math>.
+SparTerm <cite>(<a href="#bib.bib2">Bai et al. 2020</a>)</cite> introduces two sparsification schemes that turn off a large amount of dimensions in query and document representations, allowing to efficiently retrieve from an inverted index:</p>
+</div>
+<div id="S3.SS1.p2">
+<p id="S3.SS1.p2.1"><span id="S3.SS1.p2.1.1">lexical-only</span> is a BOW masking, i.e. <math alttext="g_{j}=1" class="ltx_Math" display="inline" id="S3.SS1.p2.m1" intent=":literal"><semantics><mrow><msub><mi>g</mi><mi>j</mi></msub><mo>=</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">g_{j}=1</annotation></semantics></math> if token <math alttext="j" class="ltx_Math" display="inline" id="S3.SS1.p2.m2" intent=":literal"><semantics><mi>j</mi><annotation encoding="application/x-tex">j</annotation></semantics></math> appears in <math alttext="t" class="ltx_Math" display="inline" id="S3.SS1.p2.m3" intent=":literal"><semantics><mi>t</mi><annotation encoding="application/x-tex">t</annotation></semantics></math>, and 0 otherwise;</p>
+</div>
+<div id="S3.SS1.p3">
+<p id="S3.SS1.p3.1"><span id="S3.SS1.p3.1.1">expansion-aware</span> is a lexical/expansion-aware binary gating mechanism, where <math alttext="g_{j}" class="ltx_Math" display="inline" id="S3.SS1.p3.m1" intent=":literal"><semantics><msub><mi>g</mi><mi>j</mi></msub><annotation encoding="application/x-tex">g_{j}</annotation></semantics></math> is <em id="S3.SS1.p3.1.2">learned</em>. To preserve the original input, it is forced to 1 if the token <math alttext="j" class="ltx_Math" display="inline" id="S3.SS1.p3.m2" intent=":literal"><semantics><mi>j</mi><annotation encoding="application/x-tex">j</annotation></semantics></math> appears in <math alttext="t" class="ltx_Math" display="inline" id="S3.SS1.p3.m3" intent=":literal"><semantics><mi>t</mi><annotation encoding="application/x-tex">t</annotation></semantics></math>.</p>
+</div>
+<div id="S3.SS1.p4">
+<p id="S3.SS1.p4.1">Let <math alttext="s(q,d)" class="ltx_Math" display="inline" id="S3.SS1.p4.m1" intent=":literal"><semantics><mrow><mi>s</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mi>q</mi><mo>,</mo><mi>d</mi><mo stretchy="false">)</mo></mrow></mrow><annotation encoding="application/x-tex">s(q,d)</annotation></semantics></math> denote the ranking score obtained via dot product between <math alttext="q" class="ltx_Math" display="inline" id="S3.SS1.p4.m2" intent=":literal"><semantics><mi>q</mi><annotation encoding="application/x-tex">q</annotation></semantics></math> and <math alttext="d" class="ltx_Math" display="inline" id="S3.SS1.p4.m3" intent=":literal"><semantics><mi>d</mi><annotation encoding="application/x-tex">d</annotation></semantics></math> representations from Eq. (<a href="#S3.E2"><span>2</span></a>). Given a query <math alttext="q_{i}" class="ltx_Math" display="inline" id="S3.SS1.p4.m4" intent=":literal"><semantics><msub><mi>q</mi><mi>i</mi></msub><annotation encoding="application/x-tex">q_{i}</annotation></semantics></math>, a positive document <math alttext="d_{i}^{+}" class="ltx_Math" display="inline" id="S3.SS1.p4.m5" intent=":literal"><semantics><msubsup><mi>d</mi><mi>i</mi><mo>+</mo></msubsup><annotation encoding="application/x-tex">d_{i}^{+}</annotation></semantics></math> and a negative document <math alttext="d_{i}^{-}" class="ltx_Math" display="inline" id="S3.SS1.p4.m6" intent=":literal"><semantics><msubsup><mi>d</mi><mi>i</mi><mo>−</mo></msubsup><annotation encoding="application/x-tex">d_{i}^{-}</annotation></semantics></math>, SparTerm is trained by minimzing the following loss:</p>
+</div>
+<div id="S3.SS1.p5">
+<p><math alttext="\mathcal{L}_{rank}=-\log\frac{e^{s(q_{i},d_{i}^{+})}}{e^{s(q_{i},d_{i}^{+})}+e^{s(q_{i},d_{i}^{-})}}" class="ltx_Math" display="block" id="S3.E3.m1" intent=":literal"><semantics><mrow><msub><mi class="ltx_font_mathcaligraphic">ℒ</mi><mrow><mi>r</mi><mo lspace="0em" rspace="0em">​</mo><mi>a</mi><mo lspace="0em" rspace="0em">​</mo><mi>n</mi><mo lspace="0em" rspace="0em">​</mo><mi>k</mi></mrow></msub><mo rspace="0em">=</mo><mrow><mo lspace="0em">−</mo><mrow><mi>log</mi><mo lspace="0.167em">⁡</mo><mfrac><msup><mi>e</mi><mrow><mi>s</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><msub><mi>q</mi><mi>i</mi></msub><mo>,</mo><msubsup><mi>d</mi><mi>i</mi><mo>+</mo></msubsup><mo stretchy="false">)</mo></mrow></mrow></msup><mrow><msup><mi>e</mi><mrow><mi>s</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><msub><mi>q</mi><mi>i</mi></msub><mo>,</mo><msubsup><mi>d</mi><mi>i</mi><mo>+</mo></msubsup><mo stretchy="false">)</mo></mrow></mrow></msup><mo>+</mo><msup><mi>e</mi><mrow><mi>s</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><msub><mi>q</mi><mi>i</mi></msub><mo>,</mo><msubsup><mi>d</mi><mi>i</mi><mo>−</mo></msubsup><mo stretchy="false">)</mo></mrow></mrow></msup></mrow></mfrac></mrow></mrow></mrow><annotation encoding="application/x-tex">\mathcal{L}_{rank}=-\log\frac{e^{s(q_{i},d_{i}^{+})}}{e^{s(q_{i},d_{i}^{+})}+e^{s(q_{i},d_{i}^{-})}}</annotation></semantics></math> (3)</p>
+</div>
+<section id="S3.SS1.SSS0.Px1">
+<h4>Limitations</h4>
+<div id="S3.SS1.SSS0.Px1.p1">
+<p id="S3.SS1.SSS0.Px1.p1.1">SparTerm expansion-aware gating is somewhat intricate, and the model cannot be trained end-to-end: the gating mechanism is learned beforehand, and <em id="S3.SS1.SSS0.Px1.p1.1.1">fixed</em> while fine-tuning the matching model with <math alttext="\mathcal{L}_{rank}" class="ltx_Math" display="inline" id="S3.SS1.SSS0.Px1.p1.m1" intent=":literal"><semantics><msub><mi class="ltx_font_mathcaligraphic">ℒ</mi><mrow><mi>r</mi><mo lspace="0em" rspace="0em">​</mo><mi>a</mi><mo lspace="0em" rspace="0em">​</mo><mi>n</mi><mo lspace="0em" rspace="0em">​</mo><mi>k</mi></mrow></msub><annotation encoding="application/x-tex">\mathcal{L}_{rank}</annotation></semantics></math>, therefore preventing the model to learn the optimal sparsification strategy for the ranking task. Moreover, the two lexical and expansion-aware strategies do perform almost equally well, questioning the actual benefits of expansion.</p>
+</div>
+</section>
+</section>
+<section id="S3.SS2">
+<h3><span>3.2. </span>SPLADE: SParse Lexical AnD Expansion model</h3>
+<div id="S3.SS2.p1">
+<p id="S3.SS2.p1.1">In the following, we propose slight, but essential changes to the SparTerm model that dramatically improve its performance.</p>
+</div>
+<section id="S3.SS2.SSS0.Px1">
+<h4>Model</h4>
+<div id="S3.SS2.SSS0.Px1.p1">
+<p id="S3.SS2.SSS0.Px1.p1.1">We introduce a minor change in the importance estimation from Eq. <a href="#S3.E2"><span>2</span></a>, by introducing a log-saturation effect which
+prevents some terms to dominate and
+naturally ensures sparsity in representations:</p>
+<p><math alttext="w_{j}=\sum_{i\in t}\log\left(1+\text{ReLU}(w_{ij})\right)" class="ltx_Math" display="block" id="S3.E4.m1" intent=":literal"><semantics><mrow><msub><mi>w</mi><mi>j</mi></msub><mo rspace="0.111em">=</mo><mrow><munder><mo movablelimits="false">∑</mo><mrow><mi>i</mi><mo>∈</mo><mi>t</mi></mrow></munder><mrow><mi>log</mi><mo>⁡</mo><mrow><mo>(</mo><mrow><mn>1</mn><mo>+</mo><mrow><mtext>ReLU</mtext><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><msub><mi>w</mi><mrow><mi>i</mi><mo lspace="0em" rspace="0em">​</mo><mi>j</mi></mrow></msub><mo stretchy="false">)</mo></mrow></mrow></mrow><mo>)</mo></mrow></mrow></mrow></mrow><annotation encoding="application/x-tex">w_{j}=\sum_{i\in t}\log\left(1+\text{ReLU}(w_{ij})\right)</annotation></semantics></math> (4)</p>
+<p id="S3.SS2.SSS0.Px1.p1.2">While it is intuitive that using a log-saturation prevents some terms from dominating – drawing a parallel with axiomatic approaches in IR and <math alttext="\log" class="ltx_Math" display="inline" id="S3.SS2.SSS0.Px1.p1.m1" intent=":literal"><semantics><mi>log</mi><annotation encoding="application/x-tex">\log</annotation></semantics></math>(tf) models <cite>(<a href="#bib.bib10">Fang
+et al. 2004</a>)</cite> – the implied sparsity can seem surprising at first, but,
+according to our experiments, it obtains better experimental results and allows already to obtain sparse solutions <em id="S3.SS2.SSS0.Px1.p1.2.1">without any regularization</em>.</p>
+</div>
+</section>
+<section id="S3.SS2.SSS0.Px2">
+<h4>Ranking loss</h4>
+<div id="S3.SS2.SSS0.Px2.p1">
+<p id="S3.SS2.SSS0.Px2.p1.1">Given a query <math alttext="q_{i}" class="ltx_Math" display="inline" id="S3.SS2.SSS0.Px2.p1.m1" intent=":literal"><semantics><msub><mi>q</mi><mi>i</mi></msub><annotation encoding="application/x-tex">q_{i}</annotation></semantics></math> in a batch, a positive document <math alttext="d_{i}^{+}" class="ltx_Math" display="inline" id="S3.SS2.SSS0.Px2.p1.m2" intent=":literal"><semantics><msubsup><mi>d</mi><mi>i</mi><mo>+</mo></msubsup><annotation encoding="application/x-tex">d_{i}^{+}</annotation></semantics></math>, a (hard) negative document <math alttext="d_{i}^{-}" class="ltx_Math" display="inline" id="S3.SS2.SSS0.Px2.p1.m3" intent=":literal"><semantics><msubsup><mi>d</mi><mi>i</mi><mo>−</mo></msubsup><annotation encoding="application/x-tex">d_{i}^{-}</annotation></semantics></math> (e.g. coming from BM25 sampling), and a set of negative documents in the batch (positive documents from other queries) <math alttext="\{d_{i,j}^{-}\}_{j}" class="ltx_Math" display="inline" id="S3.SS2.SSS0.Px2.p1.m4" intent=":literal"><semantics><msub><mrow><mo stretchy="false">{</mo><msubsup><mi>d</mi><mrow><mi>i</mi><mo>,</mo><mi>j</mi></mrow><mo>−</mo></msubsup><mo stretchy="false">}</mo></mrow><mi>j</mi></msub><annotation encoding="application/x-tex">\{d_{i,j}^{-}\}_{j}</annotation></semantics></math>, we consider the ranking loss from <cite>(<a href="#bib.bib9">Ding et al. 2020</a>)</cite>, which can be interpreted as the maximization of the probability of the document <math alttext="d_{i}^{+}" class="ltx_Math" display="inline" id="S3.SS2.SSS0.Px2.p1.m5" intent=":literal"><semantics><msubsup><mi>d</mi><mi>i</mi><mo>+</mo></msubsup><annotation encoding="application/x-tex">d_{i}^{+}</annotation></semantics></math> being relevant among the documents <math alttext="d_{i}^{+},d_{i}^{-}" class="ltx_Math" display="inline" id="S3.SS2.SSS0.Px2.p1.m6" intent=":literal"><semantics><mrow><msubsup><mi>d</mi><mi>i</mi><mo>+</mo></msubsup><mo>,</mo><msubsup><mi>d</mi><mi>i</mi><mo>−</mo></msubsup></mrow><annotation encoding="application/x-tex">d_{i}^{+},d_{i}^{-}</annotation></semantics></math> and <math alttext="\{d_{i,j}^{-}\}" class="ltx_Math" display="inline" id="S3.SS2.SSS0.Px2.p1.m7" intent=":literal"><semantics><mrow><mo stretchy="false">{</mo><msubsup><mi>d</mi><mrow><mi>i</mi><mo>,</mo><mi>j</mi></mrow><mo>−</mo></msubsup><mo stretchy="false">}</mo></mrow><annotation encoding="application/x-tex">\{d_{i,j}^{-}\}</annotation></semantics></math>:</p>
+</div>
+<div id="S3.SS2.SSS0.Px2.p2">
+<p><math alttext="\mathcal{L}_{rank-IBN}=-\log\frac{e^{s(q_{i},d_{i}^{+})}}{e^{s(q_{i},d_{i}^{+})}+e^{s(q_{i},d_{i}^{-})}+\sum_{j}e^{s(q_{i},d_{i,j}^{-})}}" class="ltx_Math" display="block" id="S3.E5.m1" intent=":literal"><semantics><mrow><msub><mi class="ltx_font_mathcaligraphic">ℒ</mi><mrow><mrow><mi>r</mi><mo lspace="0em" rspace="0em">​</mo><mi>a</mi><mo lspace="0em" rspace="0em">​</mo><mi>n</mi><mo lspace="0em" rspace="0em">​</mo><mi>k</mi></mrow><mo>−</mo><mrow><mi>I</mi><mo lspace="0em" rspace="0em">​</mo><mi>B</mi><mo lspace="0em" rspace="0em">​</mo><mi>N</mi></mrow></mrow></msub><mo rspace="0em">=</mo><mrow><mo lspace="0em">−</mo><mrow><mi>log</mi><mo lspace="0.167em">⁡</mo><mfrac><msup><mi>e</mi><mrow><mi>s</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><msub><mi>q</mi><mi>i</mi></msub><mo>,</mo><msubsup><mi>d</mi><mi>i</mi><mo>+</mo></msubsup><mo stretchy="false">)</mo></mrow></mrow></msup><mrow><msup><mi>e</mi><mrow><mi>s</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><msub><mi>q</mi><mi>i</mi></msub><mo>,</mo><msubsup><mi>d</mi><mi>i</mi><mo>+</mo></msubsup><mo stretchy="false">)</mo></mrow></mrow></msup><mo>+</mo><msup><mi>e</mi><mrow><mi>s</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><msub><mi>q</mi><mi>i</mi></msub><mo>,</mo><msubsup><mi>d</mi><mi>i</mi><mo>−</mo></msubsup><mo stretchy="false">)</mo></mrow></mrow></msup><mo rspace="0.055em">+</mo><mrow><msub><mo>∑</mo><mi>j</mi></msub><msup><mi>e</mi><mrow><mi>s</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><msub><mi>q</mi><mi>i</mi></msub><mo>,</mo><msubsup><mi>d</mi><mrow><mi>i</mi><mo>,</mo><mi>j</mi></mrow><mo>−</mo></msubsup><mo stretchy="false">)</mo></mrow></mrow></msup></mrow></mrow></mfrac></mrow></mrow></mrow><annotation encoding="application/x-tex">\mathcal{L}_{rank-IBN}=-\log\frac{e^{s(q_{i},d_{i}^{+})}}{e^{s(q_{i},d_{i}^{+})}+e^{s(q_{i},d_{i}^{-})}+\sum_{j}e^{s(q_{i},d_{i,j}^{-})}}</annotation></semantics></math> (5)</p>
+</div>
+<div id="S3.SS2.SSS0.Px2.p3">
+<p id="S3.SS2.SSS0.Px2.p3.1">The <em id="S3.SS2.SSS0.Px2.p3.1.1">in-batch negatives</em> (IBN) sampling strategy is widely used for training image retrieval models, and has shown to be effective in learning first-stage rankers <cite>(<a href="#bib.bib13">Karpukhin et al. 2020</a>; <a href="#bib.bib9">Ding et al. 2020</a>; <a href="#bib.bib16">Lin et al. 2020</a>)</cite>.</p>
+</div>
+</section>
+<section id="S3.SS2.SSS0.Px3">
+<h4>Learning sparse representations</h4>
+<div id="S3.SS2.SSS0.Px3.p1">
+<p id="S3.SS2.SSS0.Px3.p1.1">The idea of learning sparse representations for first-stage retrieval dates back to SNRM <cite>(<a href="#bib.bib29">Zamani et al. 2018</a>)</cite>, via <math alttext="\ell_{1}" class="ltx_Math" display="inline" id="S3.SS2.SSS0.Px3.p1.m1" intent=":literal"><semantics><msub><mi mathvariant="normal">ℓ</mi><mn>1</mn></msub><annotation encoding="application/x-tex">\ell_{1}</annotation></semantics></math> regularization. Later, <cite>(<a href="#bib.bib21">Paria et al. 2020</a>)</cite> pointed-out that minimizing the <math alttext="\ell_{1}" class="ltx_Math" display="inline" id="S3.SS2.SSS0.Px3.p1.m2" intent=":literal"><semantics><msub><mi mathvariant="normal">ℓ</mi><mn>1</mn></msub><annotation encoding="application/x-tex">\ell_{1}</annotation></semantics></math> norm of representations does not result in the most efficient index, as nothing ensures that posting lists are evenly distributed. Note that this is even more true for standard indexes due to the Zipfian nature of the term frequency distribution.
+To obtain a well-balanced index, <span id="S3.SS2.SSS0.Px3.p1.1.1">Paria et al.</span> <cite>(<a href="#bib.bib21">Paria et al. 2020</a>)</cite> introduce the <span id="S3.SS2.SSS0.Px3.p1.1.2">FLOPS</span> regularizer, a smooth relaxation of the average number of floating-point operations necessary to compute the score of a document, and hence directly related to the retrieval time. It is defined using <math alttext="a_{j}" class="ltx_Math" display="inline" id="S3.SS2.SSS0.Px3.p1.m3" intent=":literal"><semantics><msub><mi>a</mi><mi>j</mi></msub><annotation encoding="application/x-tex">a_{j}</annotation></semantics></math> as a continuous relaxation of the activation (i.e. the term has a non zero weight) probability <math alttext="p_{j}" class="ltx_Math" display="inline" id="S3.SS2.SSS0.Px3.p1.m4" intent=":literal"><semantics><msub><mi>p</mi><mi>j</mi></msub><annotation encoding="application/x-tex">p_{j}</annotation></semantics></math> for token <math alttext="j" class="ltx_Math" display="inline" id="S3.SS2.SSS0.Px3.p1.m5" intent=":literal"><semantics><mi>j</mi><annotation encoding="application/x-tex">j</annotation></semantics></math>, and estimated for documents <math alttext="d" class="ltx_Math" display="inline" id="S3.SS2.SSS0.Px3.p1.m6" intent=":literal"><semantics><mi>d</mi><annotation encoding="application/x-tex">d</annotation></semantics></math> in a batch of size <math alttext="N" class="ltx_Math" display="inline" id="S3.SS2.SSS0.Px3.p1.m7" intent=":literal"><semantics><mi>N</mi><annotation encoding="application/x-tex">N</annotation></semantics></math> by
+<math alttext="\bar{a}_{j}=\frac{1}{N}\sum_{i=1}^{N}w^{(d_{i})}_{j}" class="ltx_Math" display="inline" id="S3.SS2.SSS0.Px3.p1.m8" intent=":literal"><semantics><mrow><msub><mover accent="true"><mi>a</mi><mo>¯</mo></mover><mi>j</mi></msub><mo>=</mo><mrow><mfrac><mn>1</mn><mi>N</mi></mfrac><mo lspace="0em" rspace="0em">​</mo><mrow><msubsup><mo>∑</mo><mrow><mi>i</mi><mo>=</mo><mn>1</mn></mrow><mi>N</mi></msubsup><msubsup><mi>w</mi><mi>j</mi><mrow><mo stretchy="false">(</mo><msub><mi>d</mi><mi>i</mi></msub><mo stretchy="false">)</mo></mrow></msubsup></mrow></mrow></mrow><annotation encoding="application/x-tex">\bar{a}_{j}=\frac{1}{N}\sum_{i=1}^{N}w^{(d_{i})}_{j}</annotation></semantics></math>.
+This gives the following regularization loss</p>
+<p><math alttext="\ell_{\texttt{FLOPS}}=\sum_{j\in V}{\bar{a}}_{j}^{2}=\sum_{j\in V}\left(\frac{1}{N}\sum_{i=1}^{N}w_{j}^{(d_{i})}\right)^{2}" class="ltx_Math" display="block" id="S3.Ex1.m1" intent=":literal"><semantics><mrow><msub><mi mathvariant="normal">ℓ</mi><mtext class="ltx_mathvariant_monospace">FLOPS</mtext></msub><mo rspace="0.111em">=</mo><mrow><munder><mo movablelimits="false">∑</mo><mrow><mi>j</mi><mo>∈</mo><mi>V</mi></mrow></munder><msubsup><mover accent="true"><mi>a</mi><mo>¯</mo></mover><mi>j</mi><mn>2</mn></msubsup></mrow><mo rspace="0.111em">=</mo><mrow><munder><mo movablelimits="false" rspace="0em">∑</mo><mrow><mi>j</mi><mo>∈</mo><mi>V</mi></mrow></munder><msup><mrow><mo>(</mo><mrow><mfrac><mn>1</mn><mi>N</mi></mfrac><mo lspace="0em" rspace="0em">​</mo><mrow><munderover><mo movablelimits="false">∑</mo><mrow><mi>i</mi><mo>=</mo><mn>1</mn></mrow><mi>N</mi></munderover><msubsup><mi>w</mi><mi>j</mi><mrow><mo stretchy="false">(</mo><msub><mi>d</mi><mi>i</mi></msub><mo stretchy="false">)</mo></mrow></msubsup></mrow></mrow><mo>)</mo></mrow><mn>2</mn></msup></mrow></mrow><annotation encoding="application/x-tex">\ell_{\texttt{FLOPS}}=\sum_{j\in V}{\bar{a}}_{j}^{2}=\sum_{j\in V}\left(\frac{1}{N}\sum_{i=1}^{N}w_{j}^{(d_{i})}\right)^{2}</annotation></semantics></math></p>
+<p id="S3.SS2.SSS0.Px3.p1.2">This differs from the <math alttext="\ell_{1}" class="ltx_Math" display="inline" id="S3.SS2.SSS0.Px3.p1.m9" intent=":literal"><semantics><msub><mi mathvariant="normal">ℓ</mi><mn>1</mn></msub><annotation encoding="application/x-tex">\ell_{1}</annotation></semantics></math> regularization used in SNRM <cite>(<a href="#bib.bib29">Zamani et al. 2018</a>)</cite> where the <math alttext="{\bar{a}}_{j}" class="ltx_Math" display="inline" id="S3.SS2.SSS0.Px3.p1.m10" intent=":literal"><semantics><msub><mover accent="true"><mi>a</mi><mo>¯</mo></mover><mi>j</mi></msub><annotation encoding="application/x-tex">{\bar{a}}_{j}</annotation></semantics></math> are not squared: using <math alttext="\ell_{\texttt{FLOPS}}" class="ltx_Math" display="inline" id="S3.SS2.SSS0.Px3.p1.m11" intent=":literal"><semantics><msub><mi mathvariant="normal">ℓ</mi><mtext class="ltx_mathvariant_monospace">FLOPS</mtext></msub><annotation encoding="application/x-tex">\ell_{\texttt{FLOPS}}</annotation></semantics></math> thus pushes down high average term weight values, giving rise to a more balanced index.</p>
+</div>
+</section>
+<section id="S3.SS2.SSS0.Px4">
+<h4>Overall loss</h4>
+<div id="S3.SS2.SSS0.Px4.p1">
+<p id="S3.SS2.SSS0.Px4.p1.1">We propose to combine the best of both worlds for end-to-end training of sparse, expansion-aware representations of documents and queries. Thus, we discard the binary gating in SparTerm, and instead learn our log-saturated model (Eq. <a href="#S3.E4"><span>4</span></a>) by jointly optimizing ranking and regularization losses:</p>
+<p><math alttext="\mathcal{L}=\mathcal{L}_{rank-IBN}+\lambda_{q}\mathcal{L}^{q}_{\texttt{reg}}+\lambda_{d}\mathcal{L}^{d}_{\texttt{reg}}" class="ltx_Math" display="block" id="S3.E6.m1" intent=":literal"><semantics><mrow><mi class="ltx_font_mathcaligraphic">ℒ</mi><mo>=</mo><mrow><msub><mi class="ltx_font_mathcaligraphic">ℒ</mi><mrow><mrow><mi>r</mi><mo lspace="0em" rspace="0em">​</mo><mi>a</mi><mo lspace="0em" rspace="0em">​</mo><mi>n</mi><mo lspace="0em" rspace="0em">​</mo><mi>k</mi></mrow><mo>−</mo><mrow><mi>I</mi><mo lspace="0em" rspace="0em">​</mo><mi>B</mi><mo lspace="0em" rspace="0em">​</mo><mi>N</mi></mrow></mrow></msub><mo>+</mo><mrow><msub><mi>λ</mi><mi>q</mi></msub><mo lspace="0em" rspace="0em">​</mo><msubsup><mi class="ltx_font_mathcaligraphic">ℒ</mi><mtext class="ltx_mathvariant_monospace">reg</mtext><mi>q</mi></msubsup></mrow><mo>+</mo><mrow><msub><mi>λ</mi><mi>d</mi></msub><mo lspace="0em" rspace="0em">​</mo><msubsup><mi class="ltx_font_mathcaligraphic">ℒ</mi><mtext class="ltx_mathvariant_monospace">reg</mtext><mi>d</mi></msubsup></mrow></mrow></mrow><annotation encoding="application/x-tex">\mathcal{L}=\mathcal{L}_{rank-IBN}+\lambda_{q}\mathcal{L}^{q}_{\texttt{reg}}+\lambda_{d}\mathcal{L}^{d}_{\texttt{reg}}</annotation></semantics></math> (6)</p>
+<p id="S3.SS2.SSS0.Px4.p1.2">where <math alttext="\mathcal{L}_{\texttt{reg}}" class="ltx_Math" display="inline" id="S3.SS2.SSS0.Px4.p1.m1" intent=":literal"><semantics><msub><mi class="ltx_font_mathcaligraphic">ℒ</mi><mtext class="ltx_mathvariant_monospace">reg</mtext></msub><annotation encoding="application/x-tex">\mathcal{L}_{\texttt{reg}}</annotation></semantics></math> is a sparse regularization (<math alttext="\ell_{1}" class="ltx_Math" display="inline" id="S3.SS2.SSS0.Px4.p1.m2" intent=":literal"><semantics><msub><mi mathvariant="normal">ℓ</mi><mn>1</mn></msub><annotation encoding="application/x-tex">\ell_{1}</annotation></semantics></math> or <math alttext="\ell_{\texttt{FLOPS}}" class="ltx_Math" display="inline" id="S3.SS2.SSS0.Px4.p1.m3" intent=":literal"><semantics><msub><mi mathvariant="normal">ℓ</mi><mtext class="ltx_mathvariant_monospace">FLOPS</mtext></msub><annotation encoding="application/x-tex">\ell_{\texttt{FLOPS}}</annotation></semantics></math>). We use two distinct regularization weights (<math alttext="\lambda_{d}" class="ltx_Math" display="inline" id="S3.SS2.SSS0.Px4.p1.m4" intent=":literal"><semantics><msub><mi>λ</mi><mi>d</mi></msub><annotation encoding="application/x-tex">\lambda_{d}</annotation></semantics></math> and <math alttext="\lambda_{q}" class="ltx_Math" display="inline" id="S3.SS2.SSS0.Px4.p1.m5" intent=":literal"><semantics><msub><mi>λ</mi><mi>q</mi></msub><annotation encoding="application/x-tex">\lambda_{q}</annotation></semantics></math>) for queries and documents – allowing to put more pressure on the sparsity for queries, which is critical for fast retrieval.</p>
+</div>
+</section>
+</section>
+</section>
+<section id="S4">
+<h2><span>4. </span>Experimental setting and results</h2>
+<div id="S4.p1">
+<p id="S4.p1.1">We trained and evaluated our models on the MS MARCO passage ranking dataset<span id="footnote1"><sup>1</sup><span><span><sup>1</sup>
+<span>1</span>
+<a href="https://github.com/microsoft/MSMARCO-Passage-Ranking">https://github.com/microsoft/MSMARCO-Passage-Ranking</a></span></span></span> in the full ranking setting. The dataset contains approximately <math alttext="8.8" class="ltx_Math" display="inline" id="S4.p1.m1" intent=":literal"><semantics><mn>8.8</mn><annotation encoding="application/x-tex">8.8</annotation></semantics></math>M passages, and hundreds of thousands training queries with shallow annotation (<math alttext="\approx 1.1" class="ltx_Math" display="inline" id="S4.p1.m2" intent=":literal"><semantics><mrow><mphantom></mphantom><mo>≈</mo><mn>1.1</mn></mrow><annotation encoding="application/x-tex">\approx 1.1</annotation></semantics></math> relevant passages per query in average). The development set contains <math alttext="6980" class="ltx_Math" display="inline" id="S4.p1.m3" intent=":literal"><semantics><mn>6980</mn><annotation encoding="application/x-tex">6980</annotation></semantics></math> queries with similar labels, while the TREC DL 2019 evaluation set provides fine-grained annotations from human assessors for a set of <math alttext="43" class="ltx_Math" display="inline" id="S4.p1.m4" intent=":literal"><semantics><mn>43</mn><annotation encoding="application/x-tex">43</annotation></semantics></math> queries <cite>(<a href="#bib.bib4">Craswell et al. 2020</a>)</cite>.</p>
+</div>
+<section id="S4.SS0.SSS0.Px1">
+<h4>Training, indexing and retrieval</h4>
+<div id="S4.SS0.SSS0.Px1.p1">
+<p id="S4.SS0.SSS0.Px1.p1.1">We initialized the models with the <span id="S4.SS0.SSS0.Px1.p1.1.1">BERT-base</span> checkpoint. Models are trained with the ADAM optimizer, using a learning rate of <math alttext="2e^{-5}" class="ltx_Math" display="inline" id="S4.SS0.SSS0.Px1.p1.m1" intent=":literal"><semantics><mrow><mn>2</mn><mo lspace="0em" rspace="0em">​</mo><msup><mi>e</mi><mrow><mo>−</mo><mn>5</mn></mrow></msup></mrow><annotation encoding="application/x-tex">2e^{-5}</annotation></semantics></math> with linear scheduling and a warmup of <math alttext="6000" class="ltx_Math" display="inline" id="S4.SS0.SSS0.Px1.p1.m2" intent=":literal"><semantics><mn>6000</mn><annotation encoding="application/x-tex">6000</annotation></semantics></math> steps, and a batch size of <math alttext="124" class="ltx_Math" display="inline" id="S4.SS0.SSS0.Px1.p1.m3" intent=":literal"><semantics><mn>124</mn><annotation encoding="application/x-tex">124</annotation></semantics></math>. We keep the best checkpoint using MRR@10 on a validation set of <math alttext="500" class="ltx_Math" display="inline" id="S4.SS0.SSS0.Px1.p1.m4" intent=":literal"><semantics><mn>500</mn><annotation encoding="application/x-tex">500</annotation></semantics></math> queries, after training for <math alttext="150" class="ltx_Math" display="inline" id="S4.SS0.SSS0.Px1.p1.m5" intent=":literal"><semantics><mn>150</mn><annotation encoding="application/x-tex">150</annotation></semantics></math>k iterations (note that this is not optimal, as we validate on a re-ranking task). We consider a maximum length of <math alttext="256" class="ltx_Math" display="inline" id="S4.SS0.SSS0.Px1.p1.m6" intent=":literal"><semantics><mn>256</mn><annotation encoding="application/x-tex">256</annotation></semantics></math> for input sequences. In order to mitigate the contribution of the regularizer at the early stages of training, we follow <cite>(<a href="#bib.bib21">Paria et al. 2020</a>)</cite> and use a scheduler for <math alttext="\lambda" class="ltx_Math" display="inline" id="S4.SS0.SSS0.Px1.p1.m7" intent=":literal"><semantics><mi>λ</mi><annotation encoding="application/x-tex">\lambda</annotation></semantics></math>, quadratically increasing <math alttext="\lambda" class="ltx_Math" display="inline" id="S4.SS0.SSS0.Px1.p1.m8" intent=":literal"><semantics><mi>λ</mi><annotation encoding="application/x-tex">\lambda</annotation></semantics></math> at each training iteration, until a given step (<math alttext="50" class="ltx_Math" display="inline" id="S4.SS0.SSS0.Px1.p1.m9" intent=":literal"><semantics><mn>50</mn><annotation encoding="application/x-tex">50</annotation></semantics></math>k in our case), from which it remains constant. Typical values for <math alttext="\lambda" class="ltx_Math" display="inline" id="S4.SS0.SSS0.Px1.p1.m10" intent=":literal"><semantics><mi>λ</mi><annotation encoding="application/x-tex">\lambda</annotation></semantics></math> fall between <math alttext="1e^{-1}" class="ltx_Math" display="inline" id="S4.SS0.SSS0.Px1.p1.m11" intent=":literal"><semantics><mrow><mn>1</mn><mo lspace="0em" rspace="0em">​</mo><msup><mi>e</mi><mrow><mo>−</mo><mn>1</mn></mrow></msup></mrow><annotation encoding="application/x-tex">1e^{-1}</annotation></semantics></math> and <math alttext="1e^{-4}" class="ltx_Math" display="inline" id="S4.SS0.SSS0.Px1.p1.m12" intent=":literal"><semantics><mrow><mn>1</mn><mo lspace="0em" rspace="0em">​</mo><msup><mi>e</mi><mrow><mo>−</mo><mn>4</mn></mrow></msup></mrow><annotation encoding="application/x-tex">1e^{-4}</annotation></semantics></math>.
+For storing the index,
+we use a custom implementation based on Python arrays, and we rely on Numba <cite>(<a href="#bib.bib15">Lam
+et al. 2015</a>)</cite> to parallelize retrieval. Models<span id="footnote2"><sup>2</sup><span><span><sup>2</sup>
+<span>2</span>
+              
+              
+              
+            We made the code public at <a href="https://github.com/naver/splade">https://github.com/naver/splade</a></span></span></span> are trained using PyTorch <cite>(<a href="#bib.bib22">Paszke
+et al. 2019</a>)</cite> and HuggingFace transformers <cite>(<a href="#bib.bib25">Wolf et al. 2020</a>)</cite>, on <math alttext="4" class="ltx_Math" display="inline" id="S4.SS0.SSS0.Px1.p1.m13" intent=":literal"><semantics><mn>4</mn><annotation encoding="application/x-tex">4</annotation></semantics></math> Tesla <math alttext="V100" class="ltx_Math" display="inline" id="S4.SS0.SSS0.Px1.p1.m14" intent=":literal"><semantics><mrow><mi>V</mi><mo lspace="0em" rspace="0em">​</mo><mn>100</mn></mrow><annotation encoding="application/x-tex">V100</annotation></semantics></math> GPUs with <math alttext="32" class="ltx_Math" display="inline" id="S4.SS0.SSS0.Px1.p1.m15" intent=":literal"><semantics><mn>32</mn><annotation encoding="application/x-tex">32</annotation></semantics></math>GB memory.</p>
+</div>
+</section>
+<section id="S4.SS0.SSS0.Px2">
+<h4>Evaluation</h4>
+<div id="S4.SS0.SSS0.Px2.p1">
+<p id="S4.SS0.SSS0.Px2.p1.1">We report Recall@1000 for both datasets, as well as the official metrics MRR@10 and NDCG@10 for MS MARCO dev set and TREC DL 2019 respectively. Since we are essentially interested in the first retrieval step, we do not consider re-rankers based on BERT, and we compare our approach to first stage rankers only – results reported on the MS MARCO leaderboard are thus not comparable to the results presented here. We compare to the following sparse approaches
+
+<span id="S4.I1">
+<span id="S4.I1.i1"><span>(1)</span> <span id="S4.I1.i1.2">BM25
+</span></span>
+<span id="S4.I1.i2"><span>(2)</span> <span id="S4.I1.i2.2">DeepCT <cite>(<a href="#bib.bib5">Dai and Callan 2019</a>)</cite>
+</span></span>
+<span id="S4.I1.i3"><span>(3)</span> <span id="S4.I1.i3.2">doc2query-T5 <cite>(<a href="#bib.bib19">Nogueira and Lin 2019</a>)</cite>
+</span></span>
+<span id="S4.I1.i4"><span>(4)</span> <span id="S4.I1.i4.2">and SparTerm <cite>(<a href="#bib.bib2">Bai et al. 2020</a>)</cite>
+</span></span>
+</span>, as well as state-of-the-art dense approaches ANCE <cite>(<a href="#bib.bib26">Xiong et al. 2020</a>)</cite> and TCT-ColBERT <cite>(<a href="#bib.bib16">Lin et al. 2020</a>)</cite>. We report the results from the original papers. We include a pure lexical SparTerm trained with our ranking pipeline (ST lexical-only). To illustrate the benefits of the log-saturation, we add results for models trained using Eq. (<a href="#S3.E2"><span>2</span></a>) instead of Eq. (<a href="#S3.E4"><span>4</span></a>) (ST exp-<math alttext="\ell_{1}" class="ltx_Math" display="inline" id="S4.SS0.SSS0.Px2.p1.m1" intent=":literal"><semantics><msub><mi mathvariant="normal">ℓ</mi><mn>1</mn></msub><annotation encoding="application/x-tex">\ell_{1}</annotation></semantics></math> and ST exp-<math alttext="\ell_{\texttt{FLOPS}}" class="ltx_Math" display="inline" id="S4.SS0.SSS0.Px2.p1.m2" intent=":literal"><semantics><msub><mi mathvariant="normal">ℓ</mi><mtext class="ltx_mathvariant_monospace">FLOPS</mtext></msub><annotation encoding="application/x-tex">\ell_{\texttt{FLOPS}}</annotation></semantics></math>).
+For sparse models, we indicate an estimation of the average number of floating-point operations between a query and a document in Table <a href="#S4.T1"><span>1</span></a>, when available, which is defined as
+the expectation <math alttext="\mathbb{E}_{q,d}\left[\sum_{j\in V}p_{j}^{(q)}p_{j}^{(d)}\right]" class="ltx_Math" display="inline" id="S4.SS0.SSS0.Px2.p1.m3" intent=":literal"><semantics><mrow><msub><mi>𝔼</mi><mrow><mi>q</mi><mo>,</mo><mi>d</mi></mrow></msub><mo lspace="0em" rspace="0em">​</mo><mrow><mo>[</mo><mrow><msub><mo lspace="0em">∑</mo><mrow><mi>j</mi><mo>∈</mo><mi>V</mi></mrow></msub><mrow><msubsup><mi>p</mi><mi>j</mi><mrow><mo stretchy="false">(</mo><mi>q</mi><mo stretchy="false">)</mo></mrow></msubsup><mo lspace="0em" rspace="0em">​</mo><msubsup><mi>p</mi><mi>j</mi><mrow><mo stretchy="false">(</mo><mi>d</mi><mo stretchy="false">)</mo></mrow></msubsup></mrow></mrow><mo>]</mo></mrow></mrow><annotation encoding="application/x-tex">\mathbb{E}_{q,d}\left[\sum_{j\in V}p_{j}^{(q)}p_{j}^{(d)}\right]</annotation></semantics></math>
+where <math alttext="p_{j}" class="ltx_Math" display="inline" id="S4.SS0.SSS0.Px2.p1.m4" intent=":literal"><semantics><msub><mi>p</mi><mi>j</mi></msub><annotation encoding="application/x-tex">p_{j}</annotation></semantics></math> is the activation probability for token <math alttext="j" class="ltx_Math" display="inline" id="S4.SS0.SSS0.Px2.p1.m5" intent=":literal"><semantics><mi>j</mi><annotation encoding="application/x-tex">j</annotation></semantics></math> in a document <math alttext="d" class="ltx_Math" display="inline" id="S4.SS0.SSS0.Px2.p1.m6" intent=":literal"><semantics><mi>d</mi><annotation encoding="application/x-tex">d</annotation></semantics></math> or a query <math alttext="q" class="ltx_Math" display="inline" id="S4.SS0.SSS0.Px2.p1.m7" intent=":literal"><semantics><mi>q</mi><annotation encoding="application/x-tex">q</annotation></semantics></math>. It is empirically estimated from a set of approximately <math alttext="100" class="ltx_Math" display="inline" id="S4.SS0.SSS0.Px2.p1.m8" intent=":literal"><semantics><mn>100</mn><annotation encoding="application/x-tex">100</annotation></semantics></math>k development queries, on the MS MARCO collection.</p>
+</div>
+<div id="S4.SS0.SSS0.Px2.p2">
+<p id="S4.SS0.SSS0.Px2.p2.1">Results are given in Table <a href="#S4.T1"><span>1</span></a>.
+Overall, we observe that:
+
+<span id="S4.I2">
+<span id="S4.I2.i1"><span>(1)</span> <span id="S4.I2.i1.2">our models outperform the other sparse retrieval methods by a large margin (except for recall@1000 on TREC DL);</span></span>
+<span id="S4.I2.i2"><span>(2)</span> <span id="S4.I2.i2.2">the results are competitive with state-of-the-art dense retrieval methods.</span></span>
+</span></p>
+</div>
+<div id="S4.SS0.SSS0.Px2.p3">
+<p id="S4.SS0.SSS0.Px2.p3.1">More specifically, our training method for ST lexical-only already outperforms the results of DeepCT as well as the results reported in the original SparTerm paper – including the model using expansion. Thanks to the additional sparse expansion mechanism, we are able to obtain results on par with state-of-the-art dense approaches on MS MARCO dev set (e.g. Recall@1000 close to <math alttext="0.96" class="ltx_Math" display="inline" id="S4.SS0.SSS0.Px2.p3.m1" intent=":literal"><semantics><mn>0.96</mn><annotation encoding="application/x-tex">0.96</annotation></semantics></math> for ST exp-<math alttext="\ell_{1}" class="ltx_Math" display="inline" id="S4.SS0.SSS0.Px2.p3.m2" intent=":literal"><semantics><msub><mi mathvariant="normal">ℓ</mi><mn>1</mn></msub><annotation encoding="application/x-tex">\ell_{1}</annotation></semantics></math>), but with a much bigger average number of FLOPS.</p>
+</div>
+<div id="S4.SS0.SSS0.Px2.p4">
+<p id="S4.SS0.SSS0.Px2.p4.1">By adding a log-saturation effect to the expansion model, SPLADE greatly increases sparsity – reducing the FLOPS to similar levels than BOW approaches – at no cost on performance when compared to the best first-stage rankers. In addition, we observe the advantage of the FLOPS regularization over <math alttext="\ell_{1}" class="ltx_Math" display="inline" id="S4.SS0.SSS0.Px2.p4.m1" intent=":literal"><semantics><msub><mi mathvariant="normal">ℓ</mi><mn>1</mn></msub><annotation encoding="application/x-tex">\ell_{1}</annotation></semantics></math> in order to decrease the computing cost. Note that in contrast to SparTerm, SPLADE is trained end-to end in a single step. It is also remarkably simple, compared to dense state-of-the-art baselines such as ANCE <cite>(<a href="#bib.bib26">Xiong et al. 2020</a>)</cite>, and avoids resorting to approximate neighbors search, whose impact on IR metrics has not been fully evaluated yet.</p>
+</div>
+<figure id="S4.T1"><img alt="Table 1. Evaluation on MS MARCO passage retrieval (dev set) and TREC DL 2019" height="798" src="https://theopinard.github.io/vrac/articles/splade-sparse-lexical-and-expansion-model-for-first-stage-ranking/table-1.jpg" width="952"/><figcaption><span>Table 1. </span>Evaluation on MS MARCO passage retrieval (dev set) and TREC DL 2019</figcaption></figure>
+<figure id="S4.F1"><img alt="Figure 1. Performance vs FLOPS for SPLADE models trained with different regularization strength λ \lambda on MS MARCO" height="773" src="https://theopinard.github.io/vrac/articles/splade-sparse-lexical-and-expansion-model-for-first-stage-ranking/figure-1.jpg" width="956"/><figcaption><span>Figure 1. </span>Performance vs FLOPS for SPLADE models trained with different regularization strength <math alttext="\lambda" class="ltx_Math" display="inline" id="S4.F1.m2" intent=":literal"><semantics><mi>λ</mi><annotation encoding="application/x-tex">\lambda</annotation></semantics></math> on MS MARCO</figcaption></figure>
+</section>
+<section id="S4.SS0.SSS0.Px3">
+<h4>Effectiveness-efficiency trade-off</h4>
+<div id="S4.SS0.SSS0.Px3.p1">
+<p id="S4.SS0.SSS0.Px3.p1.1">Figure <a href="#S4.F1"><span>1</span></a> illustrates the trade-off between effectiveness (MRR@10) and efficiency (FLOPS), when we vary <math alttext="\lambda_{q}" class="ltx_Math" display="inline" id="S4.SS0.SSS0.Px3.p1.m1" intent=":literal"><semantics><msub><mi>λ</mi><mi>q</mi></msub><annotation encoding="application/x-tex">\lambda_{q}</annotation></semantics></math> and <math alttext="\lambda_{d}" class="ltx_Math" display="inline" id="S4.SS0.SSS0.Px3.p1.m2" intent=":literal"><semantics><msub><mi>λ</mi><mi>d</mi></msub><annotation encoding="application/x-tex">\lambda_{d}</annotation></semantics></math> (varying both implies that plots are not smooth). We observe that ST exp-<math alttext="\ell_{\texttt{FLOPS}}" class="ltx_Math" display="inline" id="S4.SS0.SSS0.Px3.p1.m3" intent=":literal"><semantics><msub><mi mathvariant="normal">ℓ</mi><mtext class="ltx_mathvariant_monospace">FLOPS</mtext></msub><annotation encoding="application/x-tex">\ell_{\texttt{FLOPS}}</annotation></semantics></math> falls far behind BOW models and SPLADE in terms of efficiency. In the meantime, SPLADE reaches efficiency levels equivalent to sparse BOW models, while outperforming doc2query-T5.
+Interestingly, strongly regularized models still show competitive performance (e.g. <span id="S4.SS0.SSS0.Px3.p1.1.1">FLOPS</span>=<math alttext="0.05," class="ltx_Math" display="inline" id="S4.SS0.SSS0.Px3.p1.m4" intent=":literal"><semantics><mrow><mn>0.05</mn><mo>,</mo></mrow><annotation encoding="application/x-tex">0.05,</annotation></semantics></math> MRR@10=<math alttext="0.296" class="ltx_Math" display="inline" id="S4.SS0.SSS0.Px3.p1.m5" intent=":literal"><semantics><mn>0.296</mn><annotation encoding="application/x-tex">0.296</annotation></semantics></math>). Finally, the regularization effect brought by <math alttext="\ell_{\texttt{FLOPS}}" class="ltx_Math" display="inline" id="S4.SS0.SSS0.Px3.p1.m6" intent=":literal"><semantics><msub><mi mathvariant="normal">ℓ</mi><mtext class="ltx_mathvariant_monospace">FLOPS</mtext></msub><annotation encoding="application/x-tex">\ell_{\texttt{FLOPS}}</annotation></semantics></math> compared to <math alttext="\ell_{1}" class="ltx_Math" display="inline" id="S4.SS0.SSS0.Px3.p1.m7" intent=":literal"><semantics><msub><mi mathvariant="normal">ℓ</mi><mn>1</mn></msub><annotation encoding="application/x-tex">\ell_{1}</annotation></semantics></math> is clear: for the same level of efficiency, performance of the latter is always lower.</p>
+</div>
+</section>
+<section id="S4.SS0.SSS0.Px4">
+<h4>The role of expansion</h4>
+<div id="S4.SS0.SSS0.Px4.p1">
+<p id="S4.SS0.SSS0.Px4.p1.1">Experiments show that the expansion brings improvements w.r.t. to the purely lexical approach by increasing recall. Additionally, representations obtained from expansion-regularized models are sparser: the models learn how to balance expansion and compression, by both turning-off irrelevant dimensions and activating useful ones. On a set of <math alttext="10" class="ltx_Math" display="inline" id="S4.SS0.SSS0.Px4.p1.m1" intent=":literal"><semantics><mn>10</mn><annotation encoding="application/x-tex">10</annotation></semantics></math>k documents, the SPLADE-<math alttext="\ell_{\texttt{FLOPS}}" class="ltx_Math" display="inline" id="S4.SS0.SSS0.Px4.p1.m2" intent=":literal"><semantics><msub><mi mathvariant="normal">ℓ</mi><mtext class="ltx_mathvariant_monospace">FLOPS</mtext></msub><annotation encoding="application/x-tex">\ell_{\texttt{FLOPS}}</annotation></semantics></math> from Table <a href="#S4.T1"><span>1</span></a> drops in average <math alttext="20" class="ltx_Math" display="inline" id="S4.SS0.SSS0.Px4.p1.m3" intent=":literal"><semantics><mn>20</mn><annotation encoding="application/x-tex">20</annotation></semantics></math> terms per document, while adding <math alttext="32" class="ltx_Math" display="inline" id="S4.SS0.SSS0.Px4.p1.m4" intent=":literal"><semantics><mn>32</mn><annotation encoding="application/x-tex">32</annotation></semantics></math> expansion terms. For one of our most efficient model (<span id="S4.SS0.SSS0.Px4.p1.1.1">FLOPS</span>=<math alttext="0.05" class="ltx_Math" display="inline" id="S4.SS0.SSS0.Px4.p1.m5" intent=":literal"><semantics><mn>0.05</mn><annotation encoding="application/x-tex">0.05</annotation></semantics></math>), <math alttext="34" class="ltx_Math" display="inline" id="S4.SS0.SSS0.Px4.p1.m6" intent=":literal"><semantics><mn>34</mn><annotation encoding="application/x-tex">34</annotation></semantics></math> terms are dropped in average, for only <math alttext="5" class="ltx_Math" display="inline" id="S4.SS0.SSS0.Px4.p1.m7" intent=":literal"><semantics><mn>5</mn><annotation encoding="application/x-tex">5</annotation></semantics></math> new expansion terms. In this case, representations are extremely sparse: documents and queries contain in average <math alttext="18" class="ltx_Math" display="inline" id="S4.SS0.SSS0.Px4.p1.m8" intent=":literal"><semantics><mn>18</mn><annotation encoding="application/x-tex">18</annotation></semantics></math> and <math alttext="6" class="ltx_Math" display="inline" id="S4.SS0.SSS0.Px4.p1.m9" intent=":literal"><semantics><mn>6</mn><annotation encoding="application/x-tex">6</annotation></semantics></math> non-zero values respectively, and we need less that <math alttext="1.4" class="ltx_Math" display="inline" id="S4.SS0.SSS0.Px4.p1.m10" intent=":literal"><semantics><mn>1.4</mn><annotation encoding="application/x-tex">1.4</annotation></semantics></math> GB to store the index on disk.
+Table <a href="#S4.T2"><span>2</span></a> shows an example where the model performs term re-weighting by emphasizing on <em id="S4.SS0.SSS0.Px4.p1.1.2">important</em> terms and discarding most of the terms without information content. Expansion allows to enrich documents, either by implicitly adding stemming effects (legs <math alttext="\rightarrow" class="ltx_Math" display="inline" id="S4.SS0.SSS0.Px4.p1.m11" intent=":literal"><semantics><mo stretchy="false">→</mo><annotation encoding="application/x-tex">\rightarrow</annotation></semantics></math> leg) or by adding relevant topic words (e.g. treatment).</p>
+</div>
+<figure id="S4.T2"><img alt="Table 2. Document and expansion terms: between parenthesis is the weight associated with the term – omitted for the second occurrence of the term in the document, and strike-through for zeros" height="494" src="https://theopinard.github.io/vrac/articles/splade-sparse-lexical-and-expansion-model-for-first-stage-ranking/table-2.jpg" width="1001"/><figcaption><span>Table 2. </span>Document and expansion terms:  between parenthesis is the weight associated with the term – omitted for the second occurrence of the term in the document, and strike-through for zeros </figcaption></figure>
+</section>
+</section>
+<section id="S5">
+<h2><span>5. </span>Conclusion</h2>
+<div id="S5.p1">
+<p id="S5.p1.1">Recently, dense retrieval based on BERT has demonstrated its superiority for first-stage retrieval, questioning the competitiveness of traditional sparse models. In this work, we have proposed SPLADE, a sparse model revisiting query/document expansion. Our approach relies on in-batch negatives, logarithmic activation and FLOPS regularization to learn effective and efficient sparse representations. SPLADE is an appealing candidate for initial retrieval: it rivals the latest state-of-the-art dense retrieval models, its training procedure is straightforward, its sparsity/FLOPS can be controlled explicitly through the regularization, and it can operate on inverted indexes. In reason of its simplicity, SPLADE is a solid basis for further improvements in this line of research.</p>
+</div>
+</section>
+<section id="bib">
+<h2>References</h2>
+<ul>
+<li id="bib.bib1"><span>(1)</span>
+<span>
+</span></li>
+<li id="bib.bib2"><span>Bai et al<span id="bib.bib2.2">.</span> (2020)</span>
+<span>
+Yang Bai, Xiaoguang Li,
+Gang Wang, Chaoliang Zhang,
+Lifeng Shang, Jun Xu,
+Zhaowei Wang, Fangshan Wang, and
+Qun Liu. 2020.
+
+</span>
+<span>SparTerm: Learning Term-based Sparse Representation
+for Fast Text Retrieval.
+
+</span>
+<span>
+</span>
+<span>arXiv:2010.00768 [cs.IR]
+
+</span></li>
+<li id="bib.bib3"><span>Boytsov (2018)</span>
+<span>
+Leonid Boytsov.
+2018.
+
+</span>
+<span><em id="bib.bib3.1">Efficient and Accurate Non-Metric k-NN Search
+with Applications to Text Matching</em>.
+
+</span>
+<span>Ph.D. Dissertation. Carnegie
+Mellon University.
+
+</span>
+<span>
+</span></li>
+<li id="bib.bib4"><span>Craswell et al<span id="bib.bib4.2">.</span> (2020)</span>
+<span>
+Nick Craswell, Bhaskar
+Mitra, Emine Yilmaz, Daniel Campos,
+and Ellen M Voorhees. 2020.
+
+</span>
+<span>Overview of the trec 2019 deep learning track.
+
+</span>
+<span><em id="bib.bib4.3">arXiv preprint arXiv:2003.07820</em>
+(2020).
+
+</span>
+<span>
+</span></li>
+<li id="bib.bib5"><span>Dai and Callan (2019)</span>
+<span>
+Zhuyun Dai and Jamie
+Callan. 2019.
+
+</span>
+<span>Context-Aware Sentence/Passage Term Importance
+Estimation For First Stage Retrieval.
+
+</span>
+<span>
+</span>
+<span>arXiv:1910.10687 [cs.IR]
+
+</span></li>
+<li id="bib.bib6"><span>Dai and Callan (2020a)</span>
+<span>
+Zhuyun Dai and Jamie
+Callan. 2020a.
+
+</span>
+<span><em id="bib.bib6.1">Context-Aware Document Term Weighting for
+Ad-Hoc Search</em>.
+
+</span>
+<span>Association for Computing Machinery,
+New York, NY, USA, 1897–1907.
+
+</span>
+<span>
+<a href="https://doi.org/10.1145/3366423.3380258">https://doi.org/10.1145/3366423.3380258</a>
+</span></li>
+<li id="bib.bib7"><span>Dai and Callan (2020b)</span>
+<span>
+Zhuyun Dai and Jamie
+Callan. 2020b.
+
+</span>
+<span><em id="bib.bib7.1">Context-Aware Term Weighting For First
+Stage Passage Retrieval</em>.
+
+</span>
+<span>Association for Computing Machinery,
+New York, NY, USA, 1533–1536.
+
+</span>
+<span>
+<a href="https://doi.org/10.1145/3397271.3401204">https://doi.org/10.1145/3397271.3401204</a>
+</span></li>
+<li id="bib.bib8"><span>Devlin
+et al<span id="bib.bib8.2">.</span> (2018)</span>
+<span>
+Jacob Devlin, Ming-Wei
+Chang, Kenton Lee, and Kristina
+Toutanova. 2018.
+
+</span>
+<span>BERT: Pre-training of Deep Bidirectional
+Transformers for Language Understanding.
+
+</span>
+<span><em id="bib.bib8.3">CoRR</em> abs/1810.04805
+(2018).
+
+</span>
+<span>arXiv:1810.04805
+
+<a href="http://arxiv.org/abs/1810.04805">http://arxiv.org/abs/1810.04805</a>
+</span></li>
+<li id="bib.bib9"><span>Ding et al<span id="bib.bib9.2">.</span> (2020)</span>
+<span>
+Yingqi Qu Yuchen Ding,
+Jing Liu, Kai Liu,
+Ruiyang Ren, Xin Zhao,
+Daxiang Dong, Hua Wu, and
+Haifeng Wang. 2020.
+
+</span>
+<span>RocketQA: An Optimized Training Approach to Dense
+Passage Retrieval for Open-Domain Question Answering.
+
+</span>
+<span>
+</span>
+<span>arXiv:2010.08191 [cs.CL]
+
+</span></li>
+<li id="bib.bib10"><span>Fang
+et al<span id="bib.bib10.2">.</span> (2004)</span>
+<span>
+Hui Fang, Tao Tao, and
+ChengXiang Zhai. 2004.
+
+</span>
+<span>A Formal Study of Information Retrieval
+Heuristics. In <em id="bib.bib10.3">Proceedings of the 27th Annual
+International ACM SIGIR Conference on Research and Development in Information
+Retrieval</em> (Sheffield, United Kingdom) <em id="bib.bib10.4">(SIGIR ’04)</em>.
+Association for Computing Machinery,
+New York, NY, USA, 49–56.
+
+</span>
+<span>
+<a href="https://doi.org/10.1145/1008992.1009004">https://doi.org/10.1145/1008992.1009004</a>
+</span></li>
+<li id="bib.bib11"><span>Guu
+et al<span id="bib.bib11.2">.</span> (2020)</span>
+<span>
+Kelvin Guu, Kenton Lee,
+Zora Tung, Panupong Pasupat, and
+Ming-Wei Chang. 2020.
+
+</span>
+<span>REALM: Retrieval-Augmented Language Model
+Pre-Training.
+
+</span>
+<span>
+</span>
+<span>arXiv:2002.08909 [cs.CL]
+
+</span></li>
+<li id="bib.bib12"><span>Hofstätter et al<span id="bib.bib12.2">.</span> (2020)</span>
+<span>
+Sebastian Hofstätter,
+Sophia Althammer, Michael Schröder,
+Mete Sertkan, and Allan Hanbury.
+2020.
+
+</span>
+<span>Improving Efficient Neural Ranking Models with
+Cross-Architecture Knowledge Distillation.
+
+</span>
+<span>
+</span>
+<span>arXiv:2010.02666 [cs.IR]
+
+</span></li>
+<li id="bib.bib13"><span>Karpukhin et al<span id="bib.bib13.2">.</span> (2020)</span>
+<span>
+Vladimir Karpukhin, Barlas
+Oğuz, Sewon Min, Patrick Lewis,
+Ledell Wu, Sergey Edunov,
+Danqi Chen, and Wen tau Yih.
+2020.
+
+</span>
+<span>Dense Passage Retrieval for Open-Domain Question
+Answering.
+
+</span>
+<span>
+</span>
+<span>arXiv:2004.04906 [cs.CL]
+
+</span></li>
+<li id="bib.bib14"><span>Khattab and
+Zaharia (2020)</span>
+<span>
+Omar Khattab and Matei
+Zaharia. 2020.
+
+</span>
+<span>ColBERT: Efficient and Effective Passage Search via
+Contextualized Late Interaction over BERT. In
+<em id="bib.bib14.1">Proceedings of the 43rd International ACM SIGIR
+Conference on Research and Development in Information Retrieval</em> (Virtual
+Event, China) <em id="bib.bib14.2">(SIGIR ’20)</em>.
+Association for Computing Machinery,
+New York, NY, USA, 39–48.
+
+</span>
+<span>
+<a href="https://doi.org/10.1145/3397271.3401075">https://doi.org/10.1145/3397271.3401075</a>
+</span></li>
+<li id="bib.bib15"><span>Lam
+et al<span id="bib.bib15.2">.</span> (2015)</span>
+<span>
+Siu Kwan Lam, Antoine
+Pitrou, and Stanley Seibert.
+2015.
+
+</span>
+<span>Numba: A llvm-based python jit compiler. In
+<em id="bib.bib15.3">Proceedings of the Second Workshop on the LLVM
+Compiler Infrastructure in HPC</em>. 1–6.
+
+</span>
+<span>
+</span></li>
+<li id="bib.bib16"><span>Lin et al<span id="bib.bib16.2">.</span> (2020)</span>
+<span>
+Sheng-Chieh Lin,
+Jheng-Hong Yang, and Jimmy Lin.
+2020.
+
+</span>
+<span>Distilling Dense Representations for Ranking using
+Tightly-Coupled Teachers.
+
+</span>
+<span>
+</span>
+<span>arXiv:2010.11386 [cs.IR]
+
+</span></li>
+<li id="bib.bib17"><span>MacAvaney et al<span id="bib.bib17.2">.</span> (2020)</span>
+<span>
+Sean MacAvaney,
+Franco Maria Nardini, Raffaele Perego,
+Nicola Tonellotto, Nazli Goharian, and
+Ophir Frieder. 2020.
+
+</span>
+<span>Expansion via Prediction of Importance with
+Contextualization.
+
+</span>
+<span><em id="bib.bib17.3">Proceedings of the 43rd International ACM
+SIGIR Conference on Research and Development in Information Retrieval</em>
+(Jul 2020).
+
+</span>
+<span>
+<a href="https://doi.org/10.1145/3397271.3401262">https://doi.org/10.1145/3397271.3401262</a>
+</span></li>
+<li id="bib.bib18"><span>Nogueira and Cho (2019)</span>
+<span>
+Rodrigo Nogueira and
+Kyunghyun Cho. 2019.
+
+</span>
+<span>Passage Re-ranking with BERT.
+
+</span>
+<span>
+</span>
+<span>arXiv:1901.04085 [cs.IR]
+
+</span></li>
+<li id="bib.bib19"><span>Nogueira and Lin (2019)</span>
+<span>
+Rodrigo Nogueira and
+Jimmy Lin. 2019.
+
+</span>
+<span>From doc2query to docTTTTTquery.
+
+</span>
+<span>
+</span>
+<span>
+</span></li>
+<li id="bib.bib20"><span>Nogueira
+et al<span id="bib.bib20.2">.</span> (2019)</span>
+<span>
+Rodrigo Nogueira, Wei
+Yang, Jimmy Lin, and Kyunghyun Cho.
+2019.
+
+</span>
+<span>Document Expansion by Query Prediction.
+
+</span>
+<span>
+</span>
+<span>arXiv:1904.08375 [cs.IR]
+
+</span></li>
+<li id="bib.bib21"><span>Paria et al<span id="bib.bib21.2">.</span> (2020)</span>
+<span>
+Biswajit Paria, Chih-Kuan
+Yeh, Ian E. H. Yen, Ning Xu,
+Pradeep Ravikumar, and Barnabás
+Póczos. 2020.
+
+</span>
+<span>Minimizing FLOPs to Learn Efficient Sparse
+Representations.
+
+</span>
+<span>
+</span>
+<span>arXiv:2004.05665 [cs.LG]
+
+</span></li>
+<li id="bib.bib22"><span>Paszke
+et al<span id="bib.bib22.3">.</span> (2019)</span>
+<span>
+Adam Paszke, Sam Gross,
+Francisco Massa, Adam Lerer,
+James Bradbury, Gregory Chanan,
+Trevor Killeen, Zeming Lin,
+Natalia Gimelshein, Luca Antiga,
+et al<span id="bib.bib22.4">.</span> 2019.
+
+</span>
+<span>PyTorch: An Imperative Style, High-Performance Deep
+Learning Library.. In <em id="bib.bib22.5">NeurIPS</em>.
+
+</span>
+<span>
+</span></li>
+<li id="bib.bib23"><span>Reimers and
+Gurevych (2019)</span>
+<span>
+Nils Reimers and Iryna
+Gurevych. 2019.
+
+</span>
+<span>Sentence-BERT: Sentence Embeddings using Siamese
+BERT-Networks. In <em id="bib.bib23.1">Proceedings of the 2019
+Conference on Empirical Methods in Natural Language Processing</em>.
+Association for Computational Linguistics.
+
+</span>
+<span>
+<a href="http://arxiv.org/abs/1908.10084">http://arxiv.org/abs/1908.10084</a>
+</span></li>
+<li id="bib.bib24"><span>Tu
+et al<span id="bib.bib24.2">.</span> (2020)</span>
+<span>
+Zhengkai Tu, Wei Yang,
+Zihang Fu, Yuqing Xie,
+Luchen Tan, Kun Xiong,
+Ming Li, and Jimmy Lin.
+2020.
+
+</span>
+<span>Approximate Nearest Neighbor Search and Lightweight
+Dense Vector Reranking in Multi-Stage Retrieval Architectures. In
+<em id="bib.bib24.3">Proceedings of the 2020 ACM SIGIR on International
+Conference on Theory of Information Retrieval</em>. 97–100.
+
+</span>
+<span>
+</span></li>
+<li id="bib.bib25"><span>Wolf et al<span id="bib.bib25.2">.</span> (2020)</span>
+<span>
+Thomas Wolf, Lysandre
+Debut, Victor Sanh, Julien Chaumond,
+Clement Delangue, Anthony Moi,
+Pierric Cistac, Tim Rault,
+Rémi Louf, Morgan Funtowicz,
+Joe Davison, Sam Shleifer,
+Patrick von Platen, Clara Ma,
+Yacine Jernite, Julien Plu,
+Canwen Xu, Teven Le Scao,
+Sylvain Gugger, Mariama Drame,
+Quentin Lhoest, and Alexander M. Rush.
+2020.
+
+</span>
+<span>HuggingFace’s Transformers: State-of-the-art Natural
+Language Processing.
+
+</span>
+<span>
+</span>
+<span>arXiv:1910.03771 [cs.CL]
+
+</span></li>
+<li id="bib.bib26"><span>Xiong et al<span id="bib.bib26.2">.</span> (2020)</span>
+<span>
+Lee Xiong, Chenyan Xiong,
+Ye Li, Kwok-Fung Tang,
+Jialin Liu, Paul Bennett,
+Junaid Ahmed, and Arnold Overwijk.
+2020.
+
+</span>
+<span>Approximate Nearest Neighbor Negative Contrastive
+Learning for Dense Text Retrieval.
+
+</span>
+<span>
+</span>
+<span>arXiv:2007.00808 [cs.IR]
+
+</span></li>
+<li id="bib.bib27"><span>Xiong et al<span id="bib.bib27.2">.</span> (2021)</span>
+<span>
+Lee Xiong, Chenyan Xiong,
+Ye Li, Kwok-Fung Tang,
+Jialin Liu, Paul N. Bennett,
+Junaid Ahmed, and Arnold Overwikj.
+2021.
+
+</span>
+<span>Approximate Nearest Neighbor Negative Contrastive
+Learning for Dense Text Retrieval. In
+<em id="bib.bib27.3">International Conference on Learning
+Representations</em>.
+
+</span>
+<span>
+<a href="https://openreview.net/forum?id=zeFrfgyZln">https://openreview.net/forum?id=zeFrfgyZln</a>
+</span></li>
+<li id="bib.bib28"><span>Yang
+et al<span id="bib.bib28.2">.</span> (2019)</span>
+<span>
+Wei Yang, Kuang Lu,
+Peilin Yang, and Jimmy Lin.
+2019.
+
+</span>
+<span>Critically Examining the “Neural Hype”.
+
+</span>
+<span><em id="bib.bib28.3">Proceedings of the 42nd International ACM
+SIGIR Conference on Research and Development in Information Retrieval</em>
+(Jul 2019).
+
+</span>
+<span>
+<a href="https://doi.org/10.1145/3331184.3331340">https://doi.org/10.1145/3331184.3331340</a>
+</span></li>
+<li id="bib.bib29"><span>Zamani et al<span id="bib.bib29.2">.</span> (2018)</span>
+<span>
+Hamed Zamani, Mostafa
+Dehghani, W. Bruce Croft, Erik
+Learned-Miller, and Jaap Kamps.
+2018.
+
+</span>
+<span>From Neural Re-Ranking to Neural Ranking: Learning
+a Sparse Representation for Inverted Indexing. In
+<em id="bib.bib29.3">Proceedings of the 27th ACM International
+Conference on Information and Knowledge Management</em> (Torino, Italy)
+<em id="bib.bib29.4">(CIKM ’18)</em>. Association for
+Computing Machinery, New York, NY, USA,
+497–506.
+
+</span>
+<span>
+<a href="https://doi.org/10.1145/3269206.3271800">https://doi.org/10.1145/3269206.3271800</a>
+</span></li>
+<li id="bib.bib30"><span>Zhao et al<span id="bib.bib30.2">.</span> (2020)</span>
+<span>
+Tiancheng Zhao, Xiaopeng
+Lu, and Kyusong Lee. 2020.
+
+</span>
+<span>SPARTA: Efficient Open-Domain Question Answering via
+Sparse Transformer Matching Retrieval.
+
+</span>
+<span>
+</span>
+<span>arXiv:2009.13013 [cs.CL]
+
+</span></li>
+</ul>
+</section>
+</article></body></html>
