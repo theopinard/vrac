@@ -1,6 +1,14 @@
 import unittest
 
-from republish_arxiv import base_identifier, parse_arxiv_url, resolved_identifier
+from bs4 import BeautifulSoup
+
+from republish_arxiv import (
+    base_identifier,
+    normalize_equation_tables,
+    normalize_visual_figures,
+    parse_arxiv_url,
+    resolved_identifier,
+)
 
 
 class ArxivUrlTests(unittest.TestCase):
@@ -39,6 +47,43 @@ class ArxivUrlTests(unittest.TestCase):
         """
         with self.assertRaises(ValueError):
             resolved_identifier(html, "2607.12246v1")
+
+
+class ArxivMarkupTests(unittest.TestCase):
+    def test_visual_figures_have_only_direct_images_and_caption(self) -> None:
+        soup = BeautifulSoup(
+            """
+            <article><figure id="f1"><div><span><img src="figure-1.png"
+            alt="diagram"></span></div><div><img src="table-1.png"
+            alt="table"></div><figcaption>Figure 1.</figcaption></figure></article>
+            """,
+            "html.parser",
+        )
+        article = soup.article
+        assert article is not None
+        normalize_visual_figures(article)
+        figure = article.figure
+        assert figure is not None
+        self.assertEqual(
+            [child.name for child in figure.children if getattr(child, "name", None)],
+            ["img", "img", "figcaption"],
+        )
+
+    def test_equation_layout_table_becomes_plain_math_block(self) -> None:
+        soup = BeautifulSoup(
+            """
+            <article><table><tr><td>(1)</td><td><math alttext="x=1">
+            <semantics><mi>x</mi><annotation>x=1</annotation></semantics>
+            </math></td></tr></table></article>
+            """,
+            "html.parser",
+        )
+        article = soup.article
+        assert article is not None
+        normalize_equation_tables(article)
+        self.assertIsNone(article.table)
+        self.assertIsNotNone(article.math)
+        self.assertIn("(1)", article.get_text(" ", strip=True))
 
 
 if __name__ == "__main__":

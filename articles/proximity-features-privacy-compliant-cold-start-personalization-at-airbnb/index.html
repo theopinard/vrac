@@ -14,14 +14,6 @@ img {
 }
 figure { margin: 2rem 0; }
 figcaption, .article-meta { font-size: 0.9em; }
-table {
-  display: block;
-  max-width: 100%;
-  overflow-x: auto;
-  border-collapse: collapse;
-  margin: 1.5rem 0;
-}
-th, td { padding: 0.25rem 0.5rem; border: 1px solid #bbb; }
 pre {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -142,7 +134,7 @@ experiments across multiple surfaces (Section <a href="#S4"><span>4</span></a>)
 <p id="S2.p1.1">Figure <a href="#acmlabel1"><span>1</span></a> provides an overview of the Proximity Features
 system. Each component is described below.</p>
 </div>
-<figure id="S2.F1"><span><img alt="Figure 1. System architecture. Offline: the adaptive clustering
+<figure id="S2.F1"><img alt="Figure 1. System architecture. Offline: the adaptive clustering algorithm runs once at bootstrap to establish the proximity key partition; the IP-to-key mapping, coordinate-to-scalar mapping, and tile-to-bucket-count mapping are refreshed d" src="figure-1.png"/><figcaption><span>Figure 1. </span>System architecture. Offline: the adaptive clustering
 algorithm runs once at bootstrap to establish the proximity key partition;
 the IP-to-key mapping, coordinate-to-scalar mapping, and tile-to-bucket-count
 mapping are refreshed daily, and features are aggregated over
@@ -150,17 +142,7 @@ stable keys and stored in a distributed KV store. Online: a
 user’s IP is mapped to a proximity key via a serving API (with on-the-fly
 computation for unseen IPs), and features are fetched for model scoring.
 Engagement emails pass a user ID to the same API, which internally
-resolves it to an IP. System architecture diagram showing the offline pipeline (geo-IP clustering, feature computation, KV store) and online serving path (IP to proximity key lookup, feature fetch, model scoring)." src="figure-1.png"/></span>
-<figcaption><span>Figure 1. </span>System architecture. Offline: the adaptive clustering
-algorithm runs once at bootstrap to establish the proximity key partition;
-the IP-to-key mapping, coordinate-to-scalar mapping, and tile-to-bucket-count
-mapping are refreshed daily, and features are aggregated over
-stable keys and stored in a distributed KV store. Online: a
-user’s IP is mapped to a proximity key via a serving API (with on-the-fly
-computation for unseen IPs), and features are fetched for model scoring.
-Engagement emails pass a user ID to the same API, which internally
-resolves it to an IP.<span id="acmlabel1">System architecture diagram showing the offline pipeline (geo-IP clustering, feature computation, KV store) and online serving path (IP to proximity key lookup, feature fetch, model scoring).</span></figcaption>
-</figure>
+resolves it to an IP.<span id="acmlabel1">System architecture diagram showing the offline pipeline (geo-IP clustering, feature computation, KV store) and online serving path (IP to proximity key lookup, feature fetch, model scoring).</span></figcaption></figure>
 <section id="S2.SS1">
 <h3><span>2.1. </span>Geo-IP Data Source</h3>
 <div id="S2.SS1.p1">
@@ -193,13 +175,7 @@ a representative distribution of human traffic.</p>
 <div id="S2.SS2.p1">
 <p id="S2.SS2.p1.1">A <em id="S2.SS2.p1.1.1">proximity key</em> uniquely identifies a geographic bucket of users. It
 is constructed from three components:</p>
-<table id="S2.E1">
-<tbody><tr>
-<td rowspan="1"><span>(1)</span></td>
-<td></td>
-<td><math alttext="\text{key}=\text{base64}\bigl(\lfloor\text{lat}\times s\rfloor,\;\lfloor\text{lng}\times s\rfloor,\;h(\text{ip})\bmod b\bigr)" class="ltx_Math" display="block" id="S2.E1.m1" intent=":literal"><semantics><mrow><mtext>key</mtext><mo>=</mo><mrow><mtext>base64</mtext><mo lspace="0em" rspace="0em">​</mo><mrow><mo maxsize="1.200em" minsize="1.200em">(</mo><mrow><mo stretchy="false">⌊</mo><mrow><mtext>lat</mtext><mo lspace="0.222em" rspace="0.222em">×</mo><mi>s</mi></mrow><mo stretchy="false">⌋</mo></mrow><mo>,</mo><mrow><mo stretchy="false">⌊</mo><mrow><mtext>lng</mtext><mo lspace="0.222em" rspace="0.222em">×</mo><mi>s</mi></mrow><mo stretchy="false">⌋</mo></mrow><mo>,</mo><mrow><mrow><mi>h</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mtext>ip</mtext><mo stretchy="false">)</mo></mrow></mrow><mo>mod</mo><mi>b</mi></mrow><mo maxsize="1.200em" minsize="1.200em">)</mo></mrow></mrow></mrow><annotation encoding="application/x-tex">\text{key}=\text{base64}\bigl(\lfloor\text{lat}\times s\rfloor,\;\lfloor\text{lng}\times s\rfloor,\;h(\text{ip})\bmod b\bigr)</annotation></semantics></math></td>
-<td></td></tr></tbody>
-</table>
+<p><math alttext="\text{key}=\text{base64}\bigl(\lfloor\text{lat}\times s\rfloor,\;\lfloor\text{lng}\times s\rfloor,\;h(\text{ip})\bmod b\bigr)" class="ltx_Math" display="block" id="S2.E1.m1" intent=":literal"><semantics><mrow><mtext>key</mtext><mo>=</mo><mrow><mtext>base64</mtext><mo lspace="0em" rspace="0em">​</mo><mrow><mo maxsize="1.200em" minsize="1.200em">(</mo><mrow><mo stretchy="false">⌊</mo><mrow><mtext>lat</mtext><mo lspace="0.222em" rspace="0.222em">×</mo><mi>s</mi></mrow><mo stretchy="false">⌋</mo></mrow><mo>,</mo><mrow><mo stretchy="false">⌊</mo><mrow><mtext>lng</mtext><mo lspace="0.222em" rspace="0.222em">×</mo><mi>s</mi></mrow><mo stretchy="false">⌋</mo></mrow><mo>,</mo><mrow><mrow><mi>h</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mtext>ip</mtext><mo stretchy="false">)</mo></mrow></mrow><mo>mod</mo><mi>b</mi></mrow><mo maxsize="1.200em" minsize="1.200em">)</mo></mrow></mrow></mrow><annotation encoding="application/x-tex">\text{key}=\text{base64}\bigl(\lfloor\text{lat}\times s\rfloor,\;\lfloor\text{lng}\times s\rfloor,\;h(\text{ip})\bmod b\bigr)</annotation></semantics></math> (1)</p>
 <p id="S2.SS2.p1.2">where <math alttext="s" class="ltx_Math" display="inline" id="S2.SS2.p1.m1" intent=":literal"><semantics><mi>s</mi><annotation encoding="application/x-tex">s</annotation></semantics></math> is the <em id="S2.SS2.p1.2.1">proximity scalar</em> controlling geographic tile size, <math alttext="b" class="ltx_Math" display="inline" id="S2.SS2.p1.m2" intent=":literal"><semantics><mi>b</mi><annotation encoding="application/x-tex">b</annotation></semantics></math>
 is the number of IP hash buckets within that tile, and <math alttext="h" class="ltx_Math" display="inline" id="S2.SS2.p1.m3" intent=":literal"><semantics><mi>h</mi><annotation encoding="application/x-tex">h</annotation></semantics></math> is a deterministic
 hash function (<span id="S2.SS2.p1.2.2">xxhash64</span> <cite>(<a href="#bib.bib8">Collet 2012</a>)</cite> is used for consistency between offline and online paths). The key is base64-encoded for compact storage and transmission.</p>
@@ -236,13 +212,7 @@ distinct latitude/longitude pairs with their associated user counts. A spatially
 contiguous partition <math alttext="\mathcal{P}=\{B_{1},\ldots,B_{m}\}" class="ltx_Math" display="inline" id="S2.SS3.p1.m3" intent=":literal"><semantics><mrow><mi class="ltx_font_mathcaligraphic">𝒫</mi><mo>=</mo><mrow><mo stretchy="false">{</mo><msub><mi>B</mi><mn>1</mn></msub><mo>,</mo><mi mathvariant="normal">…</mi><mo>,</mo><msub><mi>B</mi><mi>m</mi></msub><mo stretchy="false">}</mo></mrow></mrow><annotation encoding="application/x-tex">\mathcal{P}=\{B_{1},\ldots,B_{m}\}</annotation></semantics></math> of <math alttext="\mathcal{L}" class="ltx_Math" display="inline" id="S2.SS3.p1.m4" intent=":literal"><semantics><mi class="ltx_font_mathcaligraphic">ℒ</mi><annotation encoding="application/x-tex">\mathcal{L}</annotation></semantics></math> is
 sought that maximizes the number of buckets <math alttext="m" class="ltx_Math" display="inline" id="S2.SS3.p1.m5" intent=":literal"><semantics><mi>m</mi><annotation encoding="application/x-tex">m</annotation></semantics></math>—preserving the finest
 geographic granularity—subject to a minimum bucket size constraint:</p>
-<table id="S2.E2">
-<tbody><tr>
-<td rowspan="1"><span>(2)</span></td>
-<td></td>
-<td><math alttext="\max_{|\mathcal{P}|}\quad\text{s.t.}\quad\sum_{i:(l_{i},g_{i},n_{i})\in B_{j}}n_{i}\;\geq\;T\quad\forall\,B_{j}\in\mathcal{P}" class="ltx_math_unparsed" display="block" id="S2.E2.m1" intent=":literal"><semantics><mrow><mi>max</mi><msub><mrow></mrow><mrow><mo stretchy="false">|</mo><mi class="ltx_font_mathcaligraphic">𝒫</mi><mo stretchy="false">|</mo></mrow></msub><mtext>s.t.</mtext><mo movablelimits="false">∑</mo><msub><mrow></mrow><mrow><mi>i</mi><mo lspace="0.278em" rspace="0.278em">:</mo><mrow><mrow><mo stretchy="false">(</mo><msub><mi>l</mi><mi>i</mi></msub><mo>,</mo><msub><mi>g</mi><mi>i</mi></msub><mo>,</mo><msub><mi>n</mi><mi>i</mi></msub><mo stretchy="false">)</mo></mrow><mo>∈</mo><msub><mi>B</mi><mi>j</mi></msub></mrow></mrow></msub><mi>n</mi><msub><mrow></mrow><mi>i</mi></msub><mo rspace="0.558em">≥</mo><mi>T</mi><mo lspace="0.167em" rspace="0.337em">∀</mo><mi>B</mi><msub><mrow></mrow><mi>j</mi></msub><mo>∈</mo><mi class="ltx_font_mathcaligraphic">𝒫</mi></mrow><annotation encoding="application/x-tex">\max_{|\mathcal{P}|}\quad\text{s.t.}\quad\sum_{i:(l_{i},g_{i},n_{i})\in B_{j}}n_{i}\;\geq\;T\quad\forall\,B_{j}\in\mathcal{P}</annotation></semantics></math></td>
-<td></td></tr></tbody>
-</table>
+<p><math alttext="\max_{|\mathcal{P}|}\quad\text{s.t.}\quad\sum_{i:(l_{i},g_{i},n_{i})\in B_{j}}n_{i}\;\geq\;T\quad\forall\,B_{j}\in\mathcal{P}" class="ltx_math_unparsed" display="block" id="S2.E2.m1" intent=":literal"><semantics><mrow><mi>max</mi><msub><mrow></mrow><mrow><mo stretchy="false">|</mo><mi class="ltx_font_mathcaligraphic">𝒫</mi><mo stretchy="false">|</mo></mrow></msub><mtext>s.t.</mtext><mo movablelimits="false">∑</mo><msub><mrow></mrow><mrow><mi>i</mi><mo lspace="0.278em" rspace="0.278em">:</mo><mrow><mrow><mo stretchy="false">(</mo><msub><mi>l</mi><mi>i</mi></msub><mo>,</mo><msub><mi>g</mi><mi>i</mi></msub><mo>,</mo><msub><mi>n</mi><mi>i</mi></msub><mo stretchy="false">)</mo></mrow><mo>∈</mo><msub><mi>B</mi><mi>j</mi></msub></mrow></mrow></msub><mi>n</mi><msub><mrow></mrow><mi>i</mi></msub><mo rspace="0.558em">≥</mo><mi>T</mi><mo lspace="0.167em" rspace="0.337em">∀</mo><mi>B</mi><msub><mrow></mrow><mi>j</mi></msub><mo>∈</mo><mi class="ltx_font_mathcaligraphic">𝒫</mi></mrow><annotation encoding="application/x-tex">\max_{|\mathcal{P}|}\quad\text{s.t.}\quad\sum_{i:(l_{i},g_{i},n_{i})\in B_{j}}n_{i}\;\geq\;T\quad\forall\,B_{j}\in\mathcal{P}</annotation></semantics></math> (2)</p>
 <p id="S2.SS3.p1.2">where <math alttext="T" class="ltx_Math" display="inline" id="S2.SS3.p1.m6" intent=":literal"><semantics><mi>T</mi><annotation encoding="application/x-tex">T</annotation></semantics></math> is the target bucket size. The spatial contiguity requirement ensures
 that each bucket corresponds to a geographic neighborhood; maximizing <math alttext="m" class="ltx_Math" display="inline" id="S2.SS3.p1.m7" intent=":literal"><semantics><mi>m</mi><annotation encoding="application/x-tex">m</annotation></semantics></math>
 preserves the finest granularity possible. The threshold <math alttext="T\approx 1{,}000" class="ltx_Math" display="inline" id="S2.SS3.p1.m8" intent=":literal"><semantics><mrow><mi>T</mi><mo>≈</mo><mn>1,000</mn></mrow><annotation encoding="application/x-tex">T\approx 1{,}000</annotation></semantics></math> ensures each bucket
@@ -503,12 +473,7 @@ without requiring a full re-clustering: (1) the IP is geolocated to
 from the KV store; (3) if no scalar exists, a default of <math alttext="s{=}1" class="ltx_Math" display="inline" id="S2.SS5.p2.m2" intent=":literal"><semantics><mrow><mi>s</mi><mo>=</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">s{=}1</annotation></semantics></math> is
 used; (4) the quantized geo tile is computed; (5) the bucket count <math alttext="b" class="ltx_Math" display="inline" id="S2.SS5.p2.m3" intent=":literal"><semantics><mi>b</mi><annotation encoding="application/x-tex">b</annotation></semantics></math> for that
 tile is fetched from the KV store; and (6) the key is computed as:</p>
-<table id="S2.Ex1">
-<tbody><tr>
-<td></td>
-<td><math alttext="\text{base64}\bigl(\lfloor\text{lat}{\cdot}s\rfloor,\;\lfloor\text{lng}{\cdot}s\rfloor,\;h(\text{ip})\bmod b\bigr)." class="ltx_Math" display="block" id="S2.Ex1.m1" intent=":literal"><semantics><mrow><mrow><mtext>base64</mtext><mo lspace="0em" rspace="0em">​</mo><mrow><mo maxsize="1.200em" minsize="1.200em">(</mo><mrow><mo stretchy="false">⌊</mo><mrow><mtext>lat</mtext><mo lspace="0.222em" rspace="0.222em">⋅</mo><mi>s</mi></mrow><mo stretchy="false">⌋</mo></mrow><mo>,</mo><mrow><mo stretchy="false">⌊</mo><mrow><mtext>lng</mtext><mo lspace="0.222em" rspace="0.222em">⋅</mo><mi>s</mi></mrow><mo stretchy="false">⌋</mo></mrow><mo>,</mo><mrow><mrow><mi>h</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mtext>ip</mtext><mo stretchy="false">)</mo></mrow></mrow><mo>mod</mo><mi>b</mi></mrow><mo maxsize="1.200em" minsize="1.200em">)</mo></mrow></mrow><mo lspace="0em">.</mo></mrow><annotation encoding="application/x-tex">\text{base64}\bigl(\lfloor\text{lat}{\cdot}s\rfloor,\;\lfloor\text{lng}{\cdot}s\rfloor,\;h(\text{ip})\bmod b\bigr).</annotation></semantics></math></td>
-<td></td></tr></tbody>
-</table>
+<p><math alttext="\text{base64}\bigl(\lfloor\text{lat}{\cdot}s\rfloor,\;\lfloor\text{lng}{\cdot}s\rfloor,\;h(\text{ip})\bmod b\bigr)." class="ltx_Math" display="block" id="S2.Ex1.m1" intent=":literal"><semantics><mrow><mrow><mtext>base64</mtext><mo lspace="0em" rspace="0em">​</mo><mrow><mo maxsize="1.200em" minsize="1.200em">(</mo><mrow><mo stretchy="false">⌊</mo><mrow><mtext>lat</mtext><mo lspace="0.222em" rspace="0.222em">⋅</mo><mi>s</mi></mrow><mo stretchy="false">⌋</mo></mrow><mo>,</mo><mrow><mo stretchy="false">⌊</mo><mrow><mtext>lng</mtext><mo lspace="0.222em" rspace="0.222em">⋅</mo><mi>s</mi></mrow><mo stretchy="false">⌋</mo></mrow><mo>,</mo><mrow><mrow><mi>h</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mtext>ip</mtext><mo stretchy="false">)</mo></mrow></mrow><mo>mod</mo><mi>b</mi></mrow><mo maxsize="1.200em" minsize="1.200em">)</mo></mrow></mrow><mo lspace="0em">.</mo></mrow><annotation encoding="application/x-tex">\text{base64}\bigl(\lfloor\text{lat}{\cdot}s\rfloor,\;\lfloor\text{lng}{\cdot}s\rfloor,\;h(\text{ip})\bmod b\bigr).</annotation></semantics></math></p>
 <p id="S2.SS5.p2.2">This mirrors the offline key construction (Equation <a href="#S2.E1"><span>1</span></a>) exactly,
 ensuring new IPs always receive a valid, consistent proximity key. If the bucket count lookup misses, the API returns no proximity key and the
 model proceeds via the soft dependency mechanism; this occurs in fewer than
@@ -626,15 +591,9 @@ parameter count, reducing inference latency; this is orthogonal to the
 proximity feature contribution. This application was launched in
 March 2026.</p>
 </div>
-<figure id="S3.F2">
-<div id="S3.F2.2"><span><span><img alt="Figure 2. Qualitative comparison of destination suggestions for logged-out
+<figure id="S3.F2"><img alt="Figure 2. Qualitative comparison of destination suggestions for logged-out users. Without proximity features, the model returns a static global list; with them, suggestions reflect local travel patterns. Side-by-side comparison of destinati" src="figure-2.png"/><figcaption><span>Figure 2. </span>Qualitative comparison of destination suggestions for logged-out
 users. Without proximity features, the model returns a static global
-list; with them, suggestions reflect local travel patterns. Side-by-side comparison of destination suggestions with and without proximity features for two logged-out users, showing location-aware recommendations replacing generic global defaults." src="figure-2.png"/></span>
-</span></div>
-<figcaption><span>Figure 2. </span>Qualitative comparison of destination suggestions for logged-out
-users. Without proximity features, the model returns a static global
-list; with them, suggestions reflect local travel patterns.<span id="acmlabel2">Side-by-side comparison of destination suggestions with and without proximity features for two logged-out users, showing location-aware recommendations replacing generic global defaults.</span></figcaption>
-</figure>
+list; with them, suggestions reflect local travel patterns.<span id="acmlabel2">Side-by-side comparison of destination suggestions with and without proximity features for two logged-out users, showing location-aware recommendations replacing generic global defaults.</span></figcaption></figure>
 </section>
 <section id="S3.SS3">
 <h3><span>3.3. </span>Engagement Emails</h3>
@@ -674,43 +633,10 @@ the subsequent 90 days.
 Results are reported for <em id="S4.SS1.SSS0.Px1.p1.1.1">low-activity</em> users—those with limited booking
 history—the primary target population for proximity features.</p>
 </div>
-<figure id="S4.T1">
-<figcaption><span>Table 1. </span>Recall@<math alttext="k" class="ltx_Math" display="inline" id="S4.T1.m2" intent=":literal"><semantics><mi>k</mi><annotation encoding="application/x-tex">k</annotation></semantics></math> (%) for destination prediction using proximity features
+<figure id="S4.T1"><img alt="Table 1. Recall@ k k (%) for destination prediction using proximity features on low-activity users across different aggregation windows. No comparative baseline is included; the evaluation isolates proximity feature signal in the cold-start" src="table-1.png"/><figcaption><span>Table 1. </span>Recall@<math alttext="k" class="ltx_Math" display="inline" id="S4.T1.m2" intent=":literal"><semantics><mi>k</mi><annotation encoding="application/x-tex">k</annotation></semantics></math> (%) for destination prediction using proximity features
 on low-activity users across different aggregation windows. No comparative
 baseline is included; the evaluation isolates proximity feature signal in
-the cold-start setting.</figcaption>
-<table id="S4.T1.2">
-<thead>
-<tr id="S4.T1.2.1">
-<th id="S4.T1.2.1.1">Feature</th>
-<th id="S4.T1.2.1.2">R@1</th>
-<th id="S4.T1.2.1.3">R@3</th>
-<th id="S4.T1.2.1.4">R@5</th></tr>
-</thead>
-<tbody>
-<tr id="S4.T1.2.2">
-<th id="S4.T1.2.2.1">Booked geos (365d)</th>
-<td id="S4.T1.2.2.2">12.06</td>
-<td id="S4.T1.2.2.3">22.88</td>
-<td id="S4.T1.2.2.4">29.14</td></tr>
-<tr id="S4.T1.2.3">
-<th id="S4.T1.2.3.1">Booked geos (90d)</th>
-<td id="S4.T1.2.3.2">11.91</td>
-<td id="S4.T1.2.3.3">22.20</td>
-<td id="S4.T1.2.3.4">28.25</td></tr>
-<tr id="S4.T1.2.4">
-<th id="S4.T1.2.4.1">Viewed geos (28d)</th>
-<td id="S4.T1.2.4.2">11.90</td>
-<td id="S4.T1.2.4.3">22.96</td>
-<td id="S4.T1.2.4.4">29.31</td></tr>
-<tr id="S4.T1.2.5">
-<th id="S4.T1.2.5.1">Viewed geos (7d)</th>
-<td id="S4.T1.2.5.2">11.81</td>
-<td id="S4.T1.2.5.3">23.12</td>
-<td id="S4.T1.2.5.4">30.03</td></tr>
-</tbody>
-</table>
-</figure>
+the cold-start setting.</figcaption></figure>
 <div id="S4.SS1.SSS0.Px1.p2">
 <p id="S4.SS1.SSS0.Px1.p2.1">Table <a href="#S4.T1"><span>1</span></a> shows that proximity features alone achieve Recall@5
 of approximately 29–30% for geo-level destination prediction among low-activity
@@ -736,37 +662,7 @@ significance at the 95% confidence level. Notably, the results below span
 December 2024 through March 2026, all using the same proximity key assignment,
 empirically validating the temporal stability of the key partition.</p>
 </div>
-<figure id="S4.T2">
-<figcaption><span>Table 2. </span>Online A/B experiment results across production surfaces.</figcaption>
-<table id="S4.T2.2">
-<tbody>
-<tr id="S4.T2.2.1">
-<td id="S4.T2.2.1.1">Surface</td>
-<td id="S4.T2.2.1.2">Metric</td>
-<td id="S4.T2.2.1.3">Lift</td></tr>
-<tr id="S4.T2.2.2">
-<td id="S4.T2.2.2.1">Marketing Landing Pages</td>
-<td id="S4.T2.2.2.2">Global Bookings</td>
-<td id="S4.T2.2.2.3">+0.011%</td></tr>
-<tr id="S4.T2.2.3">
-<td id="S4.T2.2.3.1">Marketing Landing Pages</td>
-<td id="S4.T2.2.3.2">First-time Bookers</td>
-<td id="S4.T2.2.3.3">+2.0%</td></tr>
-<tr id="S4.T2.2.4">
-<td id="S4.T2.2.4.1">Marketing Landing Pages</td>
-<td id="S4.T2.2.4.2">Searchers w/ Dates</td>
-<td id="S4.T2.2.4.3">+0.054%</td></tr>
-<tr id="S4.T2.2.5">
-<td id="S4.T2.2.5.1">AutoSuggest</td>
-<td id="S4.T2.2.5.2">Global Bookings</td>
-<td id="S4.T2.2.5.3">+0.16%</td></tr>
-<tr id="S4.T2.2.6">
-<td id="S4.T2.2.6.1">AutoSuggest</td>
-<td id="S4.T2.2.6.2">First-time Bookings</td>
-<td id="S4.T2.2.6.3">+0.33%</td></tr>
-</tbody>
-</table>
-</figure>
+<figure id="S4.T2"><img alt="Table 2. Online A/B experiment results across production surfaces." src="table-2.png"/><figcaption><span>Table 2. </span>Online A/B experiment results across production surfaces.</figcaption></figure>
 <div id="S4.SS2.p2">
 <p id="S4.SS2.p2.1">Table <a href="#S4.T2"><span>2</span></a> summarizes the results. On marketing landing pages, proximity features produced a +0.011% lift in
 global bookings and increased first-time bookers by +2.0%, confirming
@@ -813,42 +709,10 @@ providing location-aware signals derived from nearby users, enabling personalize
 recommendations from the first interaction.
 These results are consistent with the design hypothesis that proximity features provide the most incremental value where user-level features are absent or stale.</p>
 </div>
-<figure id="S4.F3">
-<div>
-<div><span><img alt="Figure 3. Booking lift by user cohort in the AutoSuggest experiment, with
-traffic share and p-value. The directionally largest gains are among Never-Booked and
-Dormant users. The New-Guest cohort ( &lt; &lt; 1% of traffic, p = 0.78 p=0.78 ) shows a near-zero non-significant result. Bar chart showing booking lift by user cohort (Never-Booked, Dormant, Active, New-Guest) with a companion table showing traffic share and p-value for each cohort." src="figure-3.png"/></span></div><div></div><div>
-<table id="S4.F3.2">
-<thead>
-<tr id="S4.F3.2.1">
-<th id="S4.F3.2.1.1"><span id="S4.F3.2.1.1.1">Cohort</span></th>
-<th id="S4.F3.2.1.2"><span id="S4.F3.2.1.2.1">Traffic Share</span></th>
-<th id="S4.F3.2.1.3"><span id="S4.F3.2.1.3.1">P-Value</span></th></tr>
-</thead>
-<tbody>
-<tr id="S4.F3.2.2">
-<th id="S4.F3.2.2.1"><span id="S4.F3.2.2.1.1">Never-Booked</span></th>
-<td id="S4.F3.2.2.2"><span id="S4.F3.2.2.2.1">65%</span></td>
-<td id="S4.F3.2.2.3"><span id="S4.F3.2.2.3.1">0.17</span></td></tr>
-<tr id="S4.F3.2.3">
-<th id="S4.F3.2.3.1"><span id="S4.F3.2.3.1.1">Dormant</span></th>
-<td id="S4.F3.2.3.2"><span id="S4.F3.2.3.2.1">11%</span></td>
-<td id="S4.F3.2.3.3"><span id="S4.F3.2.3.3.1">0.11</span></td></tr>
-<tr id="S4.F3.2.4">
-<th id="S4.F3.2.4.1"><span id="S4.F3.2.4.1.1">Active</span></th>
-<td id="S4.F3.2.4.2"><span id="S4.F3.2.4.2.1">23%</span></td>
-<td id="S4.F3.2.4.3"><span id="S4.F3.2.4.3.1">0.16</span></td></tr>
-<tr id="S4.F3.2.5">
-<th id="S4.F3.2.5.1"><span id="S4.F3.2.5.1.1">New-Guest</span></th>
-<td id="S4.F3.2.5.2"><math alttext="{&lt;}1\%" class="ltx_Math" display="inline" id="S4.F3.m1" intent=":literal"><semantics><mrow><mphantom></mphantom><mo mathsize="0.900em">&lt;</mo><mrow><mn mathsize="0.900em">1</mn><mo>%</mo></mrow></mrow><annotation encoding="application/x-tex">{&lt;}1\%</annotation></semantics></math></td>
-<td id="S4.F3.2.5.3"><span id="S4.F3.2.5.3.1">0.78</span></td></tr>
-</tbody>
-</table></div></div>
-<figcaption><span>Figure 3. </span>Booking lift by user cohort in the AutoSuggest experiment, with
+<figure id="S4.F3"><img alt="Figure 3. Booking lift by user cohort in the AutoSuggest experiment, with traffic share and p-value. The directionally largest gains are among Never-Booked and Dormant users. The New-Guest cohort ( &lt; &lt; 1% of traffic, p = 0.78 p=0.78 ) shows" src="figure-3.png"/><img alt="Figure 3. Booking lift by user cohort in the AutoSuggest experiment, with traffic share and p-value. The directionally largest gains are among Never-Booked and Dormant users. The New-Guest cohort ( &lt; &lt; 1% of traffic, p = 0.78 p=0.78 ) shows" src="table-3.png"/><figcaption><span>Figure 3. </span>Booking lift by user cohort in the AutoSuggest experiment, with
 traffic share and p-value. The directionally largest gains are among Never-Booked and
 Dormant users. The New-Guest cohort (<math alttext="&lt;" class="ltx_Math" display="inline" id="S4.F3.m4" intent=":literal"><semantics><mo>&lt;</mo><annotation encoding="application/x-tex">&lt;</annotation></semantics></math>1% of traffic,
-<math alttext="p=0.78" class="ltx_Math" display="inline" id="S4.F3.m5" intent=":literal"><semantics><mrow><mi>p</mi><mo>=</mo><mn>0.78</mn></mrow><annotation encoding="application/x-tex">p=0.78</annotation></semantics></math>) shows a near-zero non-significant result.<span id="acmlabel3">Bar chart showing booking lift by user cohort (Never-Booked, Dormant, Active, New-Guest) with a companion table showing traffic share and p-value for each cohort.</span></figcaption>
-</figure>
+<math alttext="p=0.78" class="ltx_Math" display="inline" id="S4.F3.m5" intent=":literal"><semantics><mrow><mi>p</mi><mo>=</mo><mn>0.78</mn></mrow><annotation encoding="application/x-tex">p=0.78</annotation></semantics></math>) shows a near-zero non-significant result.<span id="acmlabel3">Bar chart showing booking lift by user cohort (Never-Booked, Dormant, Active, New-Guest) with a companion table showing traffic share and p-value for each cohort.</span></figcaption></figure>
 </section>
 <section id="S4.SS3.SSS0.Px2">
 <h4>Impression distribution shift.</h4>

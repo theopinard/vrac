@@ -32,6 +32,7 @@ ARXIV_DATE_PATTERN = re.compile(
     r"\s*(?:\[[^]]+])?\s*(?P<date>\d{1,2}\s+[A-Z][a-z]{2}\s+\d{4})",
 )
 FIGURE_NUMBER_PATTERN = re.compile(r"Figure\s+(?P<number>\d+)", re.IGNORECASE)
+TABLE_NUMBER_PATTERN = re.compile(r"Table\s+(?P<number>\d+)", re.IGNORECASE)
 
 DROP_TAGS = {
     "script",
@@ -241,10 +242,12 @@ def union_rect(rectangles: list[pymupdf.Rect]) -> pymupdf.Rect:
     return result
 
 
-def find_caption_page(
-    document: pymupdf.Document, figure_number: str
+def find_numbered_caption_page(
+    document: pymupdf.Document,
+    kind: str,
+    number: str,
 ) -> tuple[pymupdf.Page, pymupdf.Rect, pymupdf.Rect]:
-    needle = f"Figure {figure_number}:"
+    needle = f"{kind} {number}:"
     candidates: list[tuple[pymupdf.Page, pymupdf.Rect, pymupdf.Rect]] = []
     for page in document:
         for rectangle in page.search_for(needle):
@@ -252,21 +255,27 @@ def find_caption_page(
                 pymupdf.Rect(block[:4])
                 for block in page.get_text("blocks")
                 if re.match(
-                    rf"\s*Figure\s+{re.escape(figure_number)}:",
+                    rf"\s*{re.escape(kind)}\s+{re.escape(number)}:",
                     str(block[4]),
                     re.IGNORECASE,
                 )
             ]
             if len(caption_blocks) != 1:
                 raise ValueError(
-                    f"Could not determine the PDF column for Figure {figure_number}"
+                    f"Could not determine the PDF column for {kind} {number}"
                 )
             candidates.append((page, rectangle, caption_blocks[0]))
     if len(candidates) != 1:
         raise ValueError(
-            f"Expected one PDF caption for Figure {figure_number}, found {len(candidates)}"
+            f"Expected one PDF caption for {kind} {number}, found {len(candidates)}"
         )
     return candidates[0]
+
+
+def find_caption_page(
+    document: pymupdf.Document, figure_number: str
+) -> tuple[pymupdf.Page, pymupdf.Rect, pymupdf.Rect]:
+    return find_numbered_caption_page(document, "Figure", figure_number)
 
 
 def matching_label_rectangles(
@@ -454,6 +463,172 @@ def render_svg_figures(
     return len(svgs)
 
 
+def visible_cell_text(cell: Tag) -> str:
+    fragment = BeautifulSoup(str(cell), "html.parser")
+    for annotation in fragment.find_all("annotation"):
+        annotation.decompose()
+    return re.sub(r"\s+", " ", fragment.get_text(" ", strip=True)).strip()
+
+
+def table_clip(
+    document: pymupdf.Document,
+    table: Tag,
+) -> tuple[pymupdf.Page, pymupdf.Rect]:
+    figure = table.find_parent("figure")
+    caption = figure.find("figcaption") if figure else None
+    caption_text = caption.get_text(" ", strip=True) if caption else ""
+    table_match = TABLE_NUMBER_PATTERN.search(caption_text)
+    figure_match = FIGURE_NUMBER_PATTERN.search(caption_text)
+    if table_match:
+        kind = "Table"
+        number = table_match.group("number")
+        before_caption = False
+    elif figure_match:
+        kind = "Figure"
+        number = figure_match.group("number")
+        before_caption = True
+    else:
+        raise ValueError("Could not identify a caption for a data table")
+
+    page, caption_rect, lane = find_numbered_caption_page(
+        document, kind, number
+    )
+    labels: list[str] = []
+    for cell in table.find_all(["th", "td"]):
+        label = visible_cell_text(cell)
+        if len(label) >= 2 and label not in labels:
+            labels.append(label)
+
+    matches: list[pymupdf.Rect] = []
+    for label in labels:
+        candidates = [
+            rectangle
+            for rectangle in page.search_for(label)
+            if rectangle.x0 >= lane.x0 - 4
+            and rectangle.x1 <= lane.x1 + 4
+            and (
+                rectangle.y1 < caption_rect.y0
+                if before_caption
+                else rectangle.y0 > lane.y1
+            )
+        ]
+        if not candidates:
+            continue
+        choice = (
+            max(candidates, key=lambda rectangle: rectangle.y1)
+            if before_caption
+            else min(candidates, key=lambda rectangle: rectangle.y0)
+        )
+        matches.append(choice)
+
+    if len(matches) < 3:
+        raise ValueError(f"Could not map the data for {kind} {number} into the PDF")
+    label_bounds = union_rect(matches)
+    nearby_drawings: list[pymupdf.Rect] = []
+    drawing_region = pymupdf.Rect(
+        lane.x0 - 4,
+        label_bounds.y0 - 10,
+        lane.x1 + 4,
+        label_bounds.y1 + 10,
+    )
+    for drawing in page.get_drawings():
+        rectangle = pymupdf.Rect(drawing["rect"])
+        if rectangle.intersects(drawing_region):
+            nearby_drawings.append(rectangle)
+    content = union_rect(matches + nearby_drawings)
+    clip = pymupdf.Rect(
+        max(lane.x0 - 4, content.x0 - 6),
+        max(page.rect.y0 + 36, content.y0 - 6),
+        min(lane.x1 + 4, content.x1 + 6),
+        min(caption_rect.y0 - 3, content.y1 + 6)
+        if before_caption
+        else min(page.rect.y1 - 36, content.y1 + 6),
+    )
+    if clip.is_empty or clip.width < 50 or clip.height < 20:
+        raise ValueError(f"Computed an invalid PDF crop for {kind} {number}")
+    return page, clip
+
+
+def render_data_tables(
+    article: Tag,
+    document: pymupdf.Document,
+    asset_directory: Path,
+) -> int:
+    tables = [
+        table
+        for table in article.find_all("table")
+        if table.find_parent("figure")
+        and (
+            TABLE_NUMBER_PATTERN.search(
+                table.find_parent("figure").get_text(" ", strip=True)
+            )
+            or table.find_parent("figure").find("img")
+        )
+    ]
+    for ordinal, table in enumerate(tables, start=1):
+        figure = table.find_parent("figure")
+        caption = figure.find("figcaption") if figure else None
+        caption_text = caption.get_text(" ", strip=True) if caption else "Data table"
+        page, clip = table_clip(document, table)
+        filename = f"table-{ordinal}.png"
+        zoom = min(4.0, 1198.0 / clip.width)
+        pixmap = page.get_pixmap(
+            matrix=pymupdf.Matrix(zoom, zoom),
+            clip=clip,
+            colorspace=pymupdf.csRGB,
+            alpha=False,
+        )
+        pixmap.save(asset_directory / filename)
+        image = BeautifulSoup("", "html.parser").new_tag("img")
+        image["src"] = filename
+        image["alt"] = re.sub(r"\s+", " ", caption_text)[:240]
+        table.replace_with(image)
+    return len(tables)
+
+
+def normalize_equation_tables(article: Tag) -> None:
+    for table in list(article.find_all("table")):
+        if table.find_parent("figure"):
+            continue
+        math = table.find("math")
+        if math is None:
+            continue
+        number = next(
+            (
+                text
+                for cell in table.find_all(["th", "td"])
+                if (text := visible_cell_text(cell)).startswith("(")
+            ),
+            "",
+        )
+        paragraph = BeautifulSoup("", "html.parser").new_tag("p")
+        paragraph.append(math.extract())
+        if number:
+            paragraph.append(f" {number}")
+        table.replace_with(paragraph)
+
+
+def normalize_visual_figures(article: Tag) -> None:
+    for figure in list(article.find_all("figure")):
+        images = figure.find_all("img")
+        if not images:
+            continue
+        caption = figure.find("figcaption")
+        normalized = BeautifulSoup("", "html.parser").new_tag("figure")
+        if figure.get("id"):
+            normalized["id"] = str(figure["id"])
+        for image in images:
+            simple_image = BeautifulSoup("", "html.parser").new_tag("img")
+            simple_image["src"] = str(image.get("src", ""))
+            simple_image["alt"] = re.sub(
+                r"\s+", " ", str(image.get("alt", ""))
+            )[:240]
+            normalized.append(simple_image)
+        if caption:
+            normalized.append(caption.extract())
+        figure.replace_with(normalized)
+
+
 def sanitize_article(article: Tag, source_url: str) -> None:
     for selector in (
         "h1.ltx_title_document",
@@ -478,7 +653,7 @@ def sanitize_article(article: Tag, source_url: str) -> None:
         src = str(image["src"])
         image["src"] = (
             src
-            if re.fullmatch(r"figure-\d+\.png", src)
+            if re.fullmatch(r"(?:figure|table)-\d+\.png", src)
             else urljoin(source_url, src)
         )
 
@@ -554,14 +729,6 @@ img {
 }
 figure { margin: 2rem 0; }
 figcaption, .article-meta { font-size: 0.9em; }
-table {
-  display: block;
-  max-width: 100%;
-  overflow-x: auto;
-  border-collapse: collapse;
-  margin: 1.5rem 0;
-}
-th, td { padding: 0.25rem 0.5rem; border: 1px solid #bbb; }
 pre {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -633,8 +800,15 @@ def republish(url: str, output_root: Path) -> Path:
             if len(document) == 0:
                 raise ValueError("The downloaded PDF contains no pages")
             rendered = render_svg_figures(article, document, asset_directory)
+            rendered_tables = render_data_tables(
+                article, document, asset_directory
+            )
         if rendered == 0:
             print("warning: the article contained no SVG figures", file=sys.stderr)
+        if rendered_tables == 0:
+            print("warning: the article contained no data tables", file=sys.stderr)
+        normalize_equation_tables(article)
+        normalize_visual_figures(article)
         sanitize_article(article, source.html_url)
         if article.find("svg"):
             raise ValueError("An SVG remained after figure conversion")

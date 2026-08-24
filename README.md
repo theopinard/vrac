@@ -34,7 +34,9 @@ uv run python republish_arxiv.py "https://arxiv.org/abs/2607.12246v1"
 ```
 
 It uses arXiv's semantic HTML for the reading order and downloads the matching
-PDF revision to turn inline SVG figures into local, Kobo-compatible PNG files.
+PDF revision to turn inline SVG figures and data tables into local,
+Kobo-compatible PNG files. Equation-layout tables are reduced to simple math
+blocks rather than retained as presentational HTML tables.
 An unversioned URL is resolved to the latest available version, which is then
 recorded in the generated page. The source PDF is temporary and is not copied
 into the repository.
