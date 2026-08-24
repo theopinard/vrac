@@ -51,6 +51,26 @@ class ArxivUrlTests(unittest.TestCase):
 
 
 class ArxivMarkupTests(unittest.TestCase):
+    def test_discards_latexml_preamble_artifacts_before_title(self) -> None:
+        soup = BeautifulSoup(
+            """
+            <article><div><p>*[inlinelist,1]label=),itemjoin=, and</p></div>
+            <h1 class="ltx_title_document">Paper title</h1>
+            <div class="ltx_authors">Authors</div>
+            <div class="ltx_abstract"><p>Real abstract.</p></div></article>
+            """,
+            "html.parser",
+        )
+        article = soup.article
+        assert article is not None
+        sanitize_article(
+            article,
+            "https://arxiv.org/html/2107.05720v1",
+            "https://example.test/articles/paper/",
+        )
+        self.assertNotIn("inlinelist", article.get_text(" ", strip=True))
+        self.assertIn("Real abstract.", article.get_text(" ", strip=True))
+
     def test_visual_figures_have_only_direct_images_and_caption(self) -> None:
         soup = BeautifulSoup(
             """

@@ -759,6 +759,13 @@ def normalize_visual_figures(article: Tag) -> None:
 
 
 def sanitize_article(article: Tag, source_url: str, asset_base_url: str) -> None:
+    document_title = article.select_one("h1.ltx_title_document")
+    if document_title:
+        # LaTeXML occasionally emits failed preamble commands as a paragraph
+        # immediately before the title. Nothing before the semantic document
+        # title belongs to the readable paper body.
+        for sibling in list(document_title.previous_siblings):
+            sibling.extract()
     for selector in (
         "h1.ltx_title_document",
         ".ltx_authors",
