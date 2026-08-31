@@ -815,11 +815,8 @@ def normalize_bibliography(article: Tag) -> None:
         bibliography.replace_with(normalized)
 
 
-def flatten_internal_references(article: Tag) -> None:
-    """Preserve reference text when Kobo removes citation/link elements."""
-    for link in list(article.find_all("a", href=True)):
-        if str(link["href"]).startswith("#"):
-            link.unwrap()
+def unwrap_citations(article: Tag) -> None:
+    """Keep citation text and links without Kobo-hostile cite wrappers."""
     for citation in list(article.find_all("cite")):
         citation.unwrap()
 
@@ -850,7 +847,10 @@ def sanitize_article(article: Tag, source_url: str, asset_base_url: str) -> None
 
     for link in article.find_all("a", href=True):
         href = str(link["href"])
-        link["href"] = href if href.startswith("#") else urljoin(source_url, href)
+        link["href"] = urljoin(
+            asset_base_url if href.startswith("#") else source_url,
+            href,
+        )
     for image in article.find_all("img", src=True):
         src = str(image["src"])
         image["src"] = (
@@ -1029,7 +1029,7 @@ def republish(
         normalize_equation_tables(article)
         normalize_visual_figures(article)
         normalize_bibliography(article)
-        flatten_internal_references(article)
+        unwrap_citations(article)
         sanitize_article(article, source.html_url, asset_base_url)
         if article.find("svg") or article.find("object", type="image/svg+xml"):
             raise ValueError("An SVG remained after figure conversion")
