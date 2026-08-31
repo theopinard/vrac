@@ -5,6 +5,7 @@ from bs4 import BeautifulSoup
 from republish_arxiv import (
     base_identifier,
     data_tables_to_render,
+    flatten_internal_references,
     normalize_bibliography,
     normalize_equation_tables,
     normalize_visual_figures,
@@ -176,22 +177,26 @@ class ArxivMarkupTests(unittest.TestCase):
         self.assertEqual(image["width"], "1200")
         self.assertEqual(image["height"], "650")
 
-    def test_internal_links_get_absolute_published_article_urls(self) -> None:
+    def test_internal_references_become_plain_text(self) -> None:
         soup = BeautifulSoup(
-            '<article><p><a href="#reference-1">Smith</a></p>'
-            '<h2 id="reference-1">References</h2></article>',
+            '<article><p>Prior work <cite>(<a href="#reference-1">'
+            'Smith, 2025</a>)</cite>; see <a href="#section-2">section 2</a>.</p>'
+            '<p><a href="https://doi.org/example">External source</a></p></article>',
             "html.parser",
         )
         article = soup.article
         assert article is not None
-        sanitize_article(
-            article,
-            "https://arxiv.org/html/2607.23749v1",
-            "https://example.test/articles/paper/",
+        flatten_internal_references(article)
+
+        self.assertEqual(
+            article.p.get_text(),
+            "Prior work (Smith, 2025); see section 2.",
         )
+        self.assertIsNone(article.cite)
+        self.assertEqual(len(article.find_all("a")), 1)
         self.assertEqual(
             article.a["href"],
-            "https://example.test/articles/paper/#reference-1",
+            "https://doi.org/example",
         )
 
 

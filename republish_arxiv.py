@@ -815,6 +815,15 @@ def normalize_bibliography(article: Tag) -> None:
         bibliography.replace_with(normalized)
 
 
+def flatten_internal_references(article: Tag) -> None:
+    """Preserve reference text when Kobo removes citation/link elements."""
+    for link in list(article.find_all("a", href=True)):
+        if str(link["href"]).startswith("#"):
+            link.unwrap()
+    for citation in list(article.find_all("cite")):
+        citation.unwrap()
+
+
 def sanitize_article(article: Tag, source_url: str, asset_base_url: str) -> None:
     document_title = article.select_one("h1.ltx_title_document")
     if document_title:
@@ -841,13 +850,7 @@ def sanitize_article(article: Tag, source_url: str, asset_base_url: str) -> None
 
     for link in article.find_all("a", href=True):
         href = str(link["href"])
-        # Reader services commonly discard fragment-only links while retaining
-        # normal absolute web links. Point back to the published article so
-        # citations and section references survive their HTML conversion.
-        link["href"] = urljoin(
-            asset_base_url if href.startswith("#") else source_url,
-            href,
-        )
+        link["href"] = href if href.startswith("#") else urljoin(source_url, href)
     for image in article.find_all("img", src=True):
         src = str(image["src"])
         image["src"] = (
@@ -1026,6 +1029,7 @@ def republish(
         normalize_equation_tables(article)
         normalize_visual_figures(article)
         normalize_bibliography(article)
+        flatten_internal_references(article)
         sanitize_article(article, source.html_url, asset_base_url)
         if article.find("svg") or article.find("object", type="image/svg+xml"):
             raise ValueError("An SVG remained after figure conversion")
