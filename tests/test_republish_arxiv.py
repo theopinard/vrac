@@ -176,6 +176,24 @@ class ArxivMarkupTests(unittest.TestCase):
         self.assertEqual(image["width"], "1200")
         self.assertEqual(image["height"], "650")
 
+    def test_internal_links_get_absolute_published_article_urls(self) -> None:
+        soup = BeautifulSoup(
+            '<article><p><a href="#reference-1">Smith</a></p>'
+            '<h2 id="reference-1">References</h2></article>',
+            "html.parser",
+        )
+        article = soup.article
+        assert article is not None
+        sanitize_article(
+            article,
+            "https://arxiv.org/html/2607.23749v1",
+            "https://example.test/articles/paper/",
+        )
+        self.assertEqual(
+            article.a["href"],
+            "https://example.test/articles/paper/#reference-1",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

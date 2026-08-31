@@ -841,7 +841,13 @@ def sanitize_article(article: Tag, source_url: str, asset_base_url: str) -> None
 
     for link in article.find_all("a", href=True):
         href = str(link["href"])
-        link["href"] = href if href.startswith("#") else urljoin(source_url, href)
+        # Reader services commonly discard fragment-only links while retaining
+        # normal absolute web links. Point back to the published article so
+        # citations and section references survive their HTML conversion.
+        link["href"] = urljoin(
+            asset_base_url if href.startswith("#") else source_url,
+            href,
+        )
     for image in article.find_all("img", src=True):
         src = str(image["src"])
         image["src"] = (
@@ -970,7 +976,9 @@ math[display="block"] { margin: 1rem auto; overflow-x: auto; }
     for child in list(fragment.contents):
         output_article.append(child)
     body.append(output_article)
-    return "<!doctype html>\n" + shell.html.decode(formatter="minimal") + "\n"
+    rendered = shell.html.decode(formatter="minimal")
+    rendered = "\n".join(line.rstrip() for line in rendered.splitlines())
+    return "<!doctype html>\n" + rendered + "\n"
 
 
 def republish(
