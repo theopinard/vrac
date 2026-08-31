@@ -4,6 +4,8 @@ from bs4 import BeautifulSoup
 
 from republish_arxiv import (
     base_identifier,
+    data_tables_to_render,
+    normalize_bibliography,
     normalize_equation_tables,
     normalize_visual_figures,
     parse_arxiv_url,
@@ -51,6 +53,52 @@ class ArxivUrlTests(unittest.TestCase):
 
 
 class ArxivMarkupTests(unittest.TestCase):
+    def test_only_outer_data_table_is_rendered(self) -> None:
+        soup = BeautifulSoup(
+            """
+            <article><figure><figcaption>Table 1. Results</figcaption>
+            <table id="outer"><tr><td><table id="cell-layout">
+            <tr><td>1.0</td></tr></table></td></tr></table>
+            </figure></article>
+            """,
+            "html.parser",
+        )
+        article = soup.article
+        assert article is not None
+        self.assertEqual(
+            [table["id"] for table in data_tables_to_render(article)],
+            ["outer"],
+        )
+
+    def test_bibliography_becomes_plain_link_preserving_paragraphs(self) -> None:
+        soup = BeautifulSoup(
+            """
+            <article><p>Prior work <cite><a href="#bib.bib7">Smith</a></cite>.</p>
+            <section id="bib" class="ltx_bibliography">
+            <h2>References</h2><ul class="ltx_biblist">
+            <li id="bib.bib7" class="ltx_bibitem">
+            <span class="ltx_tag_bibitem">Smith (2025)</span>
+            <span>Jane Smith. <a href="https://doi.org/example">A paper</a>.</span>
+            <span class="ltx_bib_cited">Cited by: <a href="#intro">section 1</a>.</span>
+            </li></ul></section></article>
+            """,
+            "html.parser",
+        )
+        article = soup.article
+        assert article is not None
+        normalize_bibliography(article)
+
+        self.assertIsNone(article.select_one("section.ltx_bibliography"))
+        self.assertIsNone(article.find("li"))
+        reference = article.select_one("p#reference-1")
+        assert reference is not None
+        reference_text = reference.get_text(" ", strip=True)
+        self.assertIn("[1] Jane Smith.", reference_text)
+        self.assertIn("A paper", reference_text)
+        self.assertEqual(reference.a["href"], "https://doi.org/example")
+        self.assertNotIn("Cited by", reference.get_text(" ", strip=True))
+        self.assertEqual(article.cite.a["href"], "#reference-1")
+
     def test_discards_latexml_preamble_artifacts_before_title(self) -> None:
         soup = BeautifulSoup(
             """

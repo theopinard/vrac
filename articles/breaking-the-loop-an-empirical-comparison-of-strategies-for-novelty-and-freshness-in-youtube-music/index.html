@@ -1,0 +1,528 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1" name="viewport"/><title>Breaking the Loop: An Empirical Comparison of Strategies for Novelty and Freshness in YouTube Music</title><style>body {
+  max-width: 760px;
+  margin: 2rem auto;
+  padding: 0 1rem;
+  font-family: Georgia, serif;
+  line-height: 1.55;
+}
+img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 1.5rem auto;
+}
+figure { margin: 2rem 0; }
+figcaption, .article-meta { font-size: 0.9em; }
+pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+blockquote {
+  margin-left: 0;
+  padding-left: 1rem;
+  border-left: 3px solid #999;
+}
+math[display="block"] { margin: 1rem auto; overflow-x: auto; }</style></head><body><article><h1>Breaking the Loop: An Empirical Comparison of Strategies for Novelty and Freshness in YouTube Music</h1><p class="article-meta">Srivaths Ranganathan, Zihuan Diao, Bernardo Cunha, Joshua L. Moore, Robin Dumas, Murat Goksedef, Yanwei Song, Mukai Lu, Gergo Varady, Tracy Pesin · arXiv:2607.23749v1 · 26 Jul 2026</p><p class="article-meta">Original: <a href="https://arxiv.org/html/2607.23749v1">arXiv HTML</a> · <a href="https://arxiv.org/pdf/2607.23749v1">PDF</a></p>
+<span><span><span><span>Conference: </span>20th ACM Conference on Recommender Systems; September 27-October 02, 2026; Minneapolis, MN, USA</span><span>20th ACM Conference on Recommender Systems (RecSys ’26), September 27-October 02, 2026, Minneapolis, MN, USA</span><span><span>DOI: </span><a href="https://doi.org/10.1145/3773078.3831876">10.1145/3773078.3831876</a></span><span><span>ISBN: </span>979-8-4007-2284-4/2026/09</span><span><span>CCS: </span>Information systems Recommender systems</span><span><span>CCS: </span>Information systems Novelty in information retrieval</span><span><span>CCS: </span>Information systems Learning to rank</span><span><span>CCS: </span>Computing methodologies Multi-task learning</span></span></span>
+<div id="abstract1"><h2>Abstract</h2>
+<p id="abstract1.1">Continuously trained ranking models in music recommenders fall into feedback loops where previously consumed items dominate recommendations. This suppresses two distinct content classes: new releases (temporal freshness) and unlistened catalog items (novelty). Industry practitioners have a wide menu of interventions available, ranging from serving-time heuristics, training-data reweighting, architectural debiasing, to uncertainty-driven exploration, each of which are well understood in academic settings. But live systems offer challenges with continuously ingested content, interconnected components, and practical limitations that counteract the findings from academic research.</p>
+<p id="abstract1.2">We report results from off-policy online A/B tests for six interventions and a combination experiment across four conceptual layers (serving, training, architecture, exploration) on the YouTube Music homepage. All interventions modify the ranking model or the serving layer that consumes its scores; candidate generation and other upstream components are held fixed. We discuss key takeaways from our results: first, serving-time interventions on continuously trained systems are neutralized by the learning loop. Second, architectural debiasing reduces popularity dominance and improves diversity but does not create discovery, while carrying hidden integration costs. Finally, uncertainty-driven exploration interventions with a Spectral-normalized Neural Gaussian Process (SNGP) head produce the largest new-release lift, though they come with a measurable engagement or diversity tradeoff. We close with recommendations on which layer to intervene at, and the hidden costs of each choice.</p>
+</div>
+<div>
+<h6>Keywords: </h6>recommender systems, music recommendation, cold start, novelty, feedback loops
+</div><span id="id31"><sup>†</sup><span><span><sup>†</sup><span>cc-license: </span>by</span></span></span>
+<section id="S1">
+<h2><span>1. </span>Introduction</h2>
+<div id="S1.p1">
+<p id="S1.p1.1">Music recommendation has an unusual property: listeners return to a small set of familiar tracks (repeat consumption) but also expect the system to surface <em id="S1.p1.1.1">new releases</em>, and to introduce them to <em id="S1.p1.1.2">novel</em> artists and songs they have not heard before. A recommender that perfectly predicts replay fails at the latter two, and over a long enough horizon fails at the first as well, as the user’s breadth of content stops growing and engagement plateaus or even declines.</p>
+</div>
+<div id="S1.p2">
+<p id="S1.p2.1">The mechanism that produces this failure is well understood in the literature  <cite>(<a href="#reference-14">Jiang et al., 2019</a>)</cite>. A ranking model trained on logged engagement learns that previously consumed items convert at a high rate. Continuously retraining the model on logged data closes the loop: items that were ranked highly receive impressions, those impressions generate engagement, and the next training run is fit on data that further reinforces the same items. New releases arrive into a system already saturated with engaged-on alternatives; discovery candidates compete against an internal ranking of items the user is already known to like. Beyond the user-facing impact on novelty and freshness, this dynamic also degrades the long-term health of the recommender system itself: a training distribution dominated by repeated interactions provides weak signal for items that have not yet been surfaced, and the system loses the ability to evaluate unseen items.</p>
+</div>
+<div id="S1.p3">
+<p id="S1.p3.1">A wide range of interventions has been proposed to counter this dynamic. They include serving-time score adjustments such as recency boosts, training-data reweighting via inverse propensity scoring (IPS)  <cite>(<a href="#reference-26">Schnabel et al., 2016</a>)</cite> , architectural changes such as the position-bias towers used in PAL  <cite>(<a href="#reference-11">Guo et al., 2019</a>)</cite> and YouTube’s WatchNext multitask ranker  <cite>(<a href="#reference-29">Zhao et al., 2019</a>)</cite>, and exploration strategies based on bandits and posterior sampling. Each makes a different assumption about how best to correct the failure. Heuristic boosts treat the symptom at the serving layer. Both IPS-style reweighting and position bias towers assume the failure originates from logged data being biased by what the system previously chose to show; however, they intervene at different layers. IPS addresses this at the data layer by reweighting the biased samples, whereas bias towers treat presentation confounds as architectural artifacts to be jointly modeled during training and removed at serving. Uncertainty-driven exploration treats the training signal itself as too narrow, and uses model uncertainty to direct attention to items the system has not learned about yet. In our experience, these mental models do not all map onto the same failure, and choosing the wrong layer wastes both engineering time and online traffic.
+<br/></p>
+</div>
+<div id="S1.p4">
+<p id="S1.p4.1"><span id="S1.p4.1.1">Contributions</span>
+<br/>This paper makes three contributions. (1) A <em id="S1.p4.1.2">layered</em> view of feedback-loop interventions, organized by where in the ranker stack the change is applied: serving, training data, model architecture, or exploration policy. (2) Online A/B results for six interventions plus one combination experiment, evaluated against the same control on the YouTube Music homepage. To our knowledge this is the first head-to-head online comparison of this breadth on a single production music surface. (3) Practitioner-facing claims supported by empirical evidence on the product impact, hidden costs and downstream system interactions associated with intervening at each of these conceptual layers.
+<br/></p>
+</div>
+<div id="S1.p5">
+<p id="S1.p5.1"><span id="S1.p5.1.1">Why this is hard to study</span>
+<br/>A recurring difficulty in industry recommender research is that online metrics from a short A/B do not fully capture the second-order effects of increased exposure for new content. The rest of the system: candidate generators, filters, other interacting scorer components and downstream ranking functions adapt to the shift in impressions in ways that amplify or even nullify the intended effect. On-policy experiments at the scale of large ranking models are difficult to set up cleanly, since the large models can’t be trained on a small experimental dataset. This makes it hard to predict in advance how the broader system will respond to changes in the impression distributions of a slice of content. While our study is subject to these practical constraints, we explicitly document these system adaptations in our results. These downstream systemic adaptations are often further compounded by organic, off-platform demand signals, making the isolation of recommendation-driven freshness gains a hard causal inference problem <cite>(<a href="#reference-20">Mehrotra et al., 2020</a>)</cite>. We believe highlighting these dynamics is part of why this empirical comparison is useful for practitioners.</p>
+</div>
+</section>
+<section id="S2">
+<h2><span>2. </span>Related Work</h2>
+<section id="S2.SS0.SSS0.Px1">
+<h4>Cold start and new content.</h4>
+<div id="S2.SS0.SSS0.Px1.p1">
+<p id="S2.SS0.SSS0.Px1.p1.1">The cold-start problem <cite>(<a href="#reference-25">Schein et al., 2002</a>)</cite> is the classical formulation of the new-content failure mode: items with no interaction history cannot be ranked from collaborative signal alone. Industrial recommenders typically address cold start with content-based features in the candidate generator and ranker; deep models trained on user-item engagement, including the YouTube architecture in <cite>(<a href="#reference-9">Covington et al., 2016</a>)</cite> and its multi-task successor in <cite>(<a href="#reference-29">Zhao et al., 2019</a>)</cite>, have largely absorbed cold-start handling into the feature pipeline. Cold start, however, is a subset of the broader problem we address: a song newly released by an artist a user already follows is not cold in the user-feature sense, but is cold in the system-engagement sense. Without historical positive engagement to drive up the model’s confidence, the model defaults to lower baseline predictions and these items systematically rank below better-trained alternatives.</p>
+</div>
+</section>
+<section id="S2.SS0.SSS0.Px2">
+<h4>Popularity and exposure bias.</h4>
+<div id="S2.SS0.SSS0.Px2.p1">
+<p id="S2.SS0.SSS0.Px2.p1.1">Popularity bias has been studied extensively from both algorithmic and fairness perspectives <cite>(<a href="#reference-1">Abdollahpouri et al., 2019</a>)</cite>. Anderson et al. <cite>(<a href="#reference-2">Anderson et al., 2020</a>)</cite> document that algorithmic listening on Spotify is consistently less diverse than user-driven listening, and that diversification on the platform is associated with users shifting away from algorithmic surfaces. We treat popularity bias as a related but distinct problem from new-release suppression: an intervention can reduce popularity dominance without lifting new releases, and we observe exactly this pattern with the architectural debiasing approach we evaluate.</p>
+</div>
+</section>
+<section id="S2.SS0.SSS0.Px3">
+<h4>Counterfactual learning and IPS</h4>
+<div id="S2.SS0.SSS0.Px3.p1">
+<p id="S2.SS0.SSS0.Px3.p1.1">Schnabel et al. <cite>(<a href="#reference-26">Schnabel et al., 2016</a>)</cite> formalized recommendations-as-treatments and introduced inverse propensity scoring as a tool for unbiased learning and evaluation under selection bias. Joachims et al. <cite>(<a href="#reference-15">Joachims et al., 2017</a>)</cite> extended the approach to learning-to-rank from biased click logs. To address sample selection bias—where logs only reflect shown documents—Ovaisi et al. <cite>(<a href="#reference-22">Ovaisi et al., 2020</a>)</cite> introduced counterfactual approaches adapting Heckman’s two-stage method across pointwise, pairwise, and listwise ranking objectives. Bonner and Vasile <cite>(<a href="#reference-5">Bonner and Vasile, 2018</a>)</cite> proposed causal embeddings that further leverage the distinction between organic and recommended interactions. Furthermore, Wang et al. <cite>(<a href="#reference-27">Wang et al., 2018</a>)</cite> proposed a listwise cross-entropy framework to estimate position bias without randomized traffic.</p>
+</div>
+</section>
+<section id="S2.SS0.SSS0.Px4">
+<h4>Position bias and architectural debiasing.</h4>
+<div id="S2.SS0.SSS0.Px4.p1">
+<p id="S2.SS0.SSS0.Px4.p1.1">The PAL framework <cite>(<a href="#reference-11">Guo et al., 2019</a>)</cite> models position bias as a multiplicative factor in CTR prediction and trains a position-aware module that is dropped at serving. Zhao et al. <cite>(<a href="#reference-29">Zhao et al., 2019</a>)</cite> introduce a shallow tower in YouTube’s WatchNext multitask ranker that takes presentation features (including position and device) as inputs to produce a bias correction added to the main model’s logits, again dropped at serving. Both architectures bake the assumption that the dominant logged-data confound is position and presentation, and both share the property that the resulting unbiased predictor preserves ranking but shifts the distribution of predicted scores. As identified by Zhang et al. <cite>(<a href="#reference-28">Zhang et al., 2023</a>)</cite>, this setup overlooks a causal confounding factor: because display positions in logged data are determined by the previous production model, position features are heavily entangled with true relevance. Without explicit disentanglement, the bias tower leaks relevance signal, meaning that dropping the tower at serving inadvertently discards key preference information. A recent large-scale study by Hager et al. <cite>(<a href="#reference-12">Hager et al., 2024</a>)</cite> evaluating pointwise, pairwise, and listwise debiasing on Baidu’s search logs demonstrated that offline click-prediction gains do not easily convert into online relevance improvements, highlighting the practical difficulty of deploying these models in production.</p>
+</div>
+</section>
+<section id="S2.SS0.SSS0.Px5">
+<h4>Multi-task learning for ranking.</h4>
+<div id="S2.SS0.SSS0.Px5.p1">
+<p id="S2.SS0.SSS0.Px5.p1.1">Modern industrial rankers, including the system we deploy on, predict multiple engagement targets jointly <cite>(<a href="#reference-29">Zhao et al., 2019</a>)</cite>. Multi-gate Mixture-of-Experts <cite>(<a href="#reference-18">Ma et al., 2018</a>)</cite> is a common building block. The relevance for this paper is that auxiliary heads, whether for position bias, for debiasing, or for uncertainty estimation, are added to a multi-task objective whose loss-weight balance is itself a tunable system. While multi-task learning addresses multiple objectives within a single-model paradigm, alternative decentralized structures such as multi-agent architectures  <cite>(<a href="#reference-23">Ranganathan et al., 2026</a>)</cite> have recently been proposed to decompose recommendation subtasks (e.g., separating perception from reasoning and feedback integration) to cooperatively balance competing system-level goals like diversity, fairness, and long-term user value. Some of our findings touch on this: simply adding an auxiliary head to the objective can shift behavior even when the head is not consumed at serving.</p>
+</div>
+</section>
+<section id="S2.SS0.SSS0.Px6">
+<h4>Exploration and bandits.</h4>
+<div id="S2.SS0.SSS0.Px6.p1">
+<p id="S2.SS0.SSS0.Px6.p1.1">The UCB family <cite>(<a href="#reference-3">Auer et al., 2002</a>)</cite> provides the textbook foundation for uncertainty-driven exploration. In recommender systems, exploration has been studied in contextual bandit form <cite>(<a href="#reference-16">Li et al., 2010</a>)</cite> and via off-policy correction for policy-gradient learners <cite>(<a href="#reference-8">Chen et al., 2019</a>)</cite>. In production music streaming, active exploration via multi-arm bandits has been deployed to balance this trade-off for new release carousels, though simpler neural predictions of cold-start embeddings can often perform on par due to slow bandit convergence on rapidly evolving fresh content pools <cite>(<a href="#reference-6">Briand et al., 2024</a>)</cite>. We borrow the UCB idea at serving time and the curriculum-learning idea <cite>(<a href="#reference-4">Bengio et al., 2009</a>)</cite> at training time, with per-item uncertainty supplied by a spectral-normalized Gaussian process head <cite>(<a href="#reference-17">Liu et al., 2020</a>)</cite>. Furthermore, how users explore newly discovered music clusters is closely coupled with their intrinsic discovery needs and follows structured trajectories; listeners often initiate exploration into unfamiliar genres with highly popular, accessible tracks before moving deeper into niche, representative items <cite>(<a href="#reference-21">Moscati et al., 2025</a>)</cite>.</p>
+</div>
+</section>
+<section id="S2.SS0.SSS0.Px7">
+<h4>Feedback loops.</h4>
+<div id="S2.SS0.SSS0.Px7.p1">
+<p id="S2.SS0.SSS0.Px7.p1.1">Chaney et al. <cite>(<a href="#reference-7">Chaney et al., 2018</a>)</cite> use simulation to show that algorithmic confounding homogenizes user behavior without corresponding utility gains. Jiang et al. <cite>(<a href="#reference-14">Jiang et al., 2019</a>)</cite> characterize degenerate feedback loops formally. Mansoury et al. <cite>(<a href="#reference-19">Mansoury et al., 2020</a>)</cite> document feedback-driven amplification of popularity bias in offline simulation. In music recommendation contexts, these feedback loops are often exacerbated by the fact that highly optimized, satisfaction-centric ranking models naturally exhibit an increased bias toward popular and historically familiar content as model complexity grows <cite>(<a href="#reference-13">Hansen et al., 2021</a>)</cite>. Our contribution complements this line of work with online evidence on a production music surface, and a head-to-head comparison of interventions that take different views of where the loop should be broken.</p>
+</div>
+</section>
+</section>
+<section id="S3">
+<h2><span>3. </span>Problem Description</h2>
+<div id="S3.p1">
+<p id="S3.p1.1">We study the homepage surface of the YouTube Music app. Items eligible for ranking on this surface include songs, albums, playlists, artists and algorithmic mixes. The production ranker is a deep multi-task model in the lineage of <cite>(<a href="#reference-9">Covington et al., 2016</a>; <a href="#reference-29">Zhao et al., 2019</a>)</cite>, predicting click-through rate, watch time, and several other engagement targets. The model is trained continuously on the past 4 weeks of logged impressions and engagements, and a new ranker is shipped on a regular cadence. The model also distills predictions <cite>(<a href="#reference-24">Ranganathan et al., 2025</a>)</cite> from a larger teacher model trained on YouTube’s data. We use the term <em id="S3.p1.1.1">new release</em> for songs and albums released within 7 days of the impression timestamp. We use <em id="S3.p1.1.2">discovery</em> for items the user has had no prior engagement with on the platform; discovery and new-release sets overlap but are not equal, and an item can be a new release for an artist the user is already familiar with. The product goal of this study is to lift exposure for both classes without unacceptably degrading top-line homepage engagement.
+<br/></p>
+</div>
+<div id="S3.p2">
+<p id="S3.p2.1"><span id="S3.p2.1.1">Debiasing is not a freshness intervention</span>
+<br/>As we outline our framework, we make an explicit distinction between debiasing and freshness. Practitioners often reach for popularity biasing tools when the product problem is to surface new content. Debiasing is a mathematical correction: it aims to correct a ranker that trains on biased logged data (e.g., position or popularity bias). Freshness, on the other hand, is a product outcome: the goal is to surface new content that the user has not seen. New releases lack the history of engagement that would let the ranker score them fairly and debiasing alone can’t produce the required signal for these items. An ideally debiased model may still systematically under-rank new releases simply because they lack the historical signal needed to generate a confident positive score, whereas a heuristic boost can lift new releases without correcting any underlying bias. We return to this idea in subsection <a href="#S6.SS2"><span>6.2</span></a> when discussing the impact of the bias tower on freshness. 
+<br/></p>
+</div>
+</section>
+<section id="S4">
+<h2><span>4. </span>Layered Framework and Methods</h2>
+<div id="S4.p1">
+<p id="S4.p1.1">We evaluate six interventions, organized into four conceptual layers based on where in the system they are applied. All are deployed in the same production ranker described in Section 3 and evaluated against an unmodified baseline. Each intervention is implemented as a minimal change to the smallest reasonable component: we did not stack interventions across layers, and each experimental arm differs from control in a single specified way.</p>
+</div>
+<section id="S4.SS1">
+<h3><span>4.1. </span>Serving</h3>
+<div id="S4.SS1.p1">
+<p id="S4.SS1.p1.1">These are changes that apply only in the ranking layer that consumes the scores from the models and combines it to generate a single final ranked list. Interventions here, such as heuristic recency score boosts, adjust the presentation policy directly without requiring any model retraining.
+<br/></p>
+</div>
+<div id="S4.SS1.p2">
+<p id="S4.SS1.p2.1"><span id="S4.SS1.p2.1.1">Approach 1 – Heuristic recency boost at serving.</span> A multiplicative score boost is applied to items released within <math alttext="N" class="ltx_Math" display="inline" id="S4.SS1.p2.m1" intent=":literal"><semantics><mi>N</mi><annotation encoding="application/x-tex">N</annotation></semantics></math> days, applied at the ranker’s score-combination step. No model is retrained. This is the lightest possible intervention and the one most teams attempt first; it serves both as a baseline and as a probe of how the surrounding system responds when ranking is perturbed at serving. We experimented with different factors. All arms had a similar behavior for the New release metrics but with larger swings in impressions over days.
+<br/></p>
+</div>
+<div id="S4.SS1.p3">
+<p id="S4.SS1.p3.1"><span id="S4.SS1.p3.1.1">Approach 2 – Diversification by release age.</span> A soft demotion is applied to diversify the items across buckets based on the number of days since the item was released. This diversification applies alongside other diversification factors (e.g. across artists) and adding a new dimension of diversification naturally reduces the impact of existing factors.</p>
+</div>
+</section>
+<section id="S4.SS2">
+<h3><span>4.2. </span>Training Data Debiasing</h3>
+<div id="S4.SS2.p1">
+<p id="S4.SS2.p1.1">Interventions at this layer modify the distribution or importance of the logged examples fed into the model. Common approaches include temporal sample reweighting (e.g., up-weighting more recent days) or inverse propensity scoring (IPS) or product informed weights adjusting for bias in the presentation on the platform (e.g., for items at the edge of the screen). We did not run a live experiment with IPS as the specific variants we tried ended up being unstable during training. We implemented IPS using the Predicted CTR (PCTR) from the logged predictions with a few variations for stability such as clipping the weights and normalizing by the global median PCTR. 
+<br/></p>
+</div>
+<div id="S4.SS2.p2">
+<p id="S4.SS2.p2.1"><span id="S4.SS2.p2.1.1">Approach 3 – Up-weight data from recent days.</span> Examples in the 28-day training window are reweighted with an exponential decay to give higher weight to more recent days. The model architecture and serving stack are unchanged. Hypothesis: Because new releases (by definition less than 7 days old) only possess engagement signals in the most recent days of our 28-day training window, a uniform weighting (across time) drowns out their sparse signals in favor of established items. By applying an exponential decay to up-weight recent days, we disproportionately increase the relative training impact of the narrow time window where new releases actually exist, allowing the model to adapt faster to newly trending content rather than fitting its capacity to older, accumulated engagement patterns.</p>
+</div>
+<figure id="S4.T1"><img alt="Table 1. Experimental results of various interventions on new releases, discovery, diversity and homepage engagement. Positive statistically significant changes are indicated in bold , and negative statistically significant changes are indi" height="535" src="https://theopinard.github.io/vrac/articles/breaking-the-loop-an-empirical-comparison-of-strategies-for-novelty-and-freshness-in-youtube-music/table-1.jpg" width="1199"/><figcaption><span>Table 1. </span>Experimental results of various interventions on new releases, discovery, diversity and homepage engagement. Positive statistically significant changes are indicated in <span id="S4.T1.4">bold</span>, and negative statistically significant changes are indicated in <span id="S4.T1.5">italics</span>. Arrows (<math alttext="\uparrow" class="ltx_Math" display="inline" id="S4.T1.m3" intent=":literal"><semantics><mo stretchy="false">↑</mo><annotation encoding="application/x-tex">\uparrow</annotation></semantics></math>, <math alttext="\downarrow" class="ltx_Math" display="inline" id="S4.T1.m4" intent=":literal"><semantics><mo stretchy="false">↓</mo><annotation encoding="application/x-tex">\downarrow</annotation></semantics></math>) indicate the direction of the statistically significant change at the 95th percentile confidence intervals.</figcaption></figure>
+</section>
+<section id="S4.SS3">
+<h3><span>4.3. </span>Architectural Debiasing</h3>
+<div id="S4.SS3.p1">
+<p id="S4.SS3.p1.1">This layer includes additions or changes to the model architecture, typically auxiliary heads or features that allow the model to factor the bias out of its predictions. These modules explicitly model confounding factors (like position or client bias) during training so that the main prediction heads learn a fairer, debiased representation.
+<br/></p>
+</div>
+<div id="S4.SS3.p2">
+<p id="S4.SS3.p2.1"><span id="S4.SS3.p2.1.1">Approach 4 – Shallow position/client bias tower (architecture).</span> A shallow auxiliary tower takes position and client-type sparse features and outputs a CTR correction term that is added to the main model’s logits during training; the tower is dropped at serving. The architecture follows PAL <cite>(<a href="#reference-11">Guo et al., 2019</a>)</cite> and the WatchNext shallow tower <cite>(<a href="#reference-29">Zhao et al., 2019</a>)</cite>. Hypothesis: the top ranked items on the Homepage are often previously consumed quick-access familar tracks. By accounting for and removing the bias from the item position, the ranker should produce fairer scores for typically lower ranked items.</p>
+</div>
+</section>
+<section id="S4.SS4">
+<h3><span>4.4. </span>Exploration</h3>
+<div id="S4.SS4.p1">
+<p id="S4.SS4.p1.1">Interventions that leverage estimates of model uncertainty to actively guide the system toward items it knows less about. This exploration signal can be applied either at serving time (by adding an uncertainty boost to the item’s score) or at training time (by up-weighting high-uncertainty examples in the loss).
+<br/></p>
+</div>
+<div id="S4.SS4.p2">
+<p id="S4.SS4.p2.1"><span id="S4.SS4.p2.1.1">Approach 5 – Uncertain items boosted at serving.</span> A spectral-normalized Gaussian process (SNGP) head <cite>(<a href="#reference-17">Liu et al., 2020</a>)</cite> is added to the model for the CTR prediction and is trained jointly with the main CTR head, producing a per-item posterior variance estimate. At serving time, a boost proportional to this uncertainty is multiplied to the main model’s score <cite>(<a href="#reference-3">Auer et al., 2002</a>; <a href="#reference-10">Guo et al., 2020</a>)</cite>. The model is otherwise unchanged. Hypothesis: Explicitly shifting the ranking policy to increase exposure for uncertain content will help the model understand new items faster. In our experiments we also share the results from adding the head without using the prediction in any downstream ranking layer (5 (a). in Table <a href="#S4.T1"><span>1</span></a>).
+<br/></p>
+</div>
+<div id="S4.SS4.p3">
+<p id="S4.SS4.p3.1"><span id="S4.SS4.p3.1.1">Approach 6 – Uncertainty-weighted training loss.</span> The same SNGP head supplies uncertainty estimates, but instead of being combined with the serving score, they are used to up-weight high-uncertainty training examples in the loss for the CTR head, in the spirit of curriculum learning <cite>(<a href="#reference-4">Bengio et al., 2009</a>)</cite> and self-paced approaches that emphasize examples where the model has the most to learn. The serving stack is unchanged. Hypothesis: the model would have low confidence on fresh or novel content predictions, and focusing learning on these items would improve model’s understanding on these slices.</p>
+</div>
+</section>
+</section>
+<section id="S5">
+<h2><span>5. </span>Experimental Setup and Results</h2>
+<div id="S5.p1">
+<p id="S5.p1.1">We report online A/B results for six singleton interventions and one combination experiment in <a href="#S4.T1"><span>Table 1</span></a>, evaluated against the same control on the YouTube Music homepage over a two-week window affecting millions of daily visitors for each arm. Columns capture the metrics we use to argue about new-release surfacing (1-day and 7-day new-release engagement), discovery (novel-music engagement at the track level), surface composition (artist diversity, homepage repetition), and overall homepage engagement. We intentionally focus on engagement and exposure shifts rather than slice-specific ranking metrics such as AUC. An intervention might increase exposure simply by overpredicting scores for new items rather than ranking them more accurately. However, breaking a feedback loop inherently requires trading short-term precision for exploration. The immediate goal is to generate the exposure and interactions necessary to create training data, which has a second-order effect to improve the model’s accuracy on new releases over a longer horizon. Rows correspond to the interventions, grouped by the layer of the system at which each is applied; the final row is a combination of the bias tower (layer 3) and the uncertainty-weighted loss (layer 4) discussed in <a href="#S4"><span>section 4</span></a>.</p>
+</div>
+<div id="S5.p2">
+<p id="S5.p2.1">The main observation is that no singleton intervention dominates across columns. Each row trades engagement, diversity, repetition, and new-release lift against one another, and the pattern of trades aligns with the layer at which the intervention is applied. Three patterns emerge among the singletons, and a fourth emerges from the combination experiment.</p>
+</div>
+<div id="S5.p3">
+<p id="S5.p3.1">A separate observation we cannot fully explain is that simply adding the SNGP uncertainty head to the model and <em id="S5.p3.1.1">not</em> using its output at serving still produces a <math alttext="+5.32\%" class="ltx_Math" display="inline" id="S5.p3.m1" intent=":literal"><semantics><mrow><mo>+</mo><mrow><mn>5.32</mn><mo>%</mo></mrow></mrow><annotation encoding="application/x-tex">+5.32\%</annotation></semantics></math> 1-day new-release engagement lift with no significant engagement, novelty, or diversity cost. We treat this as an open observation rather than a recommended intervention. There are three plausible mechanisms that could cause it: loss rebalancing across the multi-task objectives, generic auxiliary-task regularization, and uncertainty-target-specific representation effects in the shared layers. We plan to run future experiments disambiguating between these.</p>
+</div>
+</section>
+<section id="S6">
+<h2><span>6. </span>Discussion</h2>
+<section id="S6.SS1">
+<h3><span>6.1. </span>Serving-Layer heuristics get neutralized</h3>
+<div id="S6.SS1.p1">
+<p id="S6.SS1.p1.1">We tested two serving-layer interventions: a recency boost that adds a multiplicative bonus to items released within 7 days, and a diversification heuristic that spreads out items by days since release. Neither modifies the model or the training data; both operate on the score returned by the production ranker.</p>
+</div>
+<figure id="S6.F1"><img alt="Diagram of Change in impressions for New releases across the days of the study" height="253" src="https://arxiv.org/html/2607.23749v1/nr_boost_imp.png" width="429"/><figcaption><span>Figure 1. </span>Change in impressions for New releases across the days of the heuristic recency boost at serving study<span id="acmlabel1">Diagram of Change in impressions for New releases across the days of the study</span></figcaption></figure>
+<div id="S6.SS1.p2">
+<p id="S6.SS1.p2.1">The recency boost shows no significant effect on either 1-day or 7-day new-release engagement. <a href="#S6.F1"><span>Figure 1</span></a> makes the underlying dynamic visible. Each eligible new release rendered on-screen to a user is counted as an impression. The daily lift in new-release impressions is positive and large in the first days of the experiment; other ranking components then react to the increase in unclicked impressions, drop the impressions sharply, and the metric bounces back to neutral within a few days. The boosted impressions enter the next training run, the model learns that the boosted items receive disproportionate exposure relative to their realized engagement, and the learned ranking partially undoes the boost. The YouTube Music homepage also has specific impression-based demotions that correct for overexposure faster than the ranker can adapt.</p>
+</div>
+<div id="S6.SS1.p3">
+<p id="S6.SS1.p3.1">The general principle: any serving-time rule that the rest of the system can observe through its training inputs is subject to neutralization, and the more components of the stack are continuously trained, the larger the adaptation surface that can move against the rule. Serving-time interventions produce day-1 effects, but the effects are not durable, and the size of the eventual decay is not predictable from the day-1 measurement.</p>
+</div>
+</section>
+<section id="S6.SS2">
+<h3><span>6.2. </span>Architectural debiasing reduces bias but does not improve freshness</h3>
+<figure id="S6.F2"><img alt="Diagram of the change in impressions for the top and bottom impressed items across the methods." height="293" src="https://arxiv.org/html/2607.23749v1/popularity_bias_imp_vertical.png" width="476"/><figcaption><span>Figure 2. </span>Change in impressions (%) for the top and bottom impressed items across the methods. Top and bottom are determined by the total number of impressions for an item over the 2 week study period.<span id="acmlabel2">Diagram of the change in impressions for the top and bottom impressed items across the methods.</span></figcaption></figure>
+<div id="S6.SS2.p1">
+<p id="S6.SS2.p1.1">The bias tower produces the largest popularity redistribution of any singleton intervention we tested. <a href="#S6.F2"><span>Figure 2</span></a> shows the change in impression share for the top 1% of items by historical popularity and for the bottom 20% across all the methods; the bias tower delivers the largest reduction in top-1% concentration and the largest expansion of bottom-20% impressions (<math alttext="+9.2\%" class="ltx_Math" display="inline" id="S6.SS2.p1.m1" intent=":literal"><semantics><mrow><mo>+</mo><mrow><mn>9.2</mn><mo>%</mo></mrow></mrow><annotation encoding="application/x-tex">+9.2\%</annotation></semantics></math> relative to control), substantially larger than any other singleton. The table corroborates the popularity-redistribution story along multiple metrics. Novel-music engagement increases by <math alttext="4.70\%" class="ltx_Math" display="inline" id="S6.SS2.p1.m2" intent=":literal"><semantics><mrow><mn>4.70</mn><mo>%</mo></mrow><annotation encoding="application/x-tex">4.70\%</annotation></semantics></math> and Artist diversity increases by <math alttext="0.79\%" class="ltx_Math" display="inline" id="S6.SS2.p1.m3" intent=":literal"><semantics><mrow><mn>0.79</mn><mo>%</mo></mrow><annotation encoding="application/x-tex">0.79\%</annotation></semantics></math> (the only singleton with a significant positive effect on diversity).</p>
+</div>
+<div id="S6.SS2.p2">
+<p id="S6.SS2.p2.1">The bias tower is, however, not a new-release intervention. 7-day new-release engagement <em id="S6.SS2.p2.1.1">drops</em> by <math alttext="3.39\%" class="ltx_Math" display="inline" id="S6.SS2.p2.m1" intent=":literal"><semantics><mrow><mn>3.39</mn><mo>%</mo></mrow><annotation encoding="application/x-tex">3.39\%</annotation></semantics></math> (CI <math alttext="[-4.53,-2.24]\%" class="ltx_Math" display="inline" id="S6.SS2.p2.m2" intent=":literal"><semantics><mrow><mrow><mo stretchy="false">[</mo><mrow><mrow><mo>−</mo><mn>4.53</mn></mrow><mo>,</mo><mrow><mo>−</mo><mn>2.24</mn></mrow></mrow><mo stretchy="false">]</mo></mrow><mo>%</mo></mrow><annotation encoding="application/x-tex">[-4.53,-2.24]\%</annotation></semantics></math>) and 1-day new-release engagement is flat (<math alttext="+0.37\%" class="ltx_Math" display="inline" id="S6.SS2.p2.m3" intent=":literal"><semantics><mrow><mo>+</mo><mrow><mn>0.37</mn><mo>%</mo></mrow></mrow><annotation encoding="application/x-tex">+0.37\%</annotation></semantics></math>, not significant). New releases by popular artists were beneficiaries of the same popularity bias the tower removes, and the redistribution toward the unpopular tail does not propagate to new releases because new releases lack the historical engagement signal that would let the ranker learn to surface them. The bias tower removes a systematic distortion in the score; it does not add the new-content signal that surfacing a new release requires.</p>
+</div>
+<figure id="S6.F3"><img alt="Diagram of the change in impressions for the top and bottom impressed items across the methods." height="274" src="https://arxiv.org/html/2607.23749v1/pctr_dist.png" width="476"/><figcaption><span>Figure 3. </span>Relative change in predicted CTR per item, bucketed by control arm PCTR-percentile. The non-serving bias tower shifts the full distribution while the uncertainty-weighted training loss lifts only the bottom decile sharply with the upper end of the distribution minimally affected.<span id="acmlabel3">Diagram of the change in impressions for the top and bottom impressed items across the methods.</span></figcaption></figure>
+<div id="S6.SS2.p3">
+<p id="S6.SS2.p3.1">One practical observation is that the bias tower shifts the predicted-score distribution. The CTR distribution flattens, with mass moving from the engaged head toward the middle (Figure <a href="#S6.F3"><span>3</span></a>). This is theoretically expected, since we drop the additive bias term during serving, but downstream consumers of the ranker’s scores in our production stack (ranking functions, diversification, shelf rankers) are calibrated against the prior score distribution and require retuning. This cost is not unique to our system and practitioners considering a bias-tower-style intervention should budget engineering time for the recalibration.</p>
+</div>
+</section>
+<section id="S6.SS3">
+<h3><span>6.3. </span>Uncertainty based exploration interventions produce the largest new release lift</h3>
+<figure id="S6.F4"><img alt="Diagram of Change in impressions for New releases across the days of the study" height="270" src="https://arxiv.org/html/2607.23749v1/uncertainity_weighting_impressions_change.png" width="429"/><figcaption><span>Figure 4. </span>Change in impressions for New releases by the days since release of the item<span id="acmlabel4">Diagram of Change in impressions for New releases across the days of the study</span></figcaption></figure>
+<div id="S6.SS3.p1">
+<p id="S6.SS3.p1.1">Two interventions in our study use the SNGP-derived per-item uncertainty estimate to direct ranking attention toward items the model is least sure about. Boosting uncertain items at serving (5 (b). in Table <a href="#S4.T1"><span>1</span></a>) adds a bonus to served scores at serving time. The uncertainty-weighted loss uses the same uncertainty signal to up-weight examples during training. Both produce the largest 1-day new-release engagement gains in the suite; they differ in cost structure and in how the gain is distributed across item age.</p>
+</div>
+<div id="S6.SS3.p2">
+<p id="S6.SS3.p2.1">The uncertainty-prediction boost lifts 1-day and 7-day new-release engagement by the largest values in the new-release columns without negatively impacting Home engagement. But it drops Artist diversity and has only a minor impact on popularity bias in the system. The uncertainty-weighted loss on the other hand lifts 1-day new-release engagement but the change in 7-day new-release engagement is not significant. <a href="#S6.F4"><span>Figure 4</span></a> explains the gap. The lift is concentrated on the day-0 cohort and decays with item age. Each day as the model has learned enough about items in the dataset, the loss shifts to focus on new day-0 items. The loss up-weighting also drops home engagement and engagement on novel items. Uncertainty estimates from the SNGP head are concentrated on items lacking interaction history, and items lacking interaction history are heavily weighted toward new releases rather than toward the tail content that this specific user hasn’t interacted with before.</p>
+</div>
+<div id="S6.SS3.p3">
+<p id="S6.SS3.p3.1">This is direct empirical support for the freshness-versus-debiasing distinction set up in <a href="#S3"><span>section 3</span></a>. Even an intervention specifically designed to push exploratory content can prefer one kind of unfamiliar content over another in a way that changes the product outcome.</p>
+</div>
+</section>
+<section id="S6.SS4">
+<h3><span>6.4. </span>Composing layers: bias tower stacked with uncertainty-weighted loss</h3>
+<div id="S6.SS4.p1">
+<p id="S6.SS4.p1.1">The layered framework suggests that interventions in different layers should compose, with effects roughly additive excluding the second-order interactions through the shared training distribution. We tested this prediction directly by stacking the non-serving position bias tower with the uncertainty-weighted loss. The uncertainty prediction in this case was estimated for the <span id="S6.SS4.p1.1.1">unbiased</span> component of the CTR head which could also impact the distribution of the uncertainty predictions itself in addition to shifting the distribution of CTR. Because of production constraints, this arm ran over a one-week window rather than the two weeks that the other arms ran for. The cost of the shorter window is wider confidence intervals, which we flag where statistical significance is the load-bearing claim. The result is the final row of <a href="#S4.T1"><span>Table 1</span></a>.</p>
+</div>
+<div id="S6.SS4.p2">
+<p id="S6.SS4.p2.1">The combination does not cleanly add across all metrics :</p>
+</div>
+<div id="S6.SS4.p3">
+<ul id="S6.I1">
+<li id="S6.I1.i1"><span>•</span>
+<div id="S6.I1.i1.p1">
+<p id="S6.I1.i1.p1.1">The combination delivers a larger reduction in top-1% impression share and a larger expansion of bottom-20% impressions than the bias tower on its own (<a href="#S6.F2"><span>Figure 2</span></a>, last bar). Artist diversity is also slightly higher under the combination (<math alttext="+0.90\%" class="ltx_Math" display="inline" id="S6.I1.i1.p1.m1" intent=":literal"><semantics><mrow><mo>+</mo><mrow><mn>0.90</mn><mo>%</mo></mrow></mrow><annotation encoding="application/x-tex">+0.90\%</annotation></semantics></math>) than under the bias tower alone. The bias tower removes the popularity-bias score component, while the uncertainty-weighted loss further reweights training toward low-history items, doubling down on the same redistribution.</p>
+</div></li>
+<li id="S6.I1.i2"><span>•</span>
+<div id="S6.I1.i2.p1">
+<p id="S6.I1.i2.p1.1">The 1-day new-release engagement lift, which the uncertainty-weighted loss singleton drives to <math alttext="+4.33\%" class="ltx_Math" display="inline" id="S6.I1.i2.p1.m1" intent=":literal"><semantics><mrow><mo>+</mo><mrow><mn>4.33</mn><mo>%</mo></mrow></mrow><annotation encoding="application/x-tex">+4.33\%</annotation></semantics></math> (significant, two-week window), drops to a point estimate of approximately <math alttext="+2\%" class="ltx_Math" display="inline" id="S6.I1.i2.p1.m2" intent=":literal"><semantics><mrow><mo>+</mo><mrow><mn>2</mn><mo>%</mo></mrow></mrow><annotation encoding="application/x-tex">+2\%</annotation></semantics></math> under the combination and is not statistically significant. The 7-day new-release engagement drop from the bias tower is nearly unchanged in the combination.</p>
+</div></li>
+<li id="S6.I1.i3"><span>•</span>
+<div id="S6.I1.i3.p1">
+<p id="S6.I1.i3.p1.1">Homepage engagement drops by -0.43% in the combination, close to the sum of the singleton effects. Homepage repetition falls by <math alttext="0.48\%" class="ltx_Math" display="inline" id="S6.I1.i3.p1.m1" intent=":literal"><semantics><mrow><mn>0.48</mn><mo>%</mo></mrow><annotation encoding="application/x-tex">0.48\%</annotation></semantics></math>, between the two singleton values. Novel-music engagement is <math alttext="+1.85\%" class="ltx_Math" display="inline" id="S6.I1.i3.p1.m2" intent=":literal"><semantics><mrow><mo>+</mo><mrow><mn>1.85</mn><mo>%</mo></mrow></mrow><annotation encoding="application/x-tex">+1.85\%</annotation></semantics></math>, less than the singleton bias tower’s and consistent with the negative novel-music effect of the uncertainty-weighted loss partially offsetting the bias tower’s gain.</p>
+</div></li>
+</ul>
+</div>
+</section>
+<section id="S6.SS5">
+<h3><span>6.5. </span>Limitations</h3>
+<div id="S6.SS5.p1">
+<p id="S6.SS5.p1.1">The results reported here come from a single product (YouTube Music), a single surface (homepage), and a two-week experimental window per arm. Two weeks is enough to observe the temporal-decay dynamics that drive the serving-layer claim in Section 6.1, but it is short relative to the timescale on which long-run discovery effects on user retention or repertoire growth would materialize. Some of the new-release gains we report could be partially offset, or amplified, by longer-horizon dynamics that two weeks of online traffic cannot reveal. The combination experiment in Section 6.4 ran for one week rather than two, owing to production constraints. The resulting wider confidence intervals matter most for the 1-day new-release lift, where the two-week singleton significance does not transfer to the one-week combination.</p>
+</div>
+<div id="S6.SS5.p2">
+<p id="S6.SS5.p2.1">We test one instantiation of each layer and only on the ranker. The bias-tower architecture follows WatchNext; another debiasing architecture such as a deeper bias network, or one that conditions on additional context, could trade differently between popularity redistribution and freshness. We did not run IPS as a live arm because of training instability in our setup, so the training-data layer is represented in our results only by recency upweighting. We do not claim the layered framework is a taxonomy of all possible interventions; we claim it is a useful lens for predicting where in the stack a given intervention’s effects will and will not propagate.</p>
+</div>
+</section>
+</section>
+<section id="S7">
+<h2><span>7. </span>Conclusion</h2>
+<div id="S7.p1">
+<p id="S7.p1.1">We presented online A/B results for six interventions across four layers of a production music recommender, plus one combination arm, all evaluated against the same control on the YouTube Music homepage. The interventions are organized by where in the production stack they apply, and the overall finding is that the layer matters: which symptom of the feedback loop an intervention addresses, and which costs it incurs, is largely determined by its layer of application.</p>
+</div>
+<div id="S7.p2">
+<p id="S7.p2.1">Serving-time heuristics produce real day-1 effects but are neutralized by the learning loop over the following days, because their outputs become training inputs the next time the model retrains. Architectural debiasing with a bias tower redistributes impressions away from the popular head and toward the long tail, and significantly improves engagement on novel items. Uncertainty-driven exploration with an SNGP head produces the largest sustained new-release lift; the gain is concentrated on day-0 items when the uncertainty signal is applied as a training-loss reweighting and is spread more broadly across the 7-day window when applied as a serving-time boost. Stacking the bias tower with the uncertainty-weighted loss composes super-additively on popularity redistribution and artist diversity but negates the new-release lift seen in the individual arm. For practitioners, the choice of layer is itself a design choice with downstream consequences for the rest of the production stack. A practitioner choosing among these interventions should pick on the basis of which symptom they care most about — popularity dominance, freshness, or discovery — and budget for the integration cost of the layer where the intervention lives.</p>
+</div>
+<div id="S7.acknowledgements1">
+<h6>Acknowledgements.</h6>
+We would like to thank Yuening Li and Jiawei Li for their valuable technical consultations and feedback on integrating SNGP into the YouTube Music Ranking Model.
+
+</div>
+</section>
+<div><h2 id="works-cited">References</h2><p id="reference-1">[1] 
+<span><span>H. Abdollahpouri, M. Mansoury, R. Burke, and B. Mobasher</span>
+</span>
+<span><span>The unfairness of popularity bias in recommendation</span>.
+</span>
+<span>In <span>13th ACM Conference on Recommender Systems, RecSys 2019</span>,
+</span>
+</p><p id="reference-2">[2] 
+<span><span>A. Anderson, L. Maystre, I. Anderson, R. Mehrotra, and M. Lalmas</span>
+</span>
+<span><span>Algorithmic effects on the diversity of consumption on spotify</span>.
+</span>
+<span>In <span>Proceedings of the web conference 2020</span>,
+</span>
+<span><span>pp. 2155–2165</span>.
+</span>
+</p><p id="reference-3">[3] 
+<span><span>P. Auer, N. Cesa-Bianchi, and P. Fischer</span>
+</span>
+<span><span>Finite-time analysis of the multiarmed bandit problem</span>.
+</span>
+<span><span>Machine learning</span> <span>47</span> (<span>2</span>), <span>pp. 235–256</span>.
+</span>
+</p><p id="reference-4">[4] 
+<span><span>Y. Bengio, J. Louradour, R. Collobert, and J. Weston</span>
+</span>
+<span><span>Curriculum learning</span>.
+</span>
+<span>In <span>Proceedings of the 26th annual international conference on machine learning</span>,
+</span>
+<span><span>pp. 41–48</span>.
+</span>
+</p><p id="reference-5">[5] 
+<span><span>S. Bonner and F. Vasile</span>
+</span>
+<span><span>Causal embeddings for recommendation</span>.
+</span>
+<span>In <span>Proceedings of the 12th ACM conference on recommender systems</span>,
+</span>
+<span><span>pp. 104–112</span>.
+</span>
+</p><p id="reference-6">[6] 
+<span><span>L. Briand, T. Bontempelli, W. Bendada, M. Morlon, F. Rigaud, B. Chapus, T. Bouabça, and G. Salha-Galvan</span>
+</span>
+<span><span>Let’s get it started: fostering the discoverability of new releases on deezer</span>.
+</span>
+<span>In <span>European Conference on Information Retrieval</span>,
+</span>
+<span><span>pp. 286–291</span>.
+</span>
+</p><p id="reference-7">[7] 
+<span><span>A. J. Chaney, B. M. Stewart, and B. E. Engelhardt</span>
+</span>
+<span><span>How algorithmic confounding in recommendation systems increases homogeneity and decreases utility</span>.
+</span>
+<span>In <span>Proceedings of the 12th ACM conference on recommender systems</span>,
+</span>
+<span><span>pp. 224–232</span>.
+</span>
+</p><p id="reference-8">[8] 
+<span><span>M. Chen, A. Beutel, P. Covington, S. Jain, F. Belletti, and E. H. Chi</span>
+</span>
+<span><span>Top-k off-policy correction for a reinforce recommender system</span>.
+</span>
+<span>In <span>Proceedings of the twelfth ACM international conference on web search and data mining</span>,
+</span>
+<span><span>pp. 456–464</span>.
+</span>
+</p><p id="reference-9">[9] 
+<span><span>P. Covington, J. Adams, and E. Sargin</span>
+</span>
+<span><span>Deep neural networks for youtube recommendations</span>.
+</span>
+<span>In <span>Proceedings of the 10th ACM conference on recommender systems</span>,
+</span>
+<span><span>pp. 191–198</span>.
+</span>
+</p><p id="reference-10">[10] 
+<span><span>D. Guo, S. I. Ktena, P. K. Myana, F. Huszar, W. Shi, A. Tejani, M. Kneier, and S. Das</span>
+</span>
+<span><span>Deep bayesian bandits: exploring in online personalized recommendations</span>.
+</span>
+<span>In <span>Proceedings of the 14th ACM conference on recommender systems</span>,
+</span>
+<span><span>pp. 456–461</span>.
+</span>
+</p><p id="reference-11">[11] 
+<span><span>H. Guo, J. Yu, Q. Liu, R. Tang, and Y. Zhang</span>
+</span>
+<span><span>PAL: a position-bias aware learning framework for ctr prediction in live recommender systems</span>.
+</span>
+<span>In <span>Proceedings of the 13th ACM Conference on Recommender Systems</span>,
+</span>
+<span><span>pp. 452–456</span>.
+</span>
+</p><p id="reference-12">[12] 
+<span><span>P. Hager, R. Deffayet, J. Renders, O. Zoeter, and M. de Rijke</span>
+</span>
+<span><span>Unbiased learning to rank meets reality: lessons from baidu’s large-scale search dataset</span>.
+</span>
+<span>In <span>Proceedings of the 47th International ACM SIGIR Conference on Research and Development in Information Retrieval</span>,
+</span>
+<span><span>pp. 1546–1556</span>.
+</span>
+</p><p id="reference-13">[13] 
+<span><span>C. Hansen, R. Mehrotra, C. Hansen, B. Brost, L. Maystre, and M. Lalmas</span>
+</span>
+<span><span>Shifting consumption towards diverse content on music streaming platforms</span>.
+</span>
+<span>In <span>Proceedings of the 14th ACM international conference on web search and data mining</span>,
+</span>
+<span><span>pp. 238–246</span>.
+</span>
+</p><p id="reference-14">[14] 
+<span><span>R. Jiang, S. Chiappa, T. Lattimore, A. György, and P. Kohli</span>
+</span>
+<span><span>Degenerate feedback loops in recommender systems</span>.
+</span>
+<span>In <span>Proceedings of the 2019 AAAI/ACM Conference on AI, Ethics, and Society</span>,
+</span>
+<span><span>pp. 383–390</span>.
+</span>
+</p><p id="reference-15">[15] 
+<span><span>T. Joachims, A. Swaminathan, and T. Schnabel</span>
+</span>
+<span><span>Unbiased learning-to-rank with biased feedback</span>.
+</span>
+<span>In <span>Proceedings of the tenth ACM international conference on web search and data mining</span>,
+</span>
+<span><span>pp. 781–789</span>.
+</span>
+</p><p id="reference-16">[16] 
+<span><span>L. Li, W. Chu, J. Langford, and R. E. Schapire</span>
+</span>
+<span><span>A contextual-bandit approach to personalized news article recommendation</span>.
+</span>
+<span>In <span>Proceedings of the 19th international conference on World wide web</span>,
+</span>
+<span><span>pp. 661–670</span>.
+</span>
+</p><p id="reference-17">[17] 
+<span><span>J. Liu, Z. Lin, S. Padhy, D. Tran, T. Bedrax Weiss, and B. Lakshminarayanan</span>
+</span>
+<span><span>Simple and principled uncertainty estimation with deterministic deep learning via distance awareness</span>.
+</span>
+<span><span>Advances in neural information processing systems</span> <span>33</span>, <span>pp. 7498–7512</span>.
+</span>
+</p><p id="reference-18">[18] 
+<span><span>J. Ma, Z. Zhao, X. Yi, J. Chen, L. Hong, and E. H. Chi</span>
+</span>
+<span><span>Modeling task relationships in multi-task learning with multi-gate mixture-of-experts</span>.
+</span>
+<span>In <span>Proceedings of the 24th ACM SIGKDD international conference on knowledge discovery &amp; data mining</span>,
+</span>
+<span><span>pp. 1930–1939</span>.
+</span>
+</p><p id="reference-19">[19] 
+<span><span>M. Mansoury, H. Abdollahpouri, M. Pechenizkiy, B. Mobasher, and R. Burke</span>
+</span>
+<span><span>Feedback loop and bias amplification in recommender systems</span>.
+</span>
+<span>In <span>Proceedings of the 29th ACM international conference on information &amp; knowledge management</span>,
+</span>
+<span><span>pp. 2145–2148</span>.
+</span>
+</p><p id="reference-20">[20] 
+<span><span>R. Mehrotra, P. Bhattacharya, and M. Lalmas</span>
+</span>
+<span><span>Inferring the causal impact of new track releases on music recommendation platforms through counterfactual predictions</span>.
+</span>
+<span>In <span>Proceedings of the 14th ACM Conference on Recommender Systems</span>,
+</span>
+<span><span>pp. 687–691</span>.
+</span>
+</p><p id="reference-21">[21] 
+<span><span>M. Moscati, D. Afchar, M. Schedl, and B. Sguerra</span>
+</span>
+<span><span>Familiarizing with music: discovery patterns for different music discovery needs</span>.
+</span>
+<span>In <span>Proceedings of the 33rd ACM Conference on User Modeling, Adaptation and Personalization</span>,
+</span>
+<span><span>pp. 63–72</span>.
+</span>
+</p><p id="reference-22">[22] 
+<span><span>Z. Ovaisi, R. Ahsan, Y. Zhang, K. Vasilaky, and E. Zheleva</span>
+</span>
+<span><span>Correcting for selection bias in learning-to-rank systems</span>.
+</span>
+<span>In <span>Proceedings of the web conference 2020</span>,
+</span>
+<span><span>pp. 1863–1873</span>.
+</span>
+</p><p id="reference-23">[23] 
+<span><span>S. Ranganathan, A. Dharmaratnakar, A. Sinha, and D. Das</span>
+</span>
+<span><span>Multi-agent video recommenders: evolution, patterns, and open challenges</span>.
+</span>
+<span>In <span>Proceedings of the Nineteenth ACM International Conference on Web Search and Data Mining</span>,
+</span>
+<span><span>pp. 174–181</span>.
+</span>
+</p><p id="reference-24">[24] 
+<span><span>S. Ranganathan, C. Lo, B. Cunha, N. Khani, L. Wei, A. Nath, S. Andrews, G. Varady, Y. Song, J. Klingenhoefer, <span>et al.</span></span>
+</span>
+<span><span>Zero-shot cross-domain knowledge distillation: a case study on youtube music</span>.
+</span>
+<span>In <span>Proceedings of the Nineteenth ACM Conference on Recommender Systems</span>,
+</span>
+<span><span>pp. 1122–1125</span>.
+</span>
+</p><p id="reference-25">[25] 
+<span><span>A. I. Schein, A. Popescul, L. H. Ungar, and D. M. Pennock</span>
+</span>
+<span><span>Methods and metrics for cold-start recommendations</span>.
+</span>
+<span>In <span>Proceedings of the 25th annual international ACM SIGIR conference on Research and development in information retrieval</span>,
+</span>
+<span><span>pp. 253–260</span>.
+</span>
+</p><p id="reference-26">[26] 
+<span><span>T. Schnabel, A. Swaminathan, A. Singh, N. Chandak, and T. Joachims</span>
+</span>
+<span><span>Recommendations as treatments: debiasing learning and evaluation</span>.
+</span>
+<span>In <span>international conference on machine learning</span>,
+</span>
+<span><span>pp. 1670–1679</span>.
+</span>
+</p><p id="reference-27">[27] 
+<span><span>X. Wang, N. Golbandi, M. Bendersky, D. Metzler, and M. Najork</span>
+</span>
+<span><span>Position bias estimation for unbiased learning to rank in personal search</span>.
+</span>
+<span>In <span>Proceedings of the eleventh ACM international conference on web search and data mining</span>,
+</span>
+<span><span>pp. 610–618</span>.
+</span>
+</p><p id="reference-28">[28] 
+<span><span>Y. Zhang, L. Yan, Z. Qin, H. Zhuang, J. Shen, X. Wang, M. Bendersky, and M. Najork</span>
+</span>
+<span><span>Towards disentangling relevance and bias in unbiased learning to rank</span>.
+</span>
+<span>In <span>Proceedings of the 29th ACM SIGKDD Conference on Knowledge Discovery and Data Mining</span>,
+</span>
+<span><span>pp. 5618–5627</span>.
+</span>
+</p><p id="reference-29">[29] 
+<span><span>Z. Zhao, L. Hong, L. Wei, J. Chen, A. Nath, S. Andrews, A. Kumthekar, M. Sathiamoorthy, X. Yi, and E. Chi</span>
+</span>
+<span><span>Recommending what video to watch next: a multitask ranking system</span>.
+</span>
+<span>In <span>Proceedings of the 13th ACM conference on recommender systems</span>,
+</span>
+<span><span>pp. 43–51</span>.
+</span>
+</p></div>
+</article></body></html>

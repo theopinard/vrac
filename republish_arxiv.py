@@ -670,17 +670,7 @@ def render_data_tables(
     document: pymupdf.Document,
     asset_directory: Path,
 ) -> int:
-    tables = [
-        table
-        for table in article.find_all("table")
-        if table.find_parent("figure")
-        and (
-            TABLE_NUMBER_PATTERN.search(
-                table.find_parent("figure").get_text(" ", strip=True)
-            )
-            or table.find_parent("figure").find("img")
-        )
-    ]
+    tables = data_tables_to_render(article)
     for ordinal, table in enumerate(tables, start=1):
         figure = table.find_parent("figure")
         caption = figure.find("figcaption") if figure else None
@@ -709,6 +699,23 @@ def render_data_tables(
         image["height"] = str(pixmap.height)
         table.replace_with(image)
     return len(tables)
+
+
+def data_tables_to_render(article: Tag) -> list[Tag]:
+    return [
+        table
+        for table in article.find_all("table")
+        # Recent arXiv HTML uses nested tables to lay out individual cells.
+        # Rendering the outer table replaces all of them in one operation.
+        if table.find_parent("table") is None
+        if table.find_parent("figure")
+        and (
+            TABLE_NUMBER_PATTERN.search(
+                table.find_parent("figure").get_text(" ", strip=True)
+            )
+            or table.find_parent("figure").find("img")
+        )
+    ]
 
 
 def normalize_equation_tables(article: Tag) -> None:
@@ -756,6 +763,56 @@ def normalize_visual_figures(article: Tag) -> None:
         if caption:
             normalized.append(caption.extract())
         figure.replace_with(normalized)
+
+
+def normalize_bibliography(article: Tag) -> None:
+    """Turn LaTeXML's bibliography list into reader-extractor-safe prose."""
+    bibliographies = list(article.select("section.ltx_bibliography"))
+    for bibliography in bibliographies:
+        items = list(bibliography.select("li.ltx_bibitem"))
+        if not items:
+            continue
+
+        soup = BeautifulSoup("", "html.parser")
+        normalized = soup.new_tag("div")
+        heading = soup.new_tag("h2", id="works-cited")
+        heading.string = "References"
+        normalized.append(heading)
+
+        target_map: dict[str, str] = {"bib": "works-cited"}
+        for ordinal, item in enumerate(items, start=1):
+            old_id = str(item.get("id", ""))
+            new_id = f"reference-{ordinal}"
+            if old_id:
+                target_map[old_id] = new_id
+
+            # arXiv adds navigation-only backlinks to every entry. Besides not
+            # being bibliographic data, their density can make reader services
+            # classify the entire reference list as site navigation.
+            for cited_by in item.select(".ltx_bib_cited"):
+                cited_by.decompose()
+            label = next(
+                (
+                    child
+                    for child in item.find_all(recursive=False)
+                    if "ltx_tag_bibitem" in child.get("class", [])
+                ),
+                None,
+            )
+            if label:
+                label.decompose()
+
+            paragraph = soup.new_tag("p", id=new_id)
+            paragraph.append(f"[{ordinal}] ")
+            for child in list(item.contents):
+                paragraph.append(child.extract())
+            normalized.append(paragraph)
+
+        for link in article.find_all("a", href=True):
+            href = str(link["href"])
+            if href.startswith("#") and href[1:] in target_map:
+                link["href"] = f"#{target_map[href[1:]]}"
+        bibliography.replace_with(normalized)
 
 
 def sanitize_article(article: Tag, source_url: str, asset_base_url: str) -> None:
@@ -960,6 +1017,7 @@ def republish(
             print("warning: the article contained no data tables", file=sys.stderr)
         normalize_equation_tables(article)
         normalize_visual_figures(article)
+        normalize_bibliography(article)
         sanitize_article(article, source.html_url, asset_base_url)
         if article.find("svg") or article.find("object", type="image/svg+xml"):
             raise ValueError("An SVG remained after figure conversion")
