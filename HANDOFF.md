@@ -15,13 +15,18 @@ The project began by debugging why diagrams from complex Substack/ByteByteGo art
 - Clean generated Substack article: <https://theopinard.github.io/vrac/articles/the-new-american-ai-model-designed/>
 - arXiv validation source: <https://arxiv.org/abs/2607.12246v1>
 - Clean generated arXiv article: <https://theopinard.github.io/vrac/articles/proximity-features-privacy-compliant-cold-start-personalization-at-airbnb/>
-- Current published commit: `f4ad6d6` (`Convert arXiv assets to baseline JPEG`)
+- arXiv citation-compatibility source: <https://arxiv.org/abs/2607.23749v1>
+- Citation-compatibility article: <https://theopinard.github.io/vrac/articles/breaking-the-loop-an-empirical-comparison-of-strategies-for-novelty-and-freshness-in-youtube-music/>
+- Current arXiv implementation commit: `af525e1` (`Use simple citation links for Kobo`)
 - GitHub Pages publishes the repository root from `origin/main`.
 - Local checkout is currently on `add-instapaper-image-tag`. This branch contains the latest commits and points at the same commit as `origin/main`; the local `main` branch is stale at the initial commit.
 - The latest Substack revision is published, HTTP-verified, and Kobo-validated: all article pictures render successfully.
 - The Substack strategy is clean static HTML, bare `<img>` elements for uncaptained images, and full-resolution enclosing Substack image-link URLs for real diagrams.
 - The arXiv strategy is semantic arXiv HTML plus figures/tables cropped from the matching PDF and encoded as baseline, non-progressive RGB JPEGs.
 - The final arXiv page contains six direct, absolute JPEG image tags: three diagrams and three formatted tables. This version is Kobo-validated.
+- Current arXiv HTML with nested layout tables is supported: only the outer data table is rasterized.
+- LaTeXML bibliographies are converted to ordinary numbered paragraphs, and citation targets are remapped to stable generated IDs.
+- Citation text and parentheses now survive Kobo because `<cite>` wrappers are removed. Links remain ordinary absolute `<a>` elements and display correctly, but Kobo's Instapaper "My Articles" reader does not activate them when tapped.
 
 ## Original problem
 
@@ -335,7 +340,10 @@ The implementation:
 9. Emits direct `<figure><img ...><figcaption>...</figcaption></figure>` structures without nested arXiv spans/divs around images.
 10. Uses absolute GitHub Pages image URLs, with explicit width and height. Forks can override the default base using `--public-articles-url`.
 11. Removes scripts, SVG, HTML data tables, `<picture>`, `<source>`, `srcset`, and lazy-loading markup from the output.
-12. Downloads the source PDF only into temporary storage; it is not committed.
+12. Selects only outer data tables for PDF rasterization; nested tables used by current arXiv HTML to lay out cells are replaced with their outer table in one operation.
+13. Converts LaTeXML bibliography lists to numbered paragraphs, removes navigation-only "Cited by" backlinks, and preserves external DOI/source links.
+14. Removes `<cite>` wrappers while keeping their parentheses, citation text, and simple absolute `<a>` links.
+15. Downloads the source PDF only into temporary storage; it is not committed.
 
 arXiv support added these dependencies to the uv project:
 
@@ -385,6 +393,71 @@ The final assets are:
 | `table-3.jpg` | 581×258 | RGB baseline JPEG, quality 88 |
 
 All public HTML/image files were downloaded after deployment and compared byte-for-byte with their committed local versions.
+
+## Current arXiv references and citations
+
+The second arXiv validation source is:
+
+<https://arxiv.org/abs/2607.23749v1>
+
+Title:
+
+```text
+Breaking the Loop: An Empirical Comparison of Strategies for Novelty and Freshness in YouTube Music
+```
+
+Published page:
+
+<https://theopinard.github.io/vrac/articles/breaking-the-loop-an-empirical-comparison-of-strategies-for-novelty-and-freshness-in-youtube-music/>
+
+This paper exposed two newer LaTeXML patterns:
+
+- one semantic data table contains 48 nested layout tables, so the previous renderer attempted to process 49 tables and failed after replacing the outer one;
+- every bibliography entry contains navigation-only "Cited by" backlinks, producing a link-heavy `<section id="bib"><ul><li>...</li></ul></section>` block that reader extraction can discard as navigation or boilerplate.
+
+The converter now renders only top-level data tables and rewrites the bibliography as 29 ordinary numbered paragraphs. It removes the "Cited by" blocks, remaps every in-text citation to the new reference ID, and retains real external links.
+
+The citation investigation then established that URL form was not the main cause of missing citation text. The failing markup was:
+
+```html
+<cite>(<a href="#reference-14">Jiang et al., 2019</a>)</cite>
+```
+
+On Kobo, the complete `<cite>` node was removed, including the linked author/year text and the parentheses. Making the nested link absolute did not help because the `<cite>` wrapper remained.
+
+The useful comparison page was:
+
+<https://vladfeinberg.com/2026/05/10/how-to-land-a-job-at-a-frontier-lab.html>
+
+Its article body has zero `<cite>` elements. Links use ordinary prose markup such as `<p>...<a href="https://...">text</a>...</p>`. The arXiv output now follows that pattern:
+
+```html
+<p>
+  The mechanism that produces this failure is well understood in the literature
+  (<a href="https://theopinard.github.io/.../#reference-14">Jiang et al., 2019</a>).
+</p>
+```
+
+Confirmed result on Kobo:
+
+- `(Jiang et al., 2019)` and all other citation text remain visible;
+- the parentheses remain visible;
+- all 29 numbered reference paragraphs remain visible;
+- the linked text remains present, but tapping it does nothing in Kobo's Instapaper "My Articles" reader.
+
+The last point is an integration limitation, not a remaining source-HTML failure. The live page contains 57 normal absolute links, zero fragment-only links, and zero `<cite>` elements. Kobo and Instapaper document syncing, reading, liking, archiving, and deleting articles, but do not document interactive hyperlink navigation in "My Articles":
+
+- <https://www.instapaper.com/docs/ereaders/kobo>
+- <https://help.kobo.com/hc/en-us/articles/33359968957463-Use-Instapaper-with-your-Kobo-eReader>
+
+If clickable references become a requirement, the practical next path is a sideloaded EPUB rather than further HTML changes. For the current Instapaper workflow, citations and references must remain understandable without clicking.
+
+The relevant published commits are:
+
+- `0f30e1d` — `Preserve arXiv references for Kobo`: flatten bibliography lists and ignore nested layout tables;
+- `664fb72` — `Make arXiv links absolute for Kobo`: useful negative test because absolute URLs alone did not preserve `<cite>` contents;
+- `a3bfdf8` — `Preserve citation text on Kobo`: confirmed that plain citation text survives;
+- `af525e1` — `Use simple citation links for Kobo`: retain simple links without `<cite>` wrappers.
 
 ## arXiv failure sequence and confirmed fix
 
@@ -475,7 +548,7 @@ arXiv URL
   -> complete text, diagrams, and formatted tables render
 ```
 
-The test suite currently has nine tests covering arXiv URL forms/version handling, invalid input, direct visual markup, equation-table simplification, and absolute generated image URLs/dimensions.
+The test suite currently has 13 tests covering arXiv URL forms/version handling, invalid input, direct visual markup, equation-table simplification, generated image URLs/dimensions, nested data-table selection, bibliography flattening/link preservation, and `<cite>` removal with simple absolute links.
 
 ## The nine real diagrams in order
 
