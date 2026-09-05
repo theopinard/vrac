@@ -452,6 +452,33 @@ The last point is an integration limitation, not a remaining source-HTML failure
 
 If clickable references become a requirement, the practical next path is a sideloaded EPUB rather than further HTML changes. For the current Instapaper workflow, citations and references must remain understandable without clicking.
 
+### Pending reference-navigation experiment
+
+Before accepting paragraph-local reference duplication, test whether Kobo can navigate a fragment now that citation text is no longer enclosed by `<cite>`. The earlier fragment result was confounded because Kobo removed the complete `<cite>` element.
+
+Diagnostic page:
+
+<https://theopinard.github.io/vrac/kobo-reference-navigation-test.html?v=reference-navigation-1>
+
+Save that exact cache-busted URL as a new Instapaper item. Do not reuse a previously saved copy. The page contains enough spacer text to make a successful jump unambiguous and asks for one result per case:
+
+| Case | Markup under test | Kobo result |
+| --- | --- | --- |
+| A | Plain `href="#target"` with an `id` target | Pending |
+| B | Plain fragment with a legacy `<a name="target">` destination | Pending |
+| C | `epub:type="noteref"` / `epub:type="footnote"` plus document roles | Pending |
+| D | Native `<details>/<summary>` inline disclosure | Pending |
+| E | Absolute same-page URL, expected browser-prompt baseline | Pending |
+
+For A, B, C, and E, record `jump`, `popup`, `browser prompt`, or `nothing`; for D, record `expanded`, `always visible`, `removed`, or `nothing`. Also test the return link after any successful jump.
+
+Selection rule after the physical test:
+
+1. Prefer browser-free internal fragment navigation with a working return path.
+2. Otherwise use an EPUB footnote popup if Kobo provides one.
+3. Otherwise use native disclosure if it expands reliably.
+4. If none works, retain visible numbered citations and insert a compact, plain-HTML reference block immediately after each citing paragraph while keeping the complete bibliography at the end.
+
 The relevant published commits are:
 
 - `0f30e1d` — `Preserve arXiv references for Kobo`: flatten bibliography lists and ignore nested layout tables;

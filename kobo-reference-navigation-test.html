@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en" xmlns:epub="http://www.idpf.org/2007/ops">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kobo Instapaper Reference Navigation Test</title>
+  <style>
+    body {
+      max-width: 760px;
+      margin: 2rem auto;
+      padding: 0 1rem;
+      font-family: Georgia, serif;
+      line-height: 1.55;
+    }
+    section { margin: 2rem 0; }
+    .test-case, .target {
+      padding: 0.75rem;
+      border: 2px solid #555;
+      margin: 1.5rem 0;
+    }
+    .target { border-style: dashed; }
+    summary { font-weight: bold; }
+  </style>
+</head>
+<body>
+  <article class="instapaper_body">
+    <h1>Kobo Instapaper Reference Navigation Test</h1>
+    <p>This page tests five ways to reach a reference without losing its citation text. Save the cache-busted test URL as a completely new Instapaper item, sync it to Kobo, and try each labeled case.</p>
+    <p>For A, B, C, and E, report one of: <strong>jump</strong>, <strong>popup</strong>, <strong>browser prompt</strong>, or <strong>nothing</strong>. For D, report <strong>expanded</strong>, <strong>always visible</strong>, <strong>removed</strong>, or <strong>nothing</strong>. If a case jumps, also try its return link.</p>
+
+    <section class="test-case" id="case-a-start">
+      <h2>A - Plain fragment with ID</h2>
+      <p>This is ordinary prose with a modern same-document link: (<a href="#case-a-target">A: Smith et al., 2025</a>).</p>
+    </section>
+
+    <section class="test-case" id="case-b-start">
+      <h2>B - Legacy named anchor</h2>
+      <p>This is ordinary prose linked to an old-style named target: (<a href="#case-b-target">B: Jones et al., 2024</a>).</p>
+    </section>
+
+    <section class="test-case" id="case-c-start">
+      <h2>C - EPUB footnote semantics</h2>
+      <p>This link has EPUB and accessibility footnote attributes: (<a href="#case-c-target" epub:type="noteref" role="doc-noteref">C: Lee et al., 2023</a>).</p>
+    </section>
+
+    <section class="test-case" id="case-d-start">
+      <h2>D - Native disclosure</h2>
+      <details>
+        <summary>Tap to show reference D</summary>
+        <p><strong>D EXPANDED:</strong> Patel, R. 2022. A deliberately obvious inline reference used to test whether Kobo supports native HTML disclosure without JavaScript.</p>
+      </details>
+    </section>
+
+    <section class="test-case" id="case-e-start">
+      <h2>E - Absolute URL baseline</h2>
+      <p>This is the current behavior and is expected to ask about opening the browser: (<a href="https://theopinard.github.io/vrac/kobo-reference-navigation-test.html#case-e-target">E: Garcia et al., 2021</a>).</p>
+    </section>
+
+    <section>
+      <h2>Navigation spacer</h2>
+      <p>Spacer 01. If a reference link works, the start of the target zone should replace this part of the article on screen.</p>
+      <p>Spacer 02. These paragraphs create enough distance to distinguish a real jump from a screen refresh.</p>
+      <p>Spacer 03. Continue past this text only when checking the targets manually.</p>
+      <p>Spacer 04. A successful internal link should not display Kobo's external-browser confirmation.</p>
+      <p>Spacer 05. The citation itself must remain visible even when its navigation behavior is unsupported.</p>
+      <p>Spacer 06. The target text below is boxed and begins with a large heading.</p>
+      <p>Spacer 07. The return links test whether Kobo can navigate in both directions.</p>
+      <p>Spacer 08. The EPUB test may appear as a popup instead of moving to the target.</p>
+      <p>Spacer 09. The disclosure test is independent of all fragment links.</p>
+      <p>Spacer 10. The absolute-link baseline should reproduce the current browser prompt.</p>
+      <p>Spacer 11. No JavaScript is used anywhere on this page.</p>
+      <p>Spacer 12. The target zone begins immediately after this paragraph.</p>
+    </section>
+
+    <h2>START OF TARGET ZONE</h2>
+
+    <section class="target" id="case-a-target">
+      <h3>A TARGET REACHED</h3>
+      <p>Smith, A., Brown, B., and Chen, C. 2025. Plain fragment navigation on an e-reader.</p>
+      <p><a href="#case-a-start">Return to test A</a></p>
+    </section>
+
+    <a name="case-b-target"></a>
+    <section class="target">
+      <h3>B TARGET REACHED</h3>
+      <p>Jones, D. and Martin, E. 2024. Legacy named anchors in simplified article HTML.</p>
+      <p><a href="#case-b-start">Return to test B</a></p>
+    </section>
+
+    <aside class="target" id="case-c-target" epub:type="footnote" role="doc-footnote">
+      <h3>C TARGET OR FOOTNOTE REACHED</h3>
+      <p>Lee, F., Wilson, G., and Novak, H. 2023. EPUB footnote semantics in an Instapaper article.</p>
+      <p><a href="#case-c-start" epub:type="backlink" role="doc-backlink">Return to test C</a></p>
+    </aside>
+
+    <section class="target" id="case-e-target">
+      <h3>E TARGET REACHED</h3>
+      <p>Garcia, I. 2021. Absolute same-page URLs and Kobo's external-browser prompt.</p>
+      <p><a href="#case-e-start">Return to test E</a></p>
+    </section>
+
+    <h2>End of navigation test</h2>
+    <p>Report A through E separately. The final arXiv representation will use the best browser-free behavior, or paragraph-local reference notes if none works.</p>
+  </article>
+</body>
+</html>
