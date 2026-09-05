@@ -450,9 +450,9 @@ The last point is an integration limitation, not a remaining source-HTML failure
 - <https://www.instapaper.com/docs/ereaders/kobo>
 - <https://help.kobo.com/hc/en-us/articles/33359968957463-Use-Instapaper-with-your-Kobo-eReader>
 
-If clickable references become a requirement, the practical next path is a sideloaded EPUB rather than further HTML changes. For the current Instapaper workflow, citations and references must remain understandable without clicking.
+If browser-free in-article reference navigation becomes a requirement, the practical next path is a sideloaded EPUB rather than further HTML changes. The current Instapaper workflow uses absolute links that Kobo can open in its browser after confirmation.
 
-### Pending reference-navigation experiment
+### Completed reference-navigation experiment
 
 Before accepting paragraph-local reference duplication, test whether Kobo can navigate a fragment now that citation text is no longer enclosed by `<cite>`. The earlier fragment result was confounded because Kobo removed the complete `<cite>` element.
 
@@ -464,20 +464,15 @@ Save that exact cache-busted URL as a new Instapaper item. Do not reuse a previo
 
 | Case | Markup under test | Kobo result |
 | --- | --- | --- |
-| A | Plain `href="#target"` with an `id` target | Pending |
-| B | Plain fragment with a legacy `<a name="target">` destination | Pending |
-| C | `epub:type="noteref"` / `epub:type="footnote"` plus document roles | Pending |
-| D | Native `<details>/<summary>` inline disclosure | Pending |
-| E | Absolute same-page URL, expected browser-prompt baseline | Pending |
+| A | Plain `href="#target"` with an `id` target | Only `()` remained; linked text was removed |
+| B | Plain fragment with a legacy `<a name="target">` destination | Only `()` remained; linked text was removed |
+| C | `epub:type="noteref"` / `epub:type="footnote"` plus document roles | Only `()` remained; linked text was removed |
+| D | Native `<details>/<summary>` inline disclosure | Text remained; tapping jumped to the article beginning on Kobo |
+| E | Absolute same-page URL, expected browser-prompt baseline | Link remained; tapping prompted to open the browser |
 
-For A, B, C, and E, record `jump`, `popup`, `browser prompt`, or `nothing`; for D, record `expanded`, `always visible`, `removed`, or `nothing`. Also test the return link after any successful jump.
+The physical Kobo test ruled out every browser-free navigation mechanism. A through C lose the linked citation text, D behaves incorrectly, and E reproduces the browser prompt. Instapaper on the web expands D correctly, confirming that the failure is specific to the Kobo reader.
 
-Selection rule after the physical test:
-
-1. Prefer browser-free internal fragment navigation with a working return path.
-2. Otherwise use an EPUB footnote popup if Kobo provides one.
-3. Otherwise use native disclosure if it expands reliably.
-4. If none works, retain visible numbered citations and insert a compact, plain-HTML reference block immediately after each citing paragraph while keeping the complete bibliography at the end.
+Case E was selected after comparison with a paragraph-local reference preview. Although E asks for confirmation before opening Kobo's browser, it preserves the normal reading layout, keeps citation text visible, and provides working navigation when explicitly requested. The paragraph-local duplication was rejected as substantially less readable.
 
 The relevant published commits are:
 
@@ -485,6 +480,8 @@ The relevant published commits are:
 - `664fb72` — `Make arXiv links absolute for Kobo`: useful negative test because absolute URLs alone did not preserve `<cite>` contents;
 - `a3bfdf8` — `Preserve citation text on Kobo`: confirmed that plain citation text survives;
 - `af525e1` — `Use simple citation links for Kobo`: retain simple links without `<cite>` wrappers.
+- `b722a97` — `Add Kobo reference navigation test`: publish the five-case physical-device diagnostic.
+- `a5a98e8` — `Preview inline Kobo references`: temporary F preview rejected in favor of E.
 
 ## arXiv failure sequence and confirmed fix
 
