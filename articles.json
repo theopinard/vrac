@@ -1,0 +1,29 @@
+{
+  "articles": [
+    {
+      "source_type": "substack",
+      "source_url": "https://blog.bytebytego.com/p/top-ai-agentic-workflow-patterns",
+      "slug": "top-ai-agentic-workflow-patterns"
+    },
+    {
+      "source_type": "substack",
+      "source_url": "https://blog.bytebytego.com/p/the-new-american-ai-model-designed",
+      "slug": "the-new-american-ai-model-designed"
+    },
+    {
+      "source_type": "arxiv",
+      "source_url": "https://arxiv.org/abs/2607.12246v1",
+      "slug": "proximity-features-privacy-compliant-cold-start-personalization-at-airbnb"
+    },
+    {
+      "source_type": "arxiv",
+      "source_url": "https://arxiv.org/abs/2107.05720v1",
+      "slug": "splade-sparse-lexical-and-expansion-model-for-first-stage-ranking"
+    },
+    {
+      "source_type": "arxiv",
+      "source_url": "https://arxiv.org/abs/2607.23749v1",
+      "slug": "breaking-the-loop-an-empirical-comparison-of-strategies-for-novelty-and-freshness-in-youtube-music"
+    }
+  ]
+}

@@ -1,5 +1,10 @@
 # Kobo + Instapaper article republisher handoff
 
+> **Architecture update (2026-09-07):** This file preserves the historical
+> Kobo/Instapaper investigation. Its recommendations against catalog and API
+> automation have been superseded. The current catalog-driven build and
+> explicit per-article Instapaper workflow are documented in `README.md`.
+
 ## Purpose of this document
 
 This is the working context for a follow-up session. It combines the earlier ChatGPT investigation with the implementation and experiments performed in Codex.

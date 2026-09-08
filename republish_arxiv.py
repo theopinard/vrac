@@ -16,6 +16,9 @@ import pymupdf
 import requests
 from bs4 import BeautifulSoup, Tag
 
+from republisher.rendering import render_article_page
+from republisher.workflow import add_article
+
 
 ARXIV_HOSTS = {"arxiv.org", "www.arxiv.org"}
 ARXIV_ID_PATTERN = re.compile(
@@ -56,6 +59,7 @@ USER_AGENT = (
     "+https://github.com/theopinard/vrac)"
 )
 DEFAULT_PUBLIC_ARTICLES_URL = "https://theopinard.github.io/vrac/articles/"
+REPOSITORY_ROOT = Path(__file__).resolve().parent
 
 
 @dataclass(frozen=True)
@@ -82,6 +86,18 @@ def parse_args() -> argparse.Namespace:
         "--public-articles-url",
         default=DEFAULT_PUBLIC_ARTICLES_URL,
         help="Public base URL used to make generated image URLs absolute",
+    )
+    parser.add_argument(
+        "--catalog",
+        type=Path,
+        default=REPOSITORY_ROOT / "articles.json",
+        help="Article source catalog",
+    )
+    parser.add_argument(
+        "--homepage",
+        type=Path,
+        default=REPOSITORY_ROOT / "index.html",
+        help="Generated global article index",
     )
     return parser.parse_args()
 
@@ -899,95 +915,25 @@ def render_page(
     metadata: dict[str, str],
     article: Tag,
     source: ArxivSource,
+    source_url: str,
+    slug: str,
 ) -> str:
-    shell = BeautifulSoup(
-        "<!doctype html><html lang='en'><head></head><body></body></html>",
-        "html.parser",
+    return render_article_page(
+        slug=slug,
+        source_type="arxiv",
+        source_url=source_url,
+        metadata=metadata,
+        content_html=article.decode_contents(formatter="minimal"),
+        source_links=(("arXiv HTML", source.html_url), ("PDF", source.pdf_url)),
     )
-    head = shell.head
-    body = shell.body
-    assert head is not None and body is not None
-
-    charset = shell.new_tag("meta")
-    charset["charset"] = "utf-8"
-    head.append(charset)
-    viewport = shell.new_tag("meta")
-    viewport["name"] = "viewport"
-    viewport["content"] = "width=device-width, initial-scale=1"
-    head.append(viewport)
-    title = shell.new_tag("title")
-    title.string = metadata["title"]
-    head.append(title)
-    style = shell.new_tag("style")
-    style.string = """
-body {
-  max-width: 760px;
-  margin: 2rem auto;
-  padding: 0 1rem;
-  font-family: Georgia, serif;
-  line-height: 1.55;
-}
-img {
-  display: block;
-  max-width: 100%;
-  height: auto;
-  margin: 1.5rem auto;
-}
-figure { margin: 2rem 0; }
-figcaption, .article-meta { font-size: 0.9em; }
-pre {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-blockquote {
-  margin-left: 0;
-  padding-left: 1rem;
-  border-left: 3px solid #999;
-}
-math[display="block"] { margin: 1rem auto; overflow-x: auto; }
-""".strip()
-    head.append(style)
-
-    output_article = shell.new_tag("article")
-    heading = shell.new_tag("h1")
-    heading.string = metadata["title"]
-    output_article.append(heading)
-
-    details = [
-        metadata.get("author"),
-        metadata.get("publication"),
-        metadata.get("date"),
-    ]
-    byline = shell.new_tag("p")
-    byline["class"] = "article-meta"
-    byline.string = " · ".join(detail for detail in details if detail)
-    output_article.append(byline)
-
-    links = shell.new_tag("p")
-    links["class"] = "article-meta"
-    links.append("Original: ")
-    html_link = shell.new_tag("a", href=source.html_url)
-    html_link.string = "arXiv HTML"
-    links.append(html_link)
-    links.append(" · ")
-    pdf_link = shell.new_tag("a", href=source.pdf_url)
-    pdf_link.string = "PDF"
-    links.append(pdf_link)
-    output_article.append(links)
-
-    fragment = BeautifulSoup(article.decode_contents(formatter="minimal"), "html.parser")
-    for child in list(fragment.contents):
-        output_article.append(child)
-    body.append(output_article)
-    rendered = shell.html.decode(formatter="minimal")
-    rendered = "\n".join(line.rstrip() for line in rendered.splitlines())
-    return "<!doctype html>\n" + rendered + "\n"
 
 
 def republish(
     url: str,
     output_root: Path,
     public_articles_url: str = DEFAULT_PUBLIC_ARTICLES_URL,
+    *,
+    slug_override: str | None = None,
 ) -> Path:
     source = fetch_arxiv_source(url)
     soup = BeautifulSoup(source.html, "html.parser")
@@ -1000,7 +946,7 @@ def republish(
     if article is None:
         raise ValueError("Could not copy the semantic arXiv article")
 
-    slug = slug_from_title(metadata["title"])
+    slug = slug_override or slug_from_title(metadata["title"])
     asset_base_url = urljoin(public_articles_url.rstrip("/") + "/", slug + "/")
     output_directory = output_root / slug
     with tempfile.TemporaryDirectory(prefix="arxiv-republish-") as temporary:
@@ -1033,7 +979,7 @@ def republish(
         sanitize_article(article, source.html_url, asset_base_url)
         if article.find("svg") or article.find("object", type="image/svg+xml"):
             raise ValueError("An SVG remained after figure conversion")
-        html = render_page(metadata, article, source)
+        html = render_page(metadata, article, source, url, slug)
 
         output_directory.mkdir(parents=True, exist_ok=True)
         for pattern in ("figure-*.png", "figure-*.jpg", "table-*.png", "table-*.jpg"):
@@ -1049,10 +995,21 @@ def republish(
 def main() -> int:
     args = parse_args()
     try:
-        output_path = republish(
-            args.url,
-            args.output_root,
-            args.public_articles_url,
+        def builder(url: str, output_root: Path, slug: str | None) -> Path:
+            return republish(
+                url,
+                output_root,
+                args.public_articles_url,
+                slug_override=slug,
+            )
+
+        _spec, output_path = add_article(
+            source_url=args.url,
+            source_type="arxiv",
+            catalog_path=args.catalog,
+            output_root=args.output_root,
+            homepage_path=args.homepage,
+            builder=builder,
         )
     except (requests.RequestException, pymupdf.FileDataError, ValueError) as error:
         print(f"error: {error}", file=sys.stderr)

@@ -3,9 +3,13 @@
   max-width: 760px;
   margin: 2rem auto;
   padding: 0 1rem;
+  color: #202020;
+  background: #fff;
   font-family: Georgia, serif;
   line-height: 1.55;
 }
+a { color: #315f8c; }
+.library-link { margin-bottom: 2rem; }
 img {
   display: block;
   max-width: 100%;
@@ -23,7 +27,8 @@ blockquote {
   padding-left: 1rem;
   border-left: 3px solid #999;
 }
-math[display="block"] { margin: 1rem auto; overflow-x: auto; }</style></head><body><article><h1>Proximity Features: Privacy-Compliant Cold-Start Personalization at Airbnb</h1><p class="article-meta">Wei Jiang, Bin Xu, Hui Gao, Bharathi Thangamani, Weiwei Guo, Sundar Srinivasavaradhan, Tracy Yu, Huiji Gao, Michael Kinoti · arXiv:2607.12246v1 · 14 Jul 2026</p><p class="article-meta">Original: <a href="https://arxiv.org/html/2607.12246v1">arXiv HTML</a> · <a href="https://arxiv.org/pdf/2607.12246v1">PDF</a></p>
+math[display="block"] { margin: 1rem auto; overflow-x: auto; }</style><meta content="proximity-features-privacy-compliant-cold-start-personalization-at-airbnb" name="vrac-slug"/><meta content="arxiv" name="vrac-source-type"/><meta content="https://arxiv.org/abs/2607.12246v1" name="vrac-source-url"/><meta content="Proximity Features: Privacy-Compliant Cold-Start Personalization at Airbnb" name="vrac-title"/><meta content="Wei Jiang, Bin Xu, Hui Gao, Bharathi Thangamani, Weiwei Guo, Sundar Srinivasavaradhan, Tracy Yu, Huiji Gao, Michael Kinoti" name="vrac-author"/><meta content="arXiv:2607.12246v1" name="vrac-publication"/><meta content="14 Jul 2026" name="vrac-published"/><meta content="f812cc25a65ccb23ceecad2c4bab461fe2d9cc0739f2dbea2f19cc8289be2aec" name="vrac-content-sha256"/></head><body><p class="library-link"><a href="../../">All articles</a></p><article><h1>Proximity Features: Privacy-Compliant Cold-Start Personalization at Airbnb</h1><p class="article-meta">Wei Jiang, Bin Xu, Hui Gao, Bharathi Thangamani, Weiwei Guo, Sundar Srinivasavaradhan, Tracy Yu, Huiji Gao, Michael Kinoti · arXiv:2607.12246v1 · 14 Jul 2026</p><p class="article-meta">Original: <a href="https://arxiv.org/html/2607.12246v1">arXiv HTML</a> · <a href="https://arxiv.org/pdf/2607.12246v1">PDF</a></p>
+<span><span><span><span>Conference: </span>KDD Workshop on Two-sided Marketplace Optimization; August 9, 2026; Jeju, South Korea</span><span><span>CCS: </span>Information systems Recommender systems</span><span><span>CCS: </span>Information systems Personalization</span><span><span>CCS: </span>Information systems Search personalization</span><span><span>CCS: </span>Security and privacy Privacy protections</span></span></span>
 <div id="abstract1"><h2>Abstract</h2>
 <p id="abstract1.1">Personalization in two-sided marketplaces relies heavily on user-level features,
 yet for platforms with infrequent, high-consideration purchases, a large fraction
@@ -73,7 +78,7 @@ features are either unavailable (for logged-out users) or too sparse to be usefu
 <div id="S1.p3">
 <p id="S1.p3.1">Compounding this challenge, evolving privacy regulations impose additional
 constraints. Under the General Data Protection Regulation
-(GDPR) <cite>(<a href="#bib.bib23">Voigt and von dem Bussche 2017</a>)</cite>, cookie-tracking requires explicit consent for
+(GDPR) (<a href="https://theopinard.github.io/vrac/articles/proximity-features-privacy-compliant-cold-start-personalization-at-airbnb/#reference-22">Voigt and von dem Bussche, 2017</a>), cookie-tracking requires explicit consent for
 non-essential use cases such as marketing personalization. With increasing
 restrictions on third-party cookies, identifier-based approaches face further
 erosion for anonymous users. Any feature system targeting cold-start users in
@@ -124,14 +129,14 @@ operate within consent-gated, aggregated processing and deletion controls.</p>
 </div></li>
 </ol>
 <p id="S1.p5.2">The paper presents the core clustering algorithm and production-scale system
-design (Section <a href="#S2"><span>2</span></a>), followed by empirical results from A/B
-experiments across multiple surfaces (Section <a href="#S4"><span>4</span></a>).</p>
+design (Section <a href="https://theopinard.github.io/vrac/articles/proximity-features-privacy-compliant-cold-start-personalization-at-airbnb/#S2"><span>2</span></a>), followed by empirical results from A/B
+experiments across multiple surfaces (Section <a href="https://theopinard.github.io/vrac/articles/proximity-features-privacy-compliant-cold-start-personalization-at-airbnb/#S4"><span>4</span></a>).</p>
 </div>
 </section>
 <section id="S2">
 <h2><span>2. </span>System Design</h2>
 <div id="S2.p1">
-<p id="S2.p1.1">Figure <a href="#acmlabel1"><span>1</span></a> provides an overview of the Proximity Features
+<p id="S2.p1.1">Figure <a href="https://theopinard.github.io/vrac/articles/proximity-features-privacy-compliant-cold-start-personalization-at-airbnb/#acmlabel1"><span>1</span></a> provides an overview of the Proximity Features
 system. Each component is described below.</p>
 </div>
 <figure id="S2.F1"><img alt="Figure 1. System architecture. Offline: the adaptive clustering algorithm runs once at bootstrap to establish the proximity key partition; the IP-to-key mapping, coordinate-to-scalar mapping, and tile-to-bucket-count mapping are refreshed d" height="651" src="https://theopinard.github.io/vrac/articles/proximity-features-privacy-compliant-cold-start-personalization-at-airbnb/figure-1.jpg" width="1199"/><figcaption><span>Figure 1. </span>System architecture. Offline: the adaptive clustering
@@ -146,7 +151,7 @@ resolves it to an IP.<span id="acmlabel1">System architecture diagram showing th
 <section id="S2.SS1">
 <h3><span>2.1. </span>Geo-IP Data Source</h3>
 <div id="S2.SS1.p1">
-<p id="S2.SS1.p1.1">Geo-IP databases <cite>(<a href="#bib.bib20">Poese et al. 2011</a>)</cite> map IP addresses to
+<p id="S2.SS1.p1.1">Geo-IP databases (<a href="https://theopinard.github.io/vrac/articles/proximity-features-privacy-compliant-cold-start-personalization-at-airbnb/#reference-19">Poese et al., 2011</a>) map IP addresses to
 latitude/longitude coordinates. A regularly updated geo-IP data source covers
 the vast majority of Airbnb’s global traffic. In our internal analysis,
 city-level agreement is approximately 80%. Most IP addresses map to a single,
@@ -160,7 +165,7 @@ specific addresses or households, even though they include more than two decimal
 places of precision. As a result, multiple IP addresses naturally map to the
 same latitude/longitude pair, typically representing a city center. This
 property is foundational to the privacy design described in
-Section <a href="#S2.SS6"><span>2.6</span></a>.</p>
+Section <a href="https://theopinard.github.io/vrac/articles/proximity-features-privacy-compliant-cold-start-personalization-at-airbnb/#S2.SS6"><span>2.6</span></a>.</p>
 </div>
 <div id="S2.SS1.p3">
 <p id="S2.SS1.p3.1">As a data quality measure, bot traffic is filtered prior to clustering. Automated
@@ -178,7 +183,7 @@ is constructed from three components:</p>
 <p><math alttext="\text{key}=\text{base64}\bigl(\lfloor\text{lat}\times s\rfloor,\;\lfloor\text{lng}\times s\rfloor,\;h(\text{ip})\bmod b\bigr)" class="ltx_Math" display="block" id="S2.E1.m1" intent=":literal"><semantics><mrow><mtext>key</mtext><mo>=</mo><mrow><mtext>base64</mtext><mo lspace="0em" rspace="0em">​</mo><mrow><mo maxsize="1.200em" minsize="1.200em">(</mo><mrow><mo stretchy="false">⌊</mo><mrow><mtext>lat</mtext><mo lspace="0.222em" rspace="0.222em">×</mo><mi>s</mi></mrow><mo stretchy="false">⌋</mo></mrow><mo>,</mo><mrow><mo stretchy="false">⌊</mo><mrow><mtext>lng</mtext><mo lspace="0.222em" rspace="0.222em">×</mo><mi>s</mi></mrow><mo stretchy="false">⌋</mo></mrow><mo>,</mo><mrow><mrow><mi>h</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mtext>ip</mtext><mo stretchy="false">)</mo></mrow></mrow><mo>mod</mo><mi>b</mi></mrow><mo maxsize="1.200em" minsize="1.200em">)</mo></mrow></mrow></mrow><annotation encoding="application/x-tex">\text{key}=\text{base64}\bigl(\lfloor\text{lat}\times s\rfloor,\;\lfloor\text{lng}\times s\rfloor,\;h(\text{ip})\bmod b\bigr)</annotation></semantics></math> (1)</p>
 <p id="S2.SS2.p1.2">where <math alttext="s" class="ltx_Math" display="inline" id="S2.SS2.p1.m1" intent=":literal"><semantics><mi>s</mi><annotation encoding="application/x-tex">s</annotation></semantics></math> is the <em id="S2.SS2.p1.2.1">proximity scalar</em> controlling geographic tile size, <math alttext="b" class="ltx_Math" display="inline" id="S2.SS2.p1.m2" intent=":literal"><semantics><mi>b</mi><annotation encoding="application/x-tex">b</annotation></semantics></math>
 is the number of IP hash buckets within that tile, and <math alttext="h" class="ltx_Math" display="inline" id="S2.SS2.p1.m3" intent=":literal"><semantics><mi>h</mi><annotation encoding="application/x-tex">h</annotation></semantics></math> is a deterministic
-hash function (<span id="S2.SS2.p1.2.2">xxhash64</span> <cite>(<a href="#bib.bib8">Collet 2012</a>)</cite> is used for consistency between offline and online paths). The key is base64-encoded for compact storage and transmission.</p>
+hash function (<span id="S2.SS2.p1.2.2">xxhash64</span> (<a href="https://theopinard.github.io/vrac/articles/proximity-features-privacy-compliant-cold-start-personalization-at-airbnb/#reference-7">Collet, 2012</a>) is used for consistency between offline and online paths). The key is base64-encoded for compact storage and transmission.</p>
 </div>
 <div id="S2.SS2.p2">
 <p id="S2.SS2.p2.1">For dense locations (Phase 1 of the clustering algorithm), <math alttext="s" class="ltx_Math" display="inline" id="S2.SS2.p2.m1" intent=":literal"><semantics><mi>s</mi><annotation encoding="application/x-tex">s</annotation></semantics></math> corresponds to
@@ -218,7 +223,7 @@ that each bucket corresponds to a geographic neighborhood; maximizing <math altt
 preserves the finest granularity possible. The threshold <math alttext="T\approx 1{,}000" class="ltx_Math" display="inline" id="S2.SS3.p1.m8" intent=":literal"><semantics><mrow><mi>T</mi><mo>≈</mo><mn>1,000</mn></mrow><annotation encoding="application/x-tex">T\approx 1{,}000</annotation></semantics></math> ensures each bucket
 aggregates over sufficiently many users, serving a dual objective: it
 is intended to provide a <math alttext="k" class="ltx_Math" display="inline" id="S2.SS3.p1.m9" intent=":literal"><semantics><mi>k</mi><annotation encoding="application/x-tex">k</annotation></semantics></math>-anonymity-like privacy
-property <cite>(<a href="#bib.bib22">Sweeney 2002</a>)</cite>, and it provides enough observations
+property (<a href="https://theopinard.github.io/vrac/articles/proximity-features-privacy-compliant-cold-start-personalization-at-airbnb/#reference-21">Sweeney, 2002</a>), and it provides enough observations
 for stable estimation of user-level features (e.g., destination distributions).
 Because the algorithm is greedy, <math alttext="T" class="ltx_Math" display="inline" id="S2.SS3.p1.m10" intent=":literal"><semantics><mi>T</mi><annotation encoding="application/x-tex">T</annotation></semantics></math> is a target rather
 than a strict guarantee—some buckets may be smaller, particularly in
@@ -228,108 +233,99 @@ low-traffic regions assigned at the coarsest resolution.</p>
 <p id="S2.SS3.p2.1">The challenge is that user density varies by orders of magnitude: a single
 coordinate near a major airport may correspond to tens of thousands of users,
 while rural coordinates may have only a handful. Solving
-Equation <a href="#S2.E2"><span>2</span></a> exactly is NP-hard <cite>(<a href="#bib.bib12">Garey and Johnson 1979</a>)</cite>; it is an instance of
-the bin covering problem <cite>(<a href="#bib.bib3">Assmann et al. 1984</a>)</cite>. Rather than pursuing
+Equation <a href="https://theopinard.github.io/vrac/articles/proximity-features-privacy-compliant-cold-start-personalization-at-airbnb/#S2.E2"><span>2</span></a> exactly is NP-hard (<a href="https://theopinard.github.io/vrac/articles/proximity-features-privacy-compliant-cold-start-personalization-at-airbnb/#reference-11">Garey and Johnson, 1979</a>); it is an instance of
+the bin covering problem (<a href="https://theopinard.github.io/vrac/articles/proximity-features-privacy-compliant-cold-start-personalization-at-airbnb/#reference-2">Assmann et al., 1984</a>). Rather than pursuing
 theoretical approximation guarantees, a greedy two-phase heuristic is proposed
 that exploits the structure of geo-IP data for computational efficiency and
-practical effectiveness (Algorithm <a href="#algorithm1"><span>1</span></a>).</p>
+practical effectiveness (Algorithm <a href="https://theopinard.github.io/vrac/articles/proximity-features-privacy-compliant-cold-start-personalization-at-airbnb/#algorithm1"><span>1</span></a>).</p>
 </div>
 <figure id="algorithm1">
-<div id="algorithm1.3">
-<div id="algorithm1.3.1">
-<span id="algorithm1.3.1.1"><span id="algorithm1.3.1.1.1">Input:</span> </span>Set of (lat, lng, ip) tuples from consented site visits; target bucket size <math alttext="T" class="ltx_Math" display="inline" id="algorithm1.m1" intent=":literal"><semantics><mi>T</mi><annotation encoding="application/x-tex">T</annotation></semantics></math>; minimum IP count <math alttext="n_{\text{ip}}^{\min}" class="ltx_Math" display="inline" id="algorithm1.m2" intent=":literal"><semantics><msubsup><mi>n</mi><mtext>ip</mtext><mi>min</mi></msubsup><annotation encoding="application/x-tex">n_{\text{ip}}^{\min}</annotation></semantics></math>; scalar range <math alttext="[e_{\min},e_{\max}]" class="ltx_Math" display="inline" id="algorithm1.m3" intent=":literal"><semantics><mrow><mo stretchy="false">[</mo><msub><mi>e</mi><mi>min</mi></msub><mo>,</mo><msub><mi>e</mi><mi>max</mi></msub><mo stretchy="false">]</mo></mrow><annotation encoding="application/x-tex">[e_{\min},e_{\max}]</annotation></semantics></math>; ratio threshold <math alttext="\rho" class="ltx_Math" display="inline" id="algorithm1.m4" intent=":literal"><semantics><mi>ρ</mi><annotation encoding="application/x-tex">\rho</annotation></semantics></math>
+<figcaption><span><span id="algorithm1.3">Algorithm 1</span> </span>Adaptive Proximity Clustering</figcaption>
+<div id="algorithm1.4">
+<div id="algorithm1.4.1">
+<span id="algorithm1.4.1.1"><span id="algorithm1.4.1.1.1">Input:</span> </span>Set of (lat, lng, ip) tuples from consented site visits; target bucket size <math alttext="T" class="ltx_Math" display="inline" id="algorithm1.m1" intent=":literal"><semantics><mi>T</mi><annotation encoding="application/x-tex">T</annotation></semantics></math>; minimum IP count <math alttext="n_{\text{ip}}^{\min}" class="ltx_Math" display="inline" id="algorithm1.m2" intent=":literal"><semantics><msubsup><mi>n</mi><mtext>ip</mtext><mi>min</mi></msubsup><annotation encoding="application/x-tex">n_{\text{ip}}^{\min}</annotation></semantics></math>; scalar range <math alttext="[e_{\min},e_{\max}]" class="ltx_Math" display="inline" id="algorithm1.m3" intent=":literal"><semantics><mrow><mo stretchy="false">[</mo><msub><mi>e</mi><mi>min</mi></msub><mo>,</mo><msub><mi>e</mi><mi>max</mi></msub><mo stretchy="false">]</mo></mrow><annotation encoding="application/x-tex">[e_{\min},e_{\max}]</annotation></semantics></math>; ratio threshold <math alttext="\rho" class="ltx_Math" display="inline" id="algorithm1.m4" intent=":literal"><semantics><mi>ρ</mi><annotation encoding="application/x-tex">\rho</annotation></semantics></math>
 </div>
-<div id="algorithm1.3.2">
-<span id="algorithm1.3.2.1"><span id="algorithm1.3.2.1.1">Output:</span> </span>Proximity key assignment for each (lat, lng) pair
+<div id="algorithm1.4.2"><span id="algorithm1.4.2.1"><span id="algorithm1.4.2.1.1">Output:</span> </span>Proximity key assignment for each (lat, lng) pair
 </div>
-<div id="algorithm1.3.3">
-<span>1</span>
+<div id="algorithm1.4.3"><span id="algorithm1.4.3.1">// </span><span id="algorithm1.4.3.2">Phase 1: Dense locations --- zoom in via IP hash buckets </span>
 </div>
-<div id="algorithm1.3.4"><span id="algorithm1.3.4.1">// </span><span id="algorithm1.3.4.2">Phase 1: Dense locations --- zoom in via IP hash buckets </span>
+<div id="algorithm1.4.4">
+<span><span id="algorithm1.4.4.1">1</span></span>
+<span id="algorithm1.4.4.2">foreach</span> <em id="algorithm1.4.4.3">unique (lat, lng) pair</em> <span id="algorithm1.4.4.4">do</span>
 </div>
-<div id="algorithm1.3.5">
-<span id="algorithm1.3.5.1">foreach</span> <em id="algorithm1.3.5.2">unique (lat, lng) pair</em> <span id="algorithm1.3.5.3">do</span>
-<span>2</span>
-</div>
-<div id="algorithm1.3.6">
+<div id="algorithm1.4.5"> <span> </span>
+              <span><span id="algorithm1.4.5.1">2</span></span>
 <math alttext="n_{v}\leftarrow" class="ltx_Math" display="inline" id="algorithm1.m5" intent=":literal"><semantics><mrow><msub><mi>n</mi><mi>v</mi></msub><mo stretchy="false">←</mo><mphantom></mphantom></mrow><annotation encoding="application/x-tex">n_{v}\leftarrow</annotation></semantics></math> number of unique users at (lat, lng);
-              <span>3</span>
 </div>
-<div id="algorithm1.3.7"> <span> </span> 
+<div id="algorithm1.4.6"> <span> </span>
+              <span><span id="algorithm1.4.6.1">3</span></span>
 <math alttext="n_{\text{ip}}\leftarrow" class="ltx_Math" display="inline" id="algorithm1.m6" intent=":literal"><semantics><mrow><msub><mi>n</mi><mtext>ip</mtext></msub><mo stretchy="false">←</mo><mphantom></mphantom></mrow><annotation encoding="application/x-tex">n_{\text{ip}}\leftarrow</annotation></semantics></math> number of unique IP addresses at (lat, lng);
-              <span>4</span>
 </div>
-<div id="algorithm1.3.8"> <span> </span> 
-<span id="algorithm1.3.8.1">if</span> <em id="algorithm1.3.8.2"><math alttext="n_{v}\geq T" class="ltx_Math" display="inline" id="algorithm1.m7" intent=":literal"><semantics><mrow><msub><mi>n</mi><mi>v</mi></msub><mo>≥</mo><mi>T</mi></mrow><annotation encoding="application/x-tex">n_{v}\geq T</annotation></semantics></math> <span id="algorithm1.3.8.2.1">and</span> <math alttext="n_{\text{ip}}\geq n_{\text{ip}}^{\min}" class="ltx_Math" display="inline" id="algorithm1.m8" intent=":literal"><semantics><mrow><msub><mi>n</mi><mtext class="ltx_mathvariant_italic">ip</mtext></msub><mo>≥</mo><msubsup><mi>n</mi><mtext class="ltx_mathvariant_italic">ip</mtext><mi>min</mi></msubsup></mrow><annotation encoding="application/x-tex">n_{\text{ip}}\geq n_{\text{ip}}^{\min}</annotation></semantics></math></em> <span id="algorithm1.3.8.3">then</span>
-<span>5</span>
+<div id="algorithm1.4.7"> <span> </span>
+              <span><span id="algorithm1.4.7.1">4</span></span>
+<span id="algorithm1.4.7.2">if</span> <em id="algorithm1.4.7.3"><math alttext="n_{v}\geq T" class="ltx_Math" display="inline" id="algorithm1.m7" intent=":literal"><semantics><mrow><msub><mi>n</mi><mi>v</mi></msub><mo>≥</mo><mi>T</mi></mrow><annotation encoding="application/x-tex">n_{v}\geq T</annotation></semantics></math> <span id="algorithm1.4.7.3.1">and</span> <math alttext="n_{\text{ip}}\geq n_{\text{ip}}^{\min}" class="ltx_Math" display="inline" id="algorithm1.m8" intent=":literal"><semantics><mrow><msub><mi>n</mi><mtext class="ltx_mathvariant_italic">ip</mtext></msub><mo>≥</mo><msubsup><mi>n</mi><mtext class="ltx_mathvariant_italic">ip</mtext><mi>min</mi></msubsup></mrow><annotation encoding="application/x-tex">n_{\text{ip}}\geq n_{\text{ip}}^{\min}</annotation></semantics></math></em> <span id="algorithm1.4.7.4">then</span>
 </div>
-<div id="algorithm1.3.9"> <span> </span> 
+<div id="algorithm1.4.8"> <span> </span>  <span> </span>
+              <span><span id="algorithm1.4.8.1">5</span></span>
 <math alttext="b\leftarrow\lceil n_{v}/T\rceil" class="ltx_Math" display="inline" id="algorithm1.m9" intent=":literal"><semantics><mrow><mi>b</mi><mo stretchy="false">←</mo><mrow><mo stretchy="false">⌈</mo><mrow><msub><mi>n</mi><mi>v</mi></msub><mo>/</mo><mi>T</mi></mrow><mo stretchy="false">⌉</mo></mrow></mrow><annotation encoding="application/x-tex">b\leftarrow\lceil n_{v}/T\rceil</annotation></semantics></math>;
-              <span>6</span>
 </div>
-<div id="algorithm1.3.10"> <span> </span>  <span> </span> 
-Assign each user to bucket <math alttext="({\text{lat}},\;{\text{lng}},\;h(\text{ip})\bmod b)" class="ltx_Math" display="inline" id="algorithm1.m10" intent=":literal"><semantics><mrow><mo stretchy="false">(</mo><mtext>lat</mtext><mo>,</mo><mtext>lng</mtext><mo>,</mo><mrow><mrow><mi>h</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mtext>ip</mtext><mo stretchy="false">)</mo></mrow></mrow><mo>mod</mo><mi>b</mi></mrow><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">({\text{lat}},\;{\text{lng}},\;h(\text{ip})\bmod b)</annotation></semantics></math>;
-              <span>7</span>
+<div id="algorithm1.4.9"> <span> </span>  <span> </span>
+              <span><span id="algorithm1.4.9.1">6</span></span>
+            Assign each user to bucket <math alttext="({\text{lat}},\;{\text{lng}},\;h(\text{ip})\bmod b)" class="ltx_Math" display="inline" id="algorithm1.m10" intent=":literal"><semantics><mrow><mo stretchy="false">(</mo><mtext>lat</mtext><mo>,</mo><mtext>lng</mtext><mo>,</mo><mrow><mrow><mi>h</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mtext>ip</mtext><mo stretchy="false">)</mo></mrow></mrow><mo>mod</mo><mi>b</mi></mrow><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">({\text{lat}},\;{\text{lng}},\;h(\text{ip})\bmod b)</annotation></semantics></math>;
 </div>
-<div id="algorithm1.3.11"> <span> </span>  <span> </span> 
-Mark (lat, lng) as <em id="algorithm1.3.11.1">assigned</em>;
-              <span>8</span>
+<div id="algorithm1.4.10"> <span> </span>  <span> </span>
+              <span><span id="algorithm1.4.10.1">7</span></span>
+            Mark (lat, lng) as <em id="algorithm1.4.10.2">assigned</em>;
 </div>
-<div id="algorithm1.3.12"> <span> </span>  <span> </span> 
-
-              <span>9</span>
+<div id="algorithm1.4.11"><span id="algorithm1.4.11.1">// </span><span id="algorithm1.4.11.2">Phase 2: Sparse locations --- zoom out via multi-pass coarsening </span>
 </div>
-<div id="algorithm1.3.13"><span id="algorithm1.3.13.1">// </span><span id="algorithm1.3.13.2">Phase 2: Sparse locations --- zoom out via multi-pass coarsening </span>
-</div>
-<div id="algorithm1.3.14">
+<div id="algorithm1.4.12">
+<span><span id="algorithm1.4.12.1">8</span></span>
 <math alttext="R\leftarrow" class="ltx_Math" display="inline" id="algorithm1.m11" intent=":literal"><semantics><mrow><mi>R</mi><mo stretchy="false">←</mo><mphantom></mphantom></mrow><annotation encoding="application/x-tex">R\leftarrow</annotation></semantics></math> all unassigned (lat, lng) pairs;
-              <span>10</span>
 </div>
-<div id="algorithm1.3.15">
-<span id="algorithm1.3.15.1">for</span> <em id="algorithm1.3.15.2"><math alttext="e\leftarrow e_{\max}" class="ltx_Math" display="inline" id="algorithm1.m12" intent=":literal"><semantics><mrow><mi>e</mi><mo stretchy="false">←</mo><msub><mi>e</mi><mi>max</mi></msub></mrow><annotation encoding="application/x-tex">e\leftarrow e_{\max}</annotation></semantics></math> <span id="algorithm1.3.15.2.1">to</span> <math alttext="e_{\min}" class="ltx_Math" display="inline" id="algorithm1.m13" intent=":literal"><semantics><msub><mi>e</mi><mi>min</mi></msub><annotation encoding="application/x-tex">e_{\min}</annotation></semantics></math></em> <span id="algorithm1.3.15.3">do</span>
-<span>11</span>
+<div id="algorithm1.4.13">
+<span><span id="algorithm1.4.13.1">9</span></span>
+<span id="algorithm1.4.13.2">for</span> <em id="algorithm1.4.13.3"><math alttext="e\leftarrow e_{\max}" class="ltx_Math" display="inline" id="algorithm1.m12" intent=":literal"><semantics><mrow><mi>e</mi><mo stretchy="false">←</mo><msub><mi>e</mi><mi>max</mi></msub></mrow><annotation encoding="application/x-tex">e\leftarrow e_{\max}</annotation></semantics></math> <span id="algorithm1.4.13.3.1">to</span> <math alttext="e_{\min}" class="ltx_Math" display="inline" id="algorithm1.m13" intent=":literal"><semantics><msub><mi>e</mi><mi>min</mi></msub><annotation encoding="application/x-tex">e_{\min}</annotation></semantics></math></em> <span id="algorithm1.4.13.4">do</span>
 </div>
-<div id="algorithm1.3.16">
+<div id="algorithm1.4.14"> <span> </span>
+              <span><span id="algorithm1.4.14.1">10</span></span>
 <math alttext="s\leftarrow 10^{e}" class="ltx_Math" display="inline" id="algorithm1.m14" intent=":literal"><semantics><mrow><mi>s</mi><mo stretchy="false">←</mo><msup><mn>10</mn><mi>e</mi></msup></mrow><annotation encoding="application/x-tex">s\leftarrow 10^{e}</annotation></semantics></math>;
-              <span>12</span>
 </div>
-<div id="algorithm1.3.17"> <span> </span> 
-Quantize each <math alttext="(lat,lng)\in R" class="ltx_Math" display="inline" id="algorithm1.m15" intent=":literal"><semantics><mrow><mrow><mo stretchy="false">(</mo><mrow><mi>l</mi><mo lspace="0em" rspace="0em">​</mo><mi>a</mi><mo lspace="0em" rspace="0em">​</mo><mi>t</mi></mrow><mo>,</mo><mrow><mi>l</mi><mo lspace="0em" rspace="0em">​</mo><mi>n</mi><mo lspace="0em" rspace="0em">​</mo><mi>g</mi></mrow><mo stretchy="false">)</mo></mrow><mo>∈</mo><mi>R</mi></mrow><annotation encoding="application/x-tex">(lat,lng)\in R</annotation></semantics></math> to tile <math alttext="(\lfloor lat\cdot s\rfloor,\;\lfloor lng\cdot s\rfloor)" class="ltx_Math" display="inline" id="algorithm1.m16" intent=":literal"><semantics><mrow><mo stretchy="false">(</mo><mrow><mo stretchy="false">⌊</mo><mrow><mrow><mi>l</mi><mo lspace="0em" rspace="0em">​</mo><mi>a</mi><mo lspace="0em" rspace="0em">​</mo><mi>t</mi></mrow><mo lspace="0.222em" rspace="0.222em">⋅</mo><mi>s</mi></mrow><mo stretchy="false">⌋</mo></mrow><mo rspace="0.447em">,</mo><mrow><mo stretchy="false">⌊</mo><mrow><mrow><mi>l</mi><mo lspace="0em" rspace="0em">​</mo><mi>n</mi><mo lspace="0em" rspace="0em">​</mo><mi>g</mi></mrow><mo lspace="0.222em" rspace="0.222em">⋅</mo><mi>s</mi></mrow><mo stretchy="false">⌋</mo></mrow><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">(\lfloor lat\cdot s\rfloor,\;\lfloor lng\cdot s\rfloor)</annotation></semantics></math>;
-              <span>13</span>
+<div id="algorithm1.4.15"> <span> </span>
+              <span><span id="algorithm1.4.15.1">11</span></span>
+            Quantize each <math alttext="(lat,lng)\in R" class="ltx_Math" display="inline" id="algorithm1.m15" intent=":literal"><semantics><mrow><mrow><mo stretchy="false">(</mo><mrow><mi>l</mi><mo lspace="0em" rspace="0em">​</mo><mi>a</mi><mo lspace="0em" rspace="0em">​</mo><mi>t</mi></mrow><mo>,</mo><mrow><mi>l</mi><mo lspace="0em" rspace="0em">​</mo><mi>n</mi><mo lspace="0em" rspace="0em">​</mo><mi>g</mi></mrow><mo stretchy="false">)</mo></mrow><mo>∈</mo><mi>R</mi></mrow><annotation encoding="application/x-tex">(lat,lng)\in R</annotation></semantics></math> to tile <math alttext="(\lfloor lat\cdot s\rfloor,\;\lfloor lng\cdot s\rfloor)" class="ltx_Math" display="inline" id="algorithm1.m16" intent=":literal"><semantics><mrow><mo stretchy="false">(</mo><mrow><mo stretchy="false">⌊</mo><mrow><mrow><mi>l</mi><mo lspace="0em" rspace="0em">​</mo><mi>a</mi><mo lspace="0em" rspace="0em">​</mo><mi>t</mi></mrow><mo lspace="0.222em" rspace="0.222em">⋅</mo><mi>s</mi></mrow><mo stretchy="false">⌋</mo></mrow><mo rspace="0.447em">,</mo><mrow><mo stretchy="false">⌊</mo><mrow><mrow><mi>l</mi><mo lspace="0em" rspace="0em">​</mo><mi>n</mi><mo lspace="0em" rspace="0em">​</mo><mi>g</mi></mrow><mo lspace="0.222em" rspace="0.222em">⋅</mo><mi>s</mi></mrow><mo stretchy="false">⌋</mo></mrow><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">(\lfloor lat\cdot s\rfloor,\;\lfloor lng\cdot s\rfloor)</annotation></semantics></math>;
 </div>
-<div id="algorithm1.3.18"> <span> </span> 
-Compute <math alttext="n_{v}" class="ltx_Math" display="inline" id="algorithm1.m17" intent=":literal"><semantics><msub><mi>n</mi><mi>v</mi></msub><annotation encoding="application/x-tex">n_{v}</annotation></semantics></math> per quantized tile;
-              <span>14</span>
+<div id="algorithm1.4.16"> <span> </span>
+              <span><span id="algorithm1.4.16.1">12</span></span>
+            Compute <math alttext="n_{v}" class="ltx_Math" display="inline" id="algorithm1.m17" intent=":literal"><semantics><msub><mi>n</mi><mi>v</mi></msub><annotation encoding="application/x-tex">n_{v}</annotation></semantics></math> per quantized tile;
 </div>
-<div id="algorithm1.3.19"> <span> </span> 
+<div id="algorithm1.4.17"> <span> </span>
+              <span><span id="algorithm1.4.17.1">13</span></span>
 <math alttext="r\leftarrow" class="ltx_Math" display="inline" id="algorithm1.m18" intent=":literal"><semantics><mrow><mi>r</mi><mo stretchy="false">←</mo><mphantom></mphantom></mrow><annotation encoding="application/x-tex">r\leftarrow</annotation></semantics></math> fraction of tiles with <math alttext="n_{v}\geq T" class="ltx_Math" display="inline" id="algorithm1.m19" intent=":literal"><semantics><mrow><msub><mi>n</mi><mi>v</mi></msub><mo>≥</mo><mi>T</mi></mrow><annotation encoding="application/x-tex">n_{v}\geq T</annotation></semantics></math>;
-              <span>15</span>
 </div>
-<div id="algorithm1.3.20"> <span> </span> 
-<span id="algorithm1.3.20.1">if</span> <em id="algorithm1.3.20.2"><math alttext="r\geq\rho" class="ltx_Math" display="inline" id="algorithm1.m20" intent=":literal"><semantics><mrow><mi>r</mi><mo>≥</mo><mi>ρ</mi></mrow><annotation encoding="application/x-tex">r\geq\rho</annotation></semantics></math> <span id="algorithm1.3.20.2.1">or</span> <math alttext="e=e_{\min}" class="ltx_Math" display="inline" id="algorithm1.m21" intent=":literal"><semantics><mrow><mi>e</mi><mo>=</mo><msub><mi>e</mi><mi>min</mi></msub></mrow><annotation encoding="application/x-tex">e=e_{\min}</annotation></semantics></math></em> <span id="algorithm1.3.20.3">then</span>
-<span>16</span>
+<div id="algorithm1.4.18"> <span> </span>
+              <span><span id="algorithm1.4.18.1">14</span></span>
+<span id="algorithm1.4.18.2">if</span> <em id="algorithm1.4.18.3"><math alttext="r\geq\rho" class="ltx_Math" display="inline" id="algorithm1.m20" intent=":literal"><semantics><mrow><mi>r</mi><mo>≥</mo><mi>ρ</mi></mrow><annotation encoding="application/x-tex">r\geq\rho</annotation></semantics></math> <span id="algorithm1.4.18.3.1">or</span> <math alttext="e=e_{\min}" class="ltx_Math" display="inline" id="algorithm1.m21" intent=":literal"><semantics><mrow><mi>e</mi><mo>=</mo><msub><mi>e</mi><mi>min</mi></msub></mrow><annotation encoding="application/x-tex">e=e_{\min}</annotation></semantics></math></em> <span id="algorithm1.4.18.4">then</span>
 </div>
-<div id="algorithm1.3.21"> <span> </span> 
-<span id="algorithm1.3.21.1">foreach</span> <em id="algorithm1.3.21.2">tile with <math alttext="n_{v}\geq T" class="ltx_Math" display="inline" id="algorithm1.m22" intent=":literal"><semantics><mrow><msub><mi>n</mi><mi>v</mi></msub><mo>≥</mo><mi>T</mi></mrow><annotation encoding="application/x-tex">n_{v}\geq T</annotation></semantics></math> <span id="algorithm1.3.21.2.1">(</span>or all remaining tiles if <math alttext="e=e_{\min}" class="ltx_Math" display="inline" id="algorithm1.m23" intent=":literal"><semantics><mrow><mi>e</mi><mo>=</mo><msub><mi>e</mi><mi>min</mi></msub></mrow><annotation encoding="application/x-tex">e=e_{\min}</annotation></semantics></math><span id="algorithm1.3.21.2.2">)</span></em> <span id="algorithm1.3.21.3">do</span>
-<span>17</span>
+<div id="algorithm1.4.19"> <span> </span>  <span> </span>
+              <span><span id="algorithm1.4.19.1">15</span></span>
+<span id="algorithm1.4.19.2">foreach</span> <em id="algorithm1.4.19.3">tile with <math alttext="n_{v}\geq T" class="ltx_Math" display="inline" id="algorithm1.m22" intent=":literal"><semantics><mrow><msub><mi>n</mi><mi>v</mi></msub><mo>≥</mo><mi>T</mi></mrow><annotation encoding="application/x-tex">n_{v}\geq T</annotation></semantics></math> <span id="algorithm1.4.19.3.1">(</span>or all remaining tiles if <math alttext="e=e_{\min}" class="ltx_Math" display="inline" id="algorithm1.m23" intent=":literal"><semantics><mrow><mi>e</mi><mo>=</mo><msub><mi>e</mi><mi>min</mi></msub></mrow><annotation encoding="application/x-tex">e=e_{\min}</annotation></semantics></math><span id="algorithm1.4.19.3.2">)</span></em> <span id="algorithm1.4.19.4">do</span>
 </div>
-<div id="algorithm1.3.22"> <span> </span>  <span> </span> 
-Assign all (lat, lng) in tile with scalar <math alttext="s" class="ltx_Math" display="inline" id="algorithm1.m24" intent=":literal"><semantics><mi>s</mi><annotation encoding="application/x-tex">s</annotation></semantics></math> and <math alttext="b=1" class="ltx_Math" display="inline" id="algorithm1.m25" intent=":literal"><semantics><mrow><mi>b</mi><mo>=</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">b=1</annotation></semantics></math>;
-              <span>18</span>
+<div id="algorithm1.4.20"> <span> </span>  <span> </span>  <span> </span>
+              <span><span id="algorithm1.4.20.1">16</span></span>
+            Assign all (lat, lng) in tile with scalar <math alttext="s" class="ltx_Math" display="inline" id="algorithm1.m24" intent=":literal"><semantics><mi>s</mi><annotation encoding="application/x-tex">s</annotation></semantics></math> and <math alttext="b=1" class="ltx_Math" display="inline" id="algorithm1.m25" intent=":literal"><semantics><mrow><mi>b</mi><mo>=</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">b=1</annotation></semantics></math>;
 </div>
-<div id="algorithm1.3.23"> <span> </span>  <span> </span>  <span> </span> 
+<div id="algorithm1.4.21"> <span> </span>  <span> </span>
+              <span><span id="algorithm1.4.21.1">17</span></span>
 <math alttext="R\leftarrow R\setminus\text{assigned pairs}" class="ltx_Math" display="inline" id="algorithm1.m26" intent=":literal"><semantics><mrow><mi>R</mi><mo stretchy="false">←</mo><mrow><mi>R</mi><mo>∖</mo><mtext>assigned pairs</mtext></mrow></mrow><annotation encoding="application/x-tex">R\leftarrow R\setminus\text{assigned pairs}</annotation></semantics></math>;
-              <span>19</span>
 </div>
-<div id="algorithm1.3.24"> <span> </span>  <span> </span> 
-<span id="algorithm1.3.24.1">if</span> <em id="algorithm1.3.24.2"><math alttext="R=\emptyset" class="ltx_Math" display="inline" id="algorithm1.m27" intent=":literal"><semantics><mrow><mi>R</mi><mo>=</mo><mi mathvariant="normal">∅</mi></mrow><annotation encoding="application/x-tex">R=\emptyset</annotation></semantics></math></em> <span id="algorithm1.3.24.3">then</span> <span id="algorithm1.3.24.4">break</span>;
-              <span>20</span>
+<div id="algorithm1.4.22"> <span> </span>  <span> </span>
+              <span><span id="algorithm1.4.22.1">18</span></span>
+<span id="algorithm1.4.22.2">if</span> <em id="algorithm1.4.22.3"><math alttext="R=\emptyset" class="ltx_Math" display="inline" id="algorithm1.m27" intent=":literal"><semantics><mrow><mi>R</mi><mo>=</mo><mi mathvariant="normal">∅</mi></mrow><annotation encoding="application/x-tex">R=\emptyset</annotation></semantics></math></em> <span id="algorithm1.4.22.4">then</span> <span id="algorithm1.4.22.5">break</span>;
 </div>
-<div id="algorithm1.3.25"> <span> </span>  <span> </span> 
-
+<div id="algorithm1.4.23">
 </div>
 </div>
-<figcaption><span><span id="algorithm1.4">Algorithm 1</span> </span>Adaptive Proximity Clustering</figcaption>
 </figure>
 <section id="S2.SS3.SSS0.Px1">
 <h4>Phase 1: Dense locations (refinement).</h4>
@@ -350,7 +346,7 @@ distribution.</p>
 <h4>Phase 2: Sparse locations (coarsening).</h4>
 <div id="S2.SS3.SSS0.Px2.p1">
 <p id="S2.SS3.SSS0.Px2.p1.1">For the remaining locations, a multi-pass coarsening procedure is applied,
-analogous to adaptive mesh refinement <cite>(<a href="#bib.bib5">Berger and Oliger 1984</a>)</cite>, where
+analogous to adaptive mesh refinement (<a href="https://theopinard.github.io/vrac/articles/proximity-features-privacy-compliant-cold-start-personalization-at-airbnb/#reference-4">Berger and Oliger, 1984</a>), where
 resolution is reduced until sufficient mass accumulates in each cell. The
 algorithm iterates over decreasing scalar values <math alttext="s=10^{e}" class="ltx_Math" display="inline" id="S2.SS3.SSS0.Px2.p1.m1" intent=":literal"><semantics><mrow><mi>s</mi><mo>=</mo><msup><mn>10</mn><mi>e</mi></msup></mrow><annotation encoding="application/x-tex">s=10^{e}</annotation></semantics></math> for
 <math alttext="e\in\{e_{\max},e_{\max}-1,\ldots,e_{\min}\}" class="ltx_Math" display="inline" id="S2.SS3.SSS0.Px2.p1.m2" intent=":literal"><semantics><mrow><mi>e</mi><mo>∈</mo><mrow><mo stretchy="false">{</mo><mrow><msub><mi>e</mi><mi>max</mi></msub><mo>,</mo><mrow><msub><mi>e</mi><mi>max</mi></msub><mo>−</mo><mn>1</mn></mrow><mo>,</mo><mi mathvariant="normal">…</mi><mo>,</mo><msub><mi>e</mi><mi>min</mi></msub></mrow><mo stretchy="false">}</mo></mrow></mrow><annotation encoding="application/x-tex">e\in\{e_{\max},e_{\max}-1,\ldots,e_{\min}\}</annotation></semantics></math>. At each pass, all remaining coordinates are quantized by <math alttext="s" class="ltx_Math" display="inline" id="S2.SS3.SSS0.Px2.p1.m3" intent=":literal"><semantics><mi>s</mi><annotation encoding="application/x-tex">s</annotation></semantics></math> and the number of
@@ -366,7 +362,7 @@ tiles (high <math alttext="s" class="ltx_Math" display="inline" id="S2.SS3.SSS0.
 No IP bucketing is applied for sparse locations (<math alttext="b=1" class="ltx_Math" display="inline" id="S2.SS3.SSS0.Px2.p2.m3" intent=":literal"><semantics><mrow><mi>b</mi><mo>=</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">b=1</annotation></semantics></math>). The greedy
 fine-to-coarse strategy ensures that each assigned tile satisfies the bucket
 size constraint at the finest resolution possible, capturing the same design
-tradeoff as Equation <a href="#S2.E2"><span>2</span></a>: maximizing geographic granularity
+tradeoff as Equation <a href="https://theopinard.github.io/vrac/articles/proximity-features-privacy-compliant-cold-start-personalization-at-airbnb/#S2.E2"><span>2</span></a>: maximizing geographic granularity
 subject to bucket-size constraints.</p>
 </div>
 </section>
@@ -379,7 +375,7 @@ cost is <math alttext="O(kN)" class="ltx_Math" display="inline" id="S2.SS3.SSS0.
 Because coordinates from the geo-IP database are pre-aggregated around population centers, <math alttext="N" class="ltx_Math" display="inline" id="S2.SS3.SSS0.Px3.p1.m6" intent=":literal"><semantics><mi>N</mi><annotation encoding="application/x-tex">N</annotation></semantics></math> is
 orders of magnitude smaller than the number of raw IP addresses—substantially
 cheaper than general spatial clustering
-algorithms <cite>(<a href="#bib.bib10">Ester et al. 1996</a>; <a href="#bib.bib4">Bentley 1975</a>)</cite>.</p>
+algorithms (<a href="https://theopinard.github.io/vrac/articles/proximity-features-privacy-compliant-cold-start-personalization-at-airbnb/#reference-9">Ester et al., 1996</a>; <a href="https://theopinard.github.io/vrac/articles/proximity-features-privacy-compliant-cold-start-personalization-at-airbnb/#reference-3">Bentley, 1975</a>).</p>
 </div>
 </section>
 <section id="S2.SS3.SSS0.Px4">
@@ -450,7 +446,7 @@ involving pets, families, or groups—signals otherwise unavailable for
 cold-start users. Multiple aggregation windows are retained rather than
 collapsed into a single value, allowing downstream models to select the time
 horizon most predictive for their task, as validated by the offline recall
-results in Section <a href="#S4"><span>4</span></a>.</p>
+results in Section <a href="https://theopinard.github.io/vrac/articles/proximity-features-privacy-compliant-cold-start-personalization-at-airbnb/#S4"><span>4</span></a>.</p>
 </div>
 </section>
 <section id="S2.SS5">
@@ -474,7 +470,7 @@ from the KV store; (3) if no scalar exists, a default of <math alttext="s{=}1" c
 used; (4) the quantized geo tile is computed; (5) the bucket count <math alttext="b" class="ltx_Math" display="inline" id="S2.SS5.p2.m3" intent=":literal"><semantics><mi>b</mi><annotation encoding="application/x-tex">b</annotation></semantics></math> for that
 tile is fetched from the KV store; and (6) the key is computed as:</p>
 <p><math alttext="\text{base64}\bigl(\lfloor\text{lat}{\cdot}s\rfloor,\;\lfloor\text{lng}{\cdot}s\rfloor,\;h(\text{ip})\bmod b\bigr)." class="ltx_Math" display="block" id="S2.Ex1.m1" intent=":literal"><semantics><mrow><mrow><mtext>base64</mtext><mo lspace="0em" rspace="0em">​</mo><mrow><mo maxsize="1.200em" minsize="1.200em">(</mo><mrow><mo stretchy="false">⌊</mo><mrow><mtext>lat</mtext><mo lspace="0.222em" rspace="0.222em">⋅</mo><mi>s</mi></mrow><mo stretchy="false">⌋</mo></mrow><mo>,</mo><mrow><mo stretchy="false">⌊</mo><mrow><mtext>lng</mtext><mo lspace="0.222em" rspace="0.222em">⋅</mo><mi>s</mi></mrow><mo stretchy="false">⌋</mo></mrow><mo>,</mo><mrow><mrow><mi>h</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mtext>ip</mtext><mo stretchy="false">)</mo></mrow></mrow><mo>mod</mo><mi>b</mi></mrow><mo maxsize="1.200em" minsize="1.200em">)</mo></mrow></mrow><mo lspace="0em">.</mo></mrow><annotation encoding="application/x-tex">\text{base64}\bigl(\lfloor\text{lat}{\cdot}s\rfloor,\;\lfloor\text{lng}{\cdot}s\rfloor,\;h(\text{ip})\bmod b\bigr).</annotation></semantics></math></p>
-<p id="S2.SS5.p2.2">This mirrors the offline key construction (Equation <a href="#S2.E1"><span>1</span></a>) exactly,
+<p id="S2.SS5.p2.2">This mirrors the offline key construction (Equation <a href="https://theopinard.github.io/vrac/articles/proximity-features-privacy-compliant-cold-start-personalization-at-airbnb/#S2.E1"><span>1</span></a>) exactly,
 ensuring new IPs always receive a valid, consistent proximity key. If the bucket count lookup misses, the API returns no proximity key and the
 model proceeds via the soft dependency mechanism; this occurs in fewer than
 0.5% of requests in practice.</p>
@@ -557,7 +553,7 @@ for completely anonymous traffic. This application was launched across two
 marketing-entry surfaces in December 2024 and January 2025. For external
 presentation, these two separate experiments are grouped under the label
 <em id="S3.SS1.p2.1.1">Marketing Landing Pages</em> because they share a similar cold-start listing
-recommendation setting. The A/B results in Table <a href="#S4.T2"><span>2</span></a> report aggregate lift
+recommendation setting. The A/B results in Table <a href="https://theopinard.github.io/vrac/articles/proximity-features-privacy-compliant-cold-start-personalization-at-airbnb/#S4.T2"><span>2</span></a> report aggregate lift
 across both surfaces.</p>
 </div>
 </section>
@@ -585,7 +581,7 @@ destinations popular among nearby travelers (e.g., Jeju Island, Osaka) rather
 than a global default list.</p>
 </div>
 <div id="S3.SS2.p4">
-<p id="S3.SS2.p4.1">Figure <a href="#acmlabel2"><span>2</span></a> illustrates this effect for two logged-out
+<p id="S3.SS2.p4.1">Figure <a href="https://theopinard.github.io/vrac/articles/proximity-features-privacy-compliant-cold-start-personalization-at-airbnb/#acmlabel2"><span>2</span></a> illustrates this effect for two logged-out
 users. Separately, architectural improvements made V2 37% smaller than V1 in
 parameter count, reducing inference latency; this is orthogonal to the
 proximity feature contribution. This application was launched in
@@ -604,7 +600,7 @@ personalized listing and destination recommendations to users. The serving
 infrastructure is in place: each recipient’s <span id="S3.SS3.p1.1.1">user_id</span> can be passed
 to the same serving API, which internally resolves it to the most recently
 logged IP address and retrieves the corresponding proximity key and features
-(Section <a href="#S2"><span>2</span></a>). Experiment integration is currently underway to
+(Section <a href="https://theopinard.github.io/vrac/articles/proximity-features-privacy-compliant-cold-start-personalization-at-airbnb/#S2"><span>2</span></a>). Experiment integration is currently underway to
 validate the lift for users with limited booking history.</p>
 </div>
 </section>
@@ -638,7 +634,7 @@ on low-activity users across different aggregation windows. No comparative
 baseline is included; the evaluation isolates proximity feature signal in
 the cold-start setting.</figcaption></figure>
 <div id="S4.SS1.SSS0.Px1.p2">
-<p id="S4.SS1.SSS0.Px1.p2.1">Table <a href="#S4.T1"><span>1</span></a> shows that proximity features alone achieve Recall@5
+<p id="S4.SS1.SSS0.Px1.p2.1">Table <a href="https://theopinard.github.io/vrac/articles/proximity-features-privacy-compliant-cold-start-personalization-at-airbnb/#S4.T1"><span>1</span></a> shows that proximity features alone achieve Recall@5
 of approximately 29–30% for geo-level destination prediction among low-activity
 users, indicating strong geographic signal. Notably, short-term viewed-geo features (7-day window)
 perform comparably to long-term booked-geo features (365-day window),
@@ -647,7 +643,7 @@ substantial predictive value.</p>
 </div>
 <div id="S4.SS1.SSS0.Px1.p3">
 <p id="S4.SS1.SSS0.Px1.p3.1">In an offline ablation for the Destination Intent Model V2
-(Section <a href="#S3"><span>3</span></a>), adding proximity features yielded an
+(Section <a href="https://theopinard.github.io/vrac/articles/proximity-features-privacy-compliant-cold-start-personalization-at-airbnb/#S3"><span>3</span></a>), adding proximity features yielded an
 approximately 2% relative improvement in Top-3 accuracy.</p>
 </div>
 </section>
@@ -664,7 +660,7 @@ empirically validating the temporal stability of the key partition.</p>
 </div>
 <figure id="S4.T2"><img alt="Table 2. Online A/B experiment results across production surfaces." height="341" src="https://theopinard.github.io/vrac/articles/proximity-features-privacy-compliant-cold-start-personalization-at-airbnb/table-2.jpg" width="909"/><figcaption><span>Table 2. </span>Online A/B experiment results across production surfaces.</figcaption></figure>
 <div id="S4.SS2.p2">
-<p id="S4.SS2.p2.1">Table <a href="#S4.T2"><span>2</span></a> summarizes the results. On marketing landing pages, proximity features produced a +0.011% lift in
+<p id="S4.SS2.p2.1">Table <a href="https://theopinard.github.io/vrac/articles/proximity-features-privacy-compliant-cold-start-personalization-at-airbnb/#S4.T2"><span>2</span></a> summarizes the results. On marketing landing pages, proximity features produced a +0.011% lift in
 global bookings and increased first-time bookers by +2.0%, confirming
 effectiveness for the cold-start population. Searchers with dates—a key
 engagement metric indicating users progressing further in the booking
@@ -691,14 +687,14 @@ have no prior bookings and whose first-ever booking occurs on the assignment dat
 <h4>Cohort effects.</h4>
 <div id="S4.SS3.SSS0.Px1.p1">
 <p id="S4.SS3.SSS0.Px1.p1.1">The directionally largest booking lifts were observed among
-<em id="S4.SS3.SSS0.Px1.p1.1.1">Never-Booked</em> and <em id="S4.SS3.SSS0.Px1.p1.1.2">Dormant</em> user cohorts (Figure <a href="#acmlabel3"><span>3</span></a>).
+<em id="S4.SS3.SSS0.Px1.p1.1.1">Never-Booked</em> and <em id="S4.SS3.SSS0.Px1.p1.1.2">Dormant</em> user cohorts (Figure <a href="https://theopinard.github.io/vrac/articles/proximity-features-privacy-compliant-cold-start-personalization-at-airbnb/#acmlabel3"><span>3</span></a>).
 The three largest cohorts (Never-Booked, Active, Dormant) show consistent positive
 directional lifts (+0.15–0.33%) in global bookings, though individually below the 95%
 significance threshold due to limited subgroup power. Even Active users benefit directionally, as infrequent booking behavior keeps
 individual history sparse. The New-Guest cohort
 (<math alttext="&lt;" class="ltx_Math" display="inline" id="S4.SS3.SSS0.Px1.p1.m1" intent=":literal"><semantics><mo>&lt;</mo><annotation encoding="application/x-tex">&lt;</annotation></semantics></math>1% of experiment traffic, <math alttext="-0.04\%" class="ltx_Math" display="inline" id="S4.SS3.SSS0.Px1.p1.m2" intent=":literal"><semantics><mrow><mo>−</mo><mrow><mn>0.04</mn><mo>%</mo></mrow></mrow><annotation encoding="application/x-tex">-0.04\%</annotation></semantics></math>, <math alttext="p=0.78" class="ltx_Math" display="inline" id="S4.SS3.SSS0.Px1.p1.m3" intent=":literal"><semantics><mrow><mi>p</mi><mo>=</mo><mn>0.78</mn></mrow><annotation encoding="application/x-tex">p=0.78</annotation></semantics></math>) is the smallest and shows a near-zero,
 non-significant result, consistent with insufficient power rather than a true
-negative effect. Separately, the +0.33% first-time bookings lift (Table <a href="#S4.T2"><span>2</span></a>)
+negative effect. Separately, the +0.33% first-time bookings lift (Table <a href="https://theopinard.github.io/vrac/articles/proximity-features-privacy-compliant-cold-start-personalization-at-airbnb/#S4.T2"><span>2</span></a>)
 is an experiment-level outcome metric capturing first-ever bookings among
 users with no prior bookings at assignment, whether reported as assignment-date
 New-Guest users or as Never-Booked users who book later in the experiment window.
@@ -722,7 +718,7 @@ destinations (e.g., Kuala Lumpur, Seoul, Jeju Island, Dubai) that the baseline
 model rarely recommended. This indicates that proximity features enable the
 model to produce more diverse, location-relevant recommendations rather than
 falling back to generic defaults. The shift also reflects a reduction in
-popularity bias <cite>(<a href="#bib.bib2">Abdollahpouri et al. 2019</a>)</cite>: rather than defaulting to
+popularity bias (<a href="https://theopinard.github.io/vrac/articles/proximity-features-privacy-compliant-cold-start-personalization-at-airbnb/#reference-1">Abdollahpouri et al., 2019</a>): rather than defaulting to
 globally popular destinations, the model surfaces destinations that are locally
 relevant to the user’s geographic context. This is a direct consequence of
 replacing a static global prior with group-level signals derived from nearby
@@ -736,19 +732,19 @@ users.</p>
 <section id="S5.SS0.SSS0.Px1">
 <h4>Spatial indexing and geo bucketing.</h4>
 <div id="S5.SS0.SSS0.Px1.p1">
-<p id="S5.SS0.SSS0.Px1.p1.1">Geohash <cite>(<a href="#bib.bib18">Niemeyer 2008</a>)</cite>, Google S2 <cite>(<a href="#bib.bib13">Google 2017</a>)</cite>, and Uber
-H3 <cite>(<a href="#bib.bib6">Brodsky 2018</a>)</cite> provide hierarchical spatial indexing at fixed
+<p id="S5.SS0.SSS0.Px1.p1.1">Geohash (<a href="https://theopinard.github.io/vrac/articles/proximity-features-privacy-compliant-cold-start-personalization-at-airbnb/#reference-17">Niemeyer, 2008</a>), Google S2 (<a href="https://theopinard.github.io/vrac/articles/proximity-features-privacy-compliant-cold-start-personalization-at-airbnb/#reference-12">Google, 2017</a>), and Uber
+H3 (<a href="https://theopinard.github.io/vrac/articles/proximity-features-privacy-compliant-cold-start-personalization-at-airbnb/#reference-5">Brodsky, 2018</a>) provide hierarchical spatial indexing at fixed
 resolutions. While computationally efficient, fixed-resolution schemes cannot
 adapt to the extreme variation in user density across geographies: a single
 cell may contain millions of users in a city center and only a handful in a
-rural area. KD-trees <cite>(<a href="#bib.bib4">Bentley 1975</a>)</cite> offer adaptive
+rural area. KD-trees (<a href="https://theopinard.github.io/vrac/articles/proximity-features-privacy-compliant-cold-start-personalization-at-airbnb/#reference-3">Bentley, 1975</a>) offer adaptive
 partitioning but require <math alttext="O(n\log n)" class="ltx_Math" display="inline" id="S5.SS0.SSS0.Px1.p1.m1" intent=":literal"><semantics><mrow><mi>O</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mrow><mi>n</mi><mo lspace="0.167em" rspace="0em">​</mo><mrow><mi>log</mi><mo lspace="0.167em">⁡</mo><mi>n</mi></mrow></mrow><mo stretchy="false">)</mo></mrow></mrow><annotation encoding="application/x-tex">O(n\log n)</annotation></semantics></math> construction and are designed for point
 queries rather than group-level feature aggregation.
-Quadtrees <cite>(<a href="#bib.bib11">Finkel and Bentley 1974</a>)</cite> recursively subdivide space into cells of
+Quadtrees (<a href="https://theopinard.github.io/vrac/articles/proximity-features-privacy-compliant-cold-start-personalization-at-airbnb/#reference-10">Finkel and Bentley, 1974</a>) recursively subdivide space into cells of
 varying size, and the Phase 2 coarsening is similar in spirit—but operates on
 a discrete set of power-of-ten scalars rather than recursive bisection. The
 approach also draws on the principle of adaptive mesh
-refinement <cite>(<a href="#bib.bib5">Berger and Oliger 1984</a>)</cite>—adjusting resolution to local
+refinement (<a href="https://theopinard.github.io/vrac/articles/proximity-features-privacy-compliant-cold-start-personalization-at-airbnb/#reference-4">Berger and Oliger, 1984</a>)—adjusting resolution to local
 density—while operating on a discrete geographic grid with <math alttext="O(kN)" class="ltx_Math" display="inline" id="S5.SS0.SSS0.Px1.p1.m2" intent=":literal"><semantics><mrow><mi>O</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mrow><mi>k</mi><mo lspace="0em" rspace="0em">​</mo><mi>N</mi></mrow><mo stretchy="false">)</mo></mrow></mrow><annotation encoding="application/x-tex">O(kN)</annotation></semantics></math> cost.</p>
 </div>
 </section>
@@ -756,13 +752,13 @@ density—while operating on a discrete geographic grid with <math alttext="O(kN
 <h4>Cold-start recommendation.</h4>
 <div id="S5.SS0.SSS0.Px2.p1">
 <p id="S5.SS0.SSS0.Px2.p1.1">The cold-start problem is well-studied in recommender
-systems <cite>(<a href="#bib.bib21">Schein et al. 2002</a>; <a href="#bib.bib16">Lam et al. 2008</a>)</cite>. Common approaches include
-content-based filtering <cite>(<a href="#bib.bib19">Pazzani and Billsus 2007</a>)</cite>, hybrid
-models <cite>(<a href="#bib.bib7">Burke 2002</a>)</cite>, and demographic-based
+systems (<a href="https://theopinard.github.io/vrac/articles/proximity-features-privacy-compliant-cold-start-personalization-at-airbnb/#reference-20">Schein et al., 2002</a>; <a href="https://theopinard.github.io/vrac/articles/proximity-features-privacy-compliant-cold-start-personalization-at-airbnb/#reference-15">Lam et al., 2008</a>). Common approaches include
+content-based filtering (<a href="https://theopinard.github.io/vrac/articles/proximity-features-privacy-compliant-cold-start-personalization-at-airbnb/#reference-18">Pazzani and Billsus, 2007</a>), hybrid
+models (<a href="https://theopinard.github.io/vrac/articles/proximity-features-privacy-compliant-cold-start-personalization-at-airbnb/#reference-6">Burke, 2002</a>), and demographic-based
 approaches that leverage user attributes when behavioral data is
 sparse. In the marketplace setting,
-<cite><a href="#bib.bib15">Haldar et al. 2020</a></cite> describe Airbnb’s approach to improving deep
-learning for search ranking, and <cite><a href="#bib.bib14">Grbovic and Cheng 2018</a></cite> address real-time
+<a href="https://theopinard.github.io/vrac/articles/proximity-features-privacy-compliant-cold-start-personalization-at-airbnb/#reference-14">Haldar et al. (2020)</a> describe Airbnb’s approach to improving deep
+learning for search ranking, and <a href="https://theopinard.github.io/vrac/articles/proximity-features-privacy-compliant-cold-start-personalization-at-airbnb/#reference-13">Grbovic and Cheng (2018)</a> address real-time
 personalization using embeddings. Proximity Features are complementary: they provide a group-level signal layer
 that can augment any of these approaches when individual-level data is
 unavailable.</p>
@@ -771,12 +767,12 @@ unavailable.</p>
 <section id="S5.SS0.SSS0.Px3">
 <h4>Privacy-preserving ML</h4>
 <div id="S5.SS0.SSS0.Px3.p1">
-<p id="S5.SS0.SSS0.Px3.p1.1">Federated learning <cite>(<a href="#bib.bib17">McMahan et al. 2017</a>)</cite> and differential
-privacy <cite>(<a href="#bib.bib9">Dwork et al. 2006</a>)</cite> enable model training without exposing
+<p id="S5.SS0.SSS0.Px3.p1.1">Federated learning (<a href="https://theopinard.github.io/vrac/articles/proximity-features-privacy-compliant-cold-start-personalization-at-airbnb/#reference-16">McMahan et al., 2017</a>) and differential
+privacy (<a href="https://theopinard.github.io/vrac/articles/proximity-features-privacy-compliant-cold-start-personalization-at-airbnb/#reference-8">Dwork et al., 2006</a>) enable model training without exposing
 individual data. Proximity Features take a different approach: rather than modifying the training
 procedure, features are constructed over aggregated groups so that individual
-behavior is masked by design. As discussed in Section <a href="#S2.SS3"><span>2.3</span></a>, the target bucket size <math alttext="T" class="ltx_Math" display="inline" id="S5.SS0.SSS0.Px3.p1.m1" intent=":literal"><semantics><mi>T</mi><annotation encoding="application/x-tex">T</annotation></semantics></math>
-is motivated by <math alttext="k" class="ltx_Math" display="inline" id="S5.SS0.SSS0.Px3.p1.m2" intent=":literal"><semantics><mi>k</mi><annotation encoding="application/x-tex">k</annotation></semantics></math>-anonymity <cite>(<a href="#bib.bib22">Sweeney 2002</a>)</cite>: each proximity
+behavior is masked by design. As discussed in Section <a href="https://theopinard.github.io/vrac/articles/proximity-features-privacy-compliant-cold-start-personalization-at-airbnb/#S2.SS3"><span>2.3</span></a>, the target bucket size <math alttext="T" class="ltx_Math" display="inline" id="S5.SS0.SSS0.Px3.p1.m1" intent=":literal"><semantics><mi>T</mi><annotation encoding="application/x-tex">T</annotation></semantics></math>
+is motivated by <math alttext="k" class="ltx_Math" display="inline" id="S5.SS0.SSS0.Px3.p1.m2" intent=":literal"><semantics><mi>k</mi><annotation encoding="application/x-tex">k</annotation></semantics></math>-anonymity (<a href="https://theopinard.github.io/vrac/articles/proximity-features-privacy-compliant-cold-start-personalization-at-airbnb/#reference-21">Sweeney, 2002</a>): each proximity
 bucket is intended to aggregate <math alttext="\sim" class="ltx_Math" display="inline" id="S5.SS0.SSS0.Px3.p1.m3" intent=":literal"><semantics><mo>∼</mo><annotation encoding="application/x-tex">\sim</annotation></semantics></math>1,000 users, making it difficult to isolate
 any individual’s contribution to the feature vector.</p>
 </div>
@@ -787,7 +783,7 @@ any individual’s contribution to the feature vector.</p>
 <p id="S5.SS0.SSS0.Px4.p1.1">IP-based geolocation has been used for coarse personalization (e.g., content
 localization, ad targeting). Prior work on IP geolocation focuses on the
 accuracy and reliability of country/city-level database
-mappings <cite>(<a href="#bib.bib20">Poese et al. 2011</a>)</cite>, rather than using geo-IP as a basis for
+mappings (<a href="https://theopinard.github.io/vrac/articles/proximity-features-privacy-compliant-cold-start-personalization-at-airbnb/#reference-19">Poese et al., 2011</a>), rather than using geo-IP as a basis for
 aggregating user-level features for ML. Proximity Features extend this line
 of work by operating at sub-city granularity, dynamically adapting resolution
 to local user density, and computing rich aggregated user-level features over
@@ -843,13 +839,7 @@ integration with marketing attribution models, and real-time proximity key
 updates to capture intra-day traffic patterns.</p>
 </div>
 </section>
-<section id="bib">
-<h2>References</h2>
-<ul>
-<li id="bib.bib1"><span>(1)</span>
-<span>
-</span></li>
-<li id="bib.bib2"><span>Abdollahpouri et al<span id="bib.bib2.2">.</span> (2019)</span>
+<div><h2 id="works-cited">References</h2><p id="reference-1">[1]
 <span>
 Himan Abdollahpouri, Robin
 Burke, and Bamshad Mobasher.
@@ -863,8 +853,7 @@ Conference (FLAIRS)</em>.
 
 </span>
 <span>
-</span></li>
-<li id="bib.bib3"><span>Assmann et al<span id="bib.bib3.2">.</span> (1984)</span>
+</span></p><p id="reference-2">[2]
 <span>
 Susan F. Assmann, David S.
 Johnson, Daniel J. Kleitman, and Joseph
@@ -881,8 +870,7 @@ Packing Problem.
 </span>
 <span>
 <a href="https://doi.org/10.1016/0196-6774(84)90004-X">https://doi.org/10.1016/0196-6774(84)90004-X</a>
-</span></li>
-<li id="bib.bib4"><span>Bentley (1975)</span>
+</span></p><p id="reference-3">[3]
 <span>
 Jon Louis Bentley.
 1975.
@@ -898,8 +886,7 @@ Associative Searching.
 </span>
 <span>
 <a href="https://doi.org/10.1145/361002.361007">https://doi.org/10.1145/361002.361007</a>
-</span></li>
-<li id="bib.bib5"><span>Berger and Oliger (1984)</span>
+</span></p><p id="reference-4">[4]
 <span>
 Marsha J. Berger and
 Joseph Oliger. 1984.
@@ -915,8 +902,7 @@ Differential Equations.
 </span>
 <span>
 <a href="https://doi.org/10.1016/0021-9991(84)90073-1">https://doi.org/10.1016/0021-9991(84)90073-1</a>
-</span></li>
-<li id="bib.bib6"><span>Brodsky (2018)</span>
+</span></p><p id="reference-5">[5]
 <span>
 Isaac Brodsky.
 2018.
@@ -932,8 +918,7 @@ Isaac Brodsky.
 </span>
 <span>Uber Engineering Blog.
 
-</span></li>
-<li id="bib.bib7"><span>Burke (2002)</span>
+</span></p><p id="reference-6">[6]
 <span>
 Robin Burke.
 2002.
@@ -950,8 +935,7 @@ Experiments.
 </span>
 <span>
 <a href="https://doi.org/10.1023/A:1021240730564">https://doi.org/10.1023/A:1021240730564</a>
-</span></li>
-<li id="bib.bib8"><span>Collet (2012)</span>
+</span></p><p id="reference-7">[7]
 <span>
 Yann Collet.
 2012.
@@ -967,8 +951,7 @@ Yann Collet.
 </span>
 <span>Accessed: 2026-04-01.
 
-</span></li>
-<li id="bib.bib9"><span>Dwork et al<span id="bib.bib9.2">.</span> (2006)</span>
+</span></p><p id="reference-8">[8]
 <span>
 Cynthia Dwork, Frank
 McSherry, Kobbi Nissim, and Adam
@@ -982,8 +965,7 @@ Cryptography Conference (TCC)</em>. 265–284.
 </span>
 <span>
 <a href="https://doi.org/10.1007/11681878_14">https://doi.org/10.1007/11681878_14</a>
-</span></li>
-<li id="bib.bib10"><span>Ester et al<span id="bib.bib10.2">.</span> (1996)</span>
+</span></p><p id="reference-9">[9]
 <span>
 Martin Ester, Hans-Peter
 Kriegel, Jörg Sander, and Xiaowei
@@ -997,8 +979,7 @@ Knowledge Discovery and Data Mining (KDD)</em>. 226–231.
 
 </span>
 <span>
-</span></li>
-<li id="bib.bib11"><span>Finkel and Bentley (1974)</span>
+</span></p><p id="reference-10">[10]
 <span>
 Raphael A. Finkel and
 Jon Louis Bentley. 1974.
@@ -1014,8 +995,7 @@ Composite Keys.
 </span>
 <span>
 <a href="https://doi.org/10.1007/BF00288933">https://doi.org/10.1007/BF00288933</a>
-</span></li>
-<li id="bib.bib12"><span>Garey and Johnson (1979)</span>
+</span></p><p id="reference-11">[11]
 <span>
 Michael R. Garey and
 David S. Johnson. 1979.
@@ -1029,8 +1009,7 @@ the Theory of NP-Completeness</em>.
 
 </span>
 <span>
-</span></li>
-<li id="bib.bib13"><span>Google (2017)</span>
+</span></p><p id="reference-12">[12]
 <span>
 Google. 2017.
 
@@ -1045,8 +1024,7 @@ Google. 2017.
 </span>
 <span>Accessed: 2026-04-01.
 
-</span></li>
-<li id="bib.bib14"><span>Grbovic and Cheng (2018)</span>
+</span></p><p id="reference-13">[13]
 <span>
 Mihajlo Grbovic and
 Haibin Cheng. 2018.
@@ -1060,8 +1038,7 @@ Mining</em>. 311–320.
 </span>
 <span>
 <a href="https://doi.org/10.1145/3219819.3219885">https://doi.org/10.1145/3219819.3219885</a>
-</span></li>
-<li id="bib.bib15"><span>Haldar et al<span id="bib.bib15.2">.</span> (2020)</span>
+</span></p><p id="reference-14">[14]
 <span>
 Malay Haldar, Mustafa
 Abdool, Prashant Ramanathan, Tao Xu,
@@ -1079,8 +1056,7 @@ Conference on Knowledge Discovery and Data Mining</em>.
 </span>
 <span>
 <a href="https://doi.org/10.1145/3394486.3403303">https://doi.org/10.1145/3394486.3403303</a>
-</span></li>
-<li id="bib.bib16"><span>Lam et al<span id="bib.bib16.2">.</span> (2008)</span>
+</span></p><p id="reference-15">[15]
 <span>
 Xuan Nhat Lam, Thuc Vu,
 Trong Duc Le, and Anh Duc Duong.
@@ -1095,8 +1071,7 @@ Conference on Ubiquitous Information Management and Communication</em>.
 </span>
 <span>
 <a href="https://doi.org/10.1145/1352793.1352837">https://doi.org/10.1145/1352793.1352837</a>
-</span></li>
-<li id="bib.bib17"><span>McMahan et al<span id="bib.bib17.2">.</span> (2017)</span>
+</span></p><p id="reference-16">[16]
 <span>
 Brendan McMahan, Eider
 Moore, Daniel Ramage, Seth Hampson,
@@ -1111,8 +1086,7 @@ from Decentralized Data. In <em id="bib.bib17.3">Proceedings of the
 
 </span>
 <span>
-</span></li>
-<li id="bib.bib18"><span>Niemeyer (2008)</span>
+</span></p><p id="reference-17">[17]
 <span>
 Gustavo Niemeyer.
 2008.
@@ -1128,8 +1102,7 @@ Gustavo Niemeyer.
 </span>
 <span>Accessed: 2026-04-01.
 
-</span></li>
-<li id="bib.bib19"><span>Pazzani and Billsus (2007)</span>
+</span></p><p id="reference-18">[18]
 <span>
 Michael J. Pazzani and
 Daniel Billsus. 2007.
@@ -1144,8 +1117,7 @@ Springer, 325–341.
 </span>
 <span>
 <a href="https://doi.org/10.1007/978-3-540-72079-9_10">https://doi.org/10.1007/978-3-540-72079-9_10</a>
-</span></li>
-<li id="bib.bib20"><span>Poese et al<span id="bib.bib20.2">.</span> (2011)</span>
+</span></p><p id="reference-19">[19]
 <span>
 Ingmar Poese, Steve
 Uhlig, Mohamed Ali Kaafar, Benoit
@@ -1163,8 +1135,7 @@ Donnet, and Bamba Gueye.
 </span>
 <span>
 <a href="https://doi.org/10.1145/1971162.1971171">https://doi.org/10.1145/1971162.1971171</a>
-</span></li>
-<li id="bib.bib21"><span>Schein et al<span id="bib.bib21.2">.</span> (2002)</span>
+</span></p><p id="reference-20">[20]
 <span>
 Andrew I. Schein,
 Alexandrin Popescul, Lyle H. Ungar, and
@@ -1179,8 +1150,7 @@ Retrieval</em>. 253–260.
 </span>
 <span>
 <a href="https://doi.org/10.1145/564376.564421">https://doi.org/10.1145/564376.564421</a>
-</span></li>
-<li id="bib.bib22"><span>Sweeney (2002)</span>
+</span></p><p id="reference-21">[21]
 <span>
 Latanya Sweeney.
 2002.
@@ -1196,8 +1166,7 @@ Fuzziness and Knowledge-Based Systems</em> 10,
 </span>
 <span>
 <a href="https://doi.org/10.1142/S0218488502001648">https://doi.org/10.1142/S0218488502001648</a>
-</span></li>
-<li id="bib.bib23"><span>Voigt and von dem Bussche (2017)</span>
+</span></p><p id="reference-22">[22]
 <span>
 Paul Voigt and Axel
 von dem Bussche. 2017.
@@ -1212,7 +1181,5 @@ von dem Bussche. 2017.
 </span>
 <span>
 <a href="https://doi.org/10.1007/978-3-319-57959-7">https://doi.org/10.1007/978-3-319-57959-7</a>
-</span></li>
-</ul>
-</section>
+</span></p></div>
 </article></body></html>

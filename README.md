@@ -1,64 +1,90 @@
-# Simple article republisher
+# Static article library
 
-This repository contains small tools that turn Substack articles and arXiv papers into deliberately simple static HTML for testing with Instapaper and Kobo.
+This repository turns Substack articles and arXiv papers into deliberately
+simple static HTML for Instapaper and Kobo. The generated homepage lists every
+source in `articles.json`, and every article links back to that library.
 
-It keeps the readable article structure and remote image URLs, while removing Substack's application shell, scripts, navigation, reactions, recommendations, and other interactive UI. Images are not downloaded, resized, or converted.
+The Substack extractor keeps readable article structure and remote images while
+removing the application shell and interactive UI. The arXiv extractor uses
+semantic HTML for reading order and the matching PDF to turn SVG figures and
+formatted data tables into local baseline RGB JPEGs.
 
-## Usage
+## Setup
 
 ```bash
 uv sync
-uv run python republish.py <URL>
 ```
 
-For example:
+## Add or update one article
+
+The unified command detects whether a source is arXiv or Substack, generates
+the article, adds it to the catalog, and refreshes the homepage:
 
 ```bash
-uv run python republish.py "https://blog.bytebytego.com/p/the-new-american-ai-model-designed"
+uv run python republish.py add "https://blog.bytebytego.com/p/example"
+uv run python republish.py add "https://arxiv.org/abs/2607.12246v1"
 ```
 
-Generated articles are written to:
+For compatibility, a URL can still be passed without the `add` subcommand:
 
-```text
-articles/<slug>/index.html
+```bash
+uv run python republish.py "https://blog.bytebytego.com/p/example"
 ```
 
-The slug normally comes from the final component of the article URL. When the repository root is published with GitHub Pages, the generated article is available at `/articles/<slug>/`.
-
-## arXiv papers
-
-The arXiv republisher accepts normal abstract, HTML, and PDF URLs:
+The existing arXiv entry point is also retained as a catalog-aware wrapper:
 
 ```bash
 uv run python republish_arxiv.py "https://arxiv.org/abs/2607.12246v1"
 ```
 
-It uses arXiv's semantic HTML for the reading order and downloads the matching
-PDF revision to turn inline SVG figures and data tables into local, baseline
-RGB JPEG files. Equation-layout tables are reduced to simple math
-blocks rather than retained as presentational HTML tables.
-An unversioned URL is resolved to the latest available version, which is then
-recorded in the generated page. The source PDF is temporary and is not copied
-into the repository.
+Generated files are written beneath `articles/<slug>/`. Slugs recorded in the
+catalog are reused on later builds so public URLs remain stable.
 
-The command writes the page and its figure assets beneath:
+## Rebuild the library
 
-```text
-articles/<paper-title-slug>/
+```bash
+uv run python republish.py rebuild
 ```
 
-Generated image tags use absolute GitHub Pages URLs by default so Instapaper
-does not have to resolve nested relative paths. Forks can change the base with
-`--public-articles-url`.
+Every catalog source is built in a staging directory first. The committed
+article pages, arXiv image assets, and root `index.html` are replaced only after
+all sources build successfully.
 
-This command requires network access and supports only papers for which arXiv
-provides semantic HTML. It does not perform OCR or generic PDF layout
-reconstruction.
+The default public location is:
 
-## Current scope
+```text
+https://theopinard.github.io/vrac/
+```
 
-The Substack tool prioritizes normal server-rendered article HTML and retains
-remote image URLs. The arXiv tool prioritizes semantic arXiv HTML and rasterizes
-its SVG figures from the matching PDF. Neither tool uses browser automation,
-calls the Instapaper API, provides a web UI, or attempts generic extraction from
-every website.
+Forks can change it with `--public-base-url`. This also controls the absolute
+arXiv image URLs embedded for Instapaper.
+
+## Send a published article to Instapaper
+
+Publish the rebuilt files first and wait for GitHub Pages to update. Then send
+one article by its catalog slug:
+
+```bash
+uv run python republish.py send proximity-features-privacy-compliant-cold-start-personalization-at-airbnb
+```
+
+The command fetches the public page and compares its content fingerprint with
+the local build before calling Instapaper. It refuses to send if deployment is
+missing or stale.
+
+Credentials are requested interactively. The password prompt is hidden, allows
+an empty value for passwordless Instapaper accounts, and neither credential is
+stored. Each command sends only the explicitly selected article through the
+[Instapaper Simple API](https://www.instapaper.com/developers/v1/simple-api/adding-urls).
+
+Adding an already-saved URL does not create a duplicate; Instapaper marks it
+unread and moves it to the top of the list.
+
+## Validation
+
+```bash
+uv run python -m unittest discover -v
+```
+
+The republishers require network access. arXiv sources must provide semantic
+HTML; generic PDF layout reconstruction and OCR are not supported.

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import getpass
 import json
 import re
 import sys
@@ -12,6 +13,11 @@ from urllib.parse import urljoin, urlparse
 
 import requests
 from bs4 import BeautifulSoup, NavigableString, Tag
+
+from republisher.catalog import infer_source_type, load_catalog
+from republisher.instapaper import send_to_instapaper
+from republisher.rendering import read_generated_article, render_article_page
+from republisher.workflow import add_article, rebuild_library
 
 
 BODY_SELECTORS = (
@@ -93,19 +99,81 @@ USER_AGENT = (
     "+https://github.com/theopinard/vrac)"
 )
 
+REPOSITORY_ROOT = Path(__file__).resolve().parent
+DEFAULT_PUBLIC_BASE_URL = "https://theopinard.github.io/vrac/"
 
-def parse_args() -> argparse.Namespace:
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    if arguments and arguments[0].startswith(("http://", "https://")):
+        arguments.insert(0, "add")
+
     parser = argparse.ArgumentParser(
-        description="Republish a Substack article as reader-friendly static HTML."
+        description="Build and manage the static article library."
     )
-    parser.add_argument("url", help="Public Substack article URL")
-    parser.add_argument(
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    def add_paths(command: argparse.ArgumentParser) -> None:
+        command.add_argument(
+            "--catalog",
+            type=Path,
+            default=REPOSITORY_ROOT / "articles.json",
+            help="Article source catalog",
+        )
+        command.add_argument(
+            "--output-root",
+            type=Path,
+            default=REPOSITORY_ROOT / "articles",
+            help="Directory that contains generated article directories",
+        )
+        command.add_argument(
+            "--homepage",
+            type=Path,
+            default=REPOSITORY_ROOT / "index.html",
+            help="Generated global article index",
+        )
+
+    add_parser = subparsers.add_parser("add", help="Add or rebuild one source URL")
+    add_parser.add_argument("url", help="Public Substack or arXiv URL")
+    add_paths(add_parser)
+    add_parser.add_argument(
+        "--public-base-url",
+        default=DEFAULT_PUBLIC_BASE_URL,
+        help="Published repository URL used for arXiv assets",
+    )
+
+    rebuild_parser = subparsers.add_parser(
+        "rebuild", help="Rebuild every catalog article and the global index"
+    )
+    add_paths(rebuild_parser)
+    rebuild_parser.add_argument(
+        "--public-base-url",
+        default=DEFAULT_PUBLIC_BASE_URL,
+        help="Published repository URL used for arXiv assets",
+    )
+
+    send_parser = subparsers.add_parser(
+        "send", help="Send one published catalog article to Instapaper"
+    )
+    send_parser.add_argument("slug", help="Catalog slug to send")
+    send_parser.add_argument(
+        "--catalog",
+        type=Path,
+        default=REPOSITORY_ROOT / "articles.json",
+        help="Article source catalog",
+    )
+    send_parser.add_argument(
         "--output-root",
         type=Path,
-        default=Path(__file__).resolve().parent / "articles",
-        help="Directory that will contain <slug>/index.html",
+        default=REPOSITORY_ROOT / "articles",
+        help="Directory that contains generated article directories",
     )
-    return parser.parse_args()
+    send_parser.add_argument(
+        "--public-base-url",
+        default=DEFAULT_PUBLIC_BASE_URL,
+        help="Published repository URL containing the generated articles",
+    )
+    return parser.parse_args(arguments)
 
 
 def fetch_html(url: str) -> str:
@@ -357,118 +425,108 @@ def slug_from_url(url: str, title: str) -> str:
     return slug
 
 
-def render_page(metadata: dict[str, str], body_html: str, source_url: str) -> str:
-    shell = BeautifulSoup("<!doctype html><html lang='en'><head></head><body></body></html>", "html.parser")
-    head = shell.head
-    body = shell.body
-    assert head is not None and body is not None
-
-    charset = shell.new_tag("meta")
-    charset["charset"] = "utf-8"
-    head.append(charset)
-    viewport = shell.new_tag("meta")
-    viewport["name"] = "viewport"
-    viewport["content"] = "width=device-width, initial-scale=1"
-    head.append(viewport)
-    title = shell.new_tag("title")
-    title.string = metadata["title"]
-    head.append(title)
-
-    style = shell.new_tag("style")
-    style.string = """
-body {
-  max-width: 760px;
-  margin: 2rem auto;
-  padding: 0 1rem;
-  font-family: Georgia, serif;
-  line-height: 1.55;
-}
-img {
-  display: block;
-  max-width: 100%;
-  height: auto;
-  margin: 1.5rem auto;
-}
-figure {
-  margin: 2rem 0;
-}
-figcaption, .article-meta {
-  font-size: 0.9em;
-}
-pre {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-blockquote {
-  margin-left: 0;
-  padding-left: 1rem;
-  border-left: 3px solid #999;
-}
-""".strip()
-    head.append(style)
-
-    article = shell.new_tag("article")
-    heading = shell.new_tag("h1")
-    heading.string = metadata["title"]
-    article.append(heading)
-
-    details = [
-        metadata.get("author"),
-        metadata.get("publication"),
-        metadata.get("date"),
-    ]
-    details = [detail for detail in details if detail]
-    if details:
-        byline = shell.new_tag("p")
-        byline["class"] = "article-meta"
-        byline.string = " · ".join(details)
-        article.append(byline)
-
-    source = shell.new_tag("p")
-    source["class"] = "article-meta"
-    source.append("Original: ")
-    source_link = shell.new_tag("a", href=source_url)
-    source_link.string = source_url
-    source.append(source_link)
-    article.append(source)
-
-    body_fragment = BeautifulSoup(body_html, "html.parser")
-    for child in list(body_fragment.contents):
-        article.append(child)
-    body.append(article)
-
-    return (
-        "<!doctype html>\n"
-        + shell.html.prettify(formatter="minimal").rstrip()
-        + "\n"
+def render_page(
+    metadata: dict[str, str], body_html: str, source_url: str, slug: str
+) -> str:
+    return render_article_page(
+        slug=slug,
+        source_type="substack",
+        source_url=source_url,
+        metadata=metadata,
+        content_html=body_html,
+        source_links=((source_url, source_url),),
     )
 
 
-def republish(url: str, output_root: Path) -> Path:
+def republish(
+    url: str,
+    output_root: Path,
+    *,
+    slug_override: str | None = None,
+) -> Path:
     html = fetch_html(url)
     soup = BeautifulSoup(html, "html.parser")
     metadata = extract_metadata(soup)
     source_body = find_article_body(soup)
     body_html = simplify_body(source_body, url)
-    slug = slug_from_url(url, metadata["title"])
+    slug = slug_override or slug_from_url(url, metadata["title"])
     output_path = output_root / slug / "index.html"
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(
-        render_page(metadata, body_html, url),
+        render_page(metadata, body_html, url, slug),
         encoding="utf-8",
     )
     return output_path
 
 
-def main() -> int:
-    args = parse_args()
+def _builders(public_base_url: str):
+    def build_substack(url: str, output_root: Path, slug: str | None) -> Path:
+        return republish(url, output_root, slug_override=slug)
+
+    def build_arxiv(url: str, output_root: Path, slug: str | None) -> Path:
+        import republish_arxiv
+
+        public_articles_url = urljoin(
+            public_base_url.rstrip("/") + "/", "articles/"
+        )
+        return republish_arxiv.republish(
+            url,
+            output_root,
+            public_articles_url,
+            slug_override=slug,
+        )
+
+    return {"substack": build_substack, "arxiv": build_arxiv}
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
     try:
-        output_path = republish(args.url, args.output_root)
-    except (requests.RequestException, ValueError) as error:
+        if args.command == "add":
+            source_type = infer_source_type(args.url)
+            builders = _builders(args.public_base_url)
+            _spec, output_path = add_article(
+                source_url=args.url,
+                source_type=source_type,
+                catalog_path=args.catalog,
+                output_root=args.output_root,
+                homepage_path=args.homepage,
+                builder=builders[source_type],
+            )
+            print(output_path)
+            return 0
+        if args.command == "rebuild":
+            output_paths = rebuild_library(
+                catalog_path=args.catalog,
+                output_root=args.output_root,
+                homepage_path=args.homepage,
+                builders=_builders(args.public_base_url),
+            )
+            for output_path in output_paths:
+                print(output_path)
+            return 0
+        if args.command == "send":
+            specs = load_catalog(args.catalog)
+            if not any(spec.slug == args.slug for spec in specs):
+                raise ValueError(f"Unknown catalog slug: {args.slug}")
+            article_path = args.output_root / args.slug / "index.html"
+            if not article_path.is_file():
+                raise ValueError(f"Generated article does not exist: {article_path}")
+            article = read_generated_article(str(article_path))
+            username = input("Instapaper email address or username: ").strip()
+            password = getpass.getpass("Password, if you have one: ")
+            saved = send_to_instapaper(
+                article,
+                args.public_base_url,
+                username,
+                password,
+            )
+            print(f"Saved to Instapaper: {saved.title} ({saved.public_url})")
+            return 0
+        raise ValueError(f"Unknown command: {args.command}")
+    except (OSError, requests.RequestException, ValueError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
-    print(output_path)
-    return 0
 
 
 if __name__ == "__main__":
