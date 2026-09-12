@@ -37,6 +37,11 @@ ARXIV_DATE_PATTERN = re.compile(
 FIGURE_NUMBER_PATTERN = re.compile(r"Figure\s+(?P<number>\d+)", re.IGNORECASE)
 TABLE_NUMBER_PATTERN = re.compile(r"Table\s+(?P<number>\d+)", re.IGNORECASE)
 
+# Author and date bylines are chrome, not readable body. LaTeXML renders
+# decorative ORCID badges as inline SVGs inside the author byline, so these
+# must be dropped before render_svg_figures treats every SVG as paper artwork.
+BYLINE_SELECTORS = (".ltx_authors", ".ltx_dates")
+
 DROP_TAGS = {
     "script",
     "style",
@@ -273,14 +278,19 @@ def find_numbered_caption_page(
     candidates: list[tuple[pymupdf.Page, pymupdf.Rect, pymupdf.Rect]] = []
     for page in document:
         for rectangle in page.search_for(needle):
+            # The caption text can either start its own block (caption above the
+            # artwork) or trail the artwork inside a shared block (caption
+            # below). Selecting the block that encloses the located caption text
+            # handles both layouts, where matching on a leading "Table N:" would
+            # miss the caption-below case entirely.
+            center = pymupdf.Point(
+                (rectangle.x0 + rectangle.x1) / 2,
+                (rectangle.y0 + rectangle.y1) / 2,
+            )
             caption_blocks = [
                 pymupdf.Rect(block[:4])
                 for block in page.get_text("blocks")
-                if re.match(
-                    rf"\s*{re.escape(kind)}\s+{re.escape(number)}:",
-                    str(block[4]),
-                    re.IGNORECASE,
-                )
+                if pymupdf.Rect(block[:4]).contains(center)
             ]
             if len(caption_blocks) != 1:
                 raise ValueError(
@@ -608,11 +618,9 @@ def table_clip(
     if table_match:
         kind = "Table"
         number = table_match.group("number")
-        before_caption = False
     elif figure_match:
         kind = "Figure"
         number = figure_match.group("number")
-        before_caption = True
     else:
         raise ValueError("Could not identify a caption for a data table")
 
@@ -625,33 +633,47 @@ def table_clip(
         if len(label) >= 2 and label not in labels:
             labels.append(label)
 
-    matches: list[pymupdf.Rect] = []
-    for label in labels:
-        candidates = [
-            rectangle
-            for rectangle in page.search_for(label)
-            if rectangle.x0 >= lane.x0 - 4
-            and rectangle.x1 <= lane.x1 + 4
-            and (
-                rectangle.y1 < caption_rect.y0
-                if before_caption
-                else rectangle.y0 > lane.y1
-            )
-        ]
-        if not candidates:
-            continue
-        choice = (
-            max(candidates, key=lambda rectangle: rectangle.y1)
-            if before_caption
-            else min(candidates, key=lambda rectangle: rectangle.y0)
-        )
-        matches.append(choice)
-        if not before_caption and len(label) > 120:
-            matches.extend(
+    def match_labels(above_caption: bool) -> list[pymupdf.Rect]:
+        found: list[pymupdf.Rect] = []
+        for label in labels:
+            candidates = [
                 rectangle
-                for rectangle in candidates
-                if choice.y0 < rectangle.y0 <= choice.y1 + 30
+                for rectangle in page.search_for(label)
+                if rectangle.x0 >= lane.x0 - 4
+                and rectangle.x1 <= lane.x1 + 4
+                and (
+                    rectangle.y1 < caption_rect.y0
+                    if above_caption
+                    else rectangle.y0 > lane.y1
+                )
+            ]
+            if not candidates:
+                continue
+            choice = (
+                max(candidates, key=lambda rectangle: rectangle.y1)
+                if above_caption
+                else min(candidates, key=lambda rectangle: rectangle.y0)
             )
+            found.append(choice)
+            if not above_caption and len(label) > 120:
+                found.extend(
+                    rectangle
+                    for rectangle in candidates
+                    if choice.y0 < rectangle.y0 <= choice.y1 + 30
+                )
+        return found
+
+    if kind == "Figure":
+        # Data rendered as a figure keeps its artwork above the caption.
+        before_caption = True
+        matches = match_labels(above_caption=True)
+    else:
+        # Tables appear either above or below their caption. Pick whichever side
+        # the cell text actually maps onto so both layouts render correctly.
+        above = match_labels(above_caption=True)
+        below = match_labels(above_caption=False)
+        before_caption = len(above) > len(below)
+        matches = above if before_caption else below
 
     if len(matches) < 3:
         raise ValueError(f"Could not map the data for {kind} {number} into the PDF")
@@ -837,6 +859,12 @@ def unwrap_citations(article: Tag) -> None:
         citation.unwrap()
 
 
+def strip_byline_chrome(article: Tag) -> None:
+    for selector in BYLINE_SELECTORS:
+        for element in article.select(selector):
+            element.decompose()
+
+
 def sanitize_article(article: Tag, source_url: str, asset_base_url: str) -> None:
     document_title = article.select_one("h1.ltx_title_document")
     if document_title:
@@ -845,11 +873,7 @@ def sanitize_article(article: Tag, source_url: str, asset_base_url: str) -> None
         # title belongs to the readable paper body.
         for sibling in list(document_title.previous_siblings):
             sibling.extract()
-    for selector in (
-        "h1.ltx_title_document",
-        ".ltx_authors",
-        ".ltx_dates",
-    ):
+    for selector in ("h1.ltx_title_document", *BYLINE_SELECTORS):
         for element in article.select(selector):
             element.decompose()
     for name in DROP_TAGS:
@@ -955,6 +979,7 @@ def republish(
         asset_directory = temporary_directory / "assets"
         asset_directory.mkdir()
         download_pdf(source.pdf_url, pdf_path)
+        strip_byline_chrome(article)
         with pymupdf.open(pdf_path) as document:
             if len(document) == 0:
                 raise ValueError("The downloaded PDF contains no pages")

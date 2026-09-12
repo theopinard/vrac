@@ -1,0 +1,919 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1" name="viewport"/><title>Optimizing Airbnb Search Journey with Multi-task Learning</title><style>body {
+  max-width: 760px;
+  margin: 2rem auto;
+  padding: 0 1rem;
+  color: #202020;
+  background: #fff;
+  font-family: Georgia, serif;
+  line-height: 1.55;
+}
+a { color: #315f8c; }
+.library-link { margin-bottom: 2rem; }
+img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 1.5rem auto;
+}
+figure { margin: 2rem 0; }
+figcaption, .article-meta { font-size: 0.9em; }
+pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+blockquote {
+  margin-left: 0;
+  padding-left: 1rem;
+  border-left: 3px solid #999;
+}
+math[display="block"] { margin: 1rem auto; overflow-x: auto; }</style><meta content="optimizing-airbnb-search-journey-with-multi-task-learning" name="vrac-slug"/><meta content="arxiv" name="vrac-source-type"/><meta content="https://arxiv.org/abs/2305.18431" name="vrac-source-url"/><meta content="Optimizing Airbnb Search Journey with Multi-task Learning" name="vrac-title"/><meta content="Chun How Tan, Austin Chan, Malay Haldar, Jie Tang, Xin Liu, Mustafa Abdool, Huiji Gao, Liwei He, Sanjeev Katariya" name="vrac-author"/><meta content="arXiv:2305.18431v1" name="vrac-publication"/><meta content="28 May 2023" name="vrac-published"/><meta content="55120f8f161c13db0e5d6a49877fa8ae1fdcd51f1fdd2cdef92d25adfadc35ef" name="vrac-content-sha256"/></head><body><p class="library-link"><a href="../../">All articles</a></p><article><h1>Optimizing Airbnb Search Journey with Multi-task Learning</h1><p class="article-meta">Chun How Tan, Austin Chan, Malay Haldar, Jie Tang, Xin Liu, Mustafa Abdool, Huiji Gao, Liwei He, Sanjeev Katariya · arXiv:2305.18431v1 · 28 May 2023</p><p class="article-meta">Original: <a href="https://arxiv.org/html/2305.18431v1">arXiv HTML</a> · <a href="https://arxiv.org/pdf/2305.18431v1">PDF</a></p>
+<span><span><span><span>Conference: </span>Proceedings of the 29th
+ACM SIGKDD Conference on Knowledge Discovery and Data Mining; August
+6–10, 2023; Long Beach, CA, USA</span><span>Proceedings of the 29th ACM SIGKDD Conference on Knowledge
+Discovery and Data Mining (KDD ’23), August 6–10, 2023, Long Beach, CA,
+USA</span><span><span>Price: </span>15.00</span><span><span>DOI: </span><a href="https://doi.org/10.1145/3580305.3599881">10.1145/3580305.3599881</a></span><span><span>ISBN: </span>979-8-4007-0103-0/23/08</span><span><span>CCS: </span>Computing methodologies Multi-task learning</span><span><span>CCS: </span>Computing methodologies Neural networks</span><span><span>CCS: </span>Information systems Learning to rank</span><span><span>CCS: </span>Information systems Content ranking</span><span><span>CCS: </span>Information systems Personalization</span><span><span>CCS: </span>Applied computing Online shopping</span></span></span>
+<div id="abstract1"><h2>Abstract</h2>
+<p id="abstract1.1">At Airbnb, an online marketplace for stays and experiences, guests often spend weeks exploring and comparing multiple items before making a final reservation request. Each reservation request may then potentially be rejected or cancelled by the host prior to check-in. The long and exploratory nature of the search journey, as well as the need to balance both guest and host preferences, present unique challenges for Airbnb search ranking. In this paper, we present Journey Ranker, a new multi-task deep learning model architecture that addresses these challenges. Journey Ranker leverages intermediate guest actions as milestones, both positive and negative, to better progress the guest towards a successful booking. It also uses contextual information such as guest state and search query to balance guest and host preferences. Its modular and extensible design, consisting of four modules with clear separation of concerns, allows for easy application to use cases beyond the Airbnb search ranking context. We conducted offline and online testing of the Journey Ranker and successfully deployed it in production to four different Airbnb products with significant business metrics improvements.</p>
+</div>
+<div>
+<h6>Keywords: </h6>Search Ranking, Recommender Systems, User Search Journey, Multi-task learning, Two-sided marketplace
+</div>
+<section id="S1">
+<h2><span>1. </span>Introduction</h2>
+<div id="S1.p1">
+<p id="S1.p1.1">At Airbnb, search is the main way for a guest to discover the right inventory, such as stays, (in-real-life) experiences (i.e. activities to do), online (i.e. virtual) experiences, etc. Specifically, given query parameters from the guest (e.g. location, date range, etc), the Airbnb Search Ranking model ranks all eligible inventories to optimize for the desired business metric. While our proposed model architecture in this paper is applicable to other domains (e.g. four different product use cases within Airbnb), we will focus the majority of our discussion in this paper on one particular instantiation of the model architecture, for the Airbnb’s stays product use case.</p>
+</div>
+<div id="S1.p2">
+<p id="S1.p2.1">Unlike other products such as social media feeds, which focus on engagement, Airbnb focuses more on the final guest conversion, similar to other e-commerce and two-sided marketplaces. Furthermore, since booking a place to stay is generally a large expense, guests tend to consider a lot of options carefully, akin to purchasing a big-ticket item such as an electronic appliance, car, or house. Based on internal data, a guest could spend multiple weeks, across dozens of searches, before narrowing down options and making a final reservation request on Airbnb. Lastly, as a two-sided marketplace, the guest’s reservation request may end up being rejected or cancelled by the host, resulting in a poor guest experience where the guest must start the whole search journey again.</p>
+</div>
+<div id="S1.p3">
+<p id="S1.p3.1">Figure <a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#S1.F1"><span>1</span></a> shows an example guest search journey from a search to a realized reservation check-in. Note that the guest made reservation requests for two listings but ended up being cancelled or rejected by the host, highlighting the importance of considering host preferences. Furthermore, even though the guest clicked on <span id="S1.p3.1.1">item-b</span> early in the search journey, the guest only made a reservation request for <span id="S1.p3.1.2">item-b</span> after more searches, illustrating the long nature of search journeys in the Airbnb product use case.</p>
+</div>
+<div id="S1.p4">
+<p id="S1.p4.1">Thus, Airbnb Stays Ranking needs to guide the guest throughout the long search journey while also balancing both guest and host preferences so that all the stakeholders are satisfied with the final Airbnb stay. However, the exploratory and assorted guest activities at Airbnb present unique challenges in modeling the end-to-end guest search journey. Guests go through different stages, making the modeling problem no longer a single task with binary positive / negative signals. Instead, we need to capture sparse guests and hosts preferences at multiple stages (i.e. milestones) of the search journey, while still taking into account the commonality of guest preference throughout all stages of the search journey.</p>
+</div>
+<div id="S1.p5">
+<p id="S1.p5.1">Furthermore, the mixture of positive (e.g. booking) and negative (e.g. cancellation) stages poses additional challenges. Specifically, the negative stages can be initiated from either guest or host, with varying correlations to other milestones in the same search journey. Explaining how the ranking model balances these often conflicting stages is an important consideration in a real world product.</p>
+</div>
+<div id="S1.p6">
+<p id="S1.p6.1">Finally, the high level concept of “Guest Journey” applies beyond the Airbnb stays ranking (e.g., experience ranking, email marketing, etc). The main differences are in terms of product-specific milestones (e.g. negative stages such as unsubscription in email marketing). Crafting a model architecture that optimizes guest journey in Airbnb stays ranking, while also easily applied to other product use cases, is strategic to the success of the Airbnb ecosystem.</p>
+</div>
+<div id="S1.p7">
+<p id="S1.p7.1">In this paper, we present <span id="S1.p7.1.1">Journey Ranker</span>, a general multi-task model architecture with the following main contributions:</p>
+<ul id="S1.I1">
+<li id="S1.I1.i1"><span>•</span>
+<div id="S1.I1.i1.p1">
+<p id="S1.I1.i1.p1.1"><span id="S1.I1.i1.p1.1.1">Learning both Positive and Negative Milestones:</span> Journey Ranker leverages intermediate guest actions to help the guest progress towards positive milestones, and avoid negative milestones throughout the guest journey.</p>
+</div></li>
+<li id="S1.I1.i2"><span>•</span>
+<div id="S1.I1.i2.p1">
+<p id="S1.I1.i2.p1.1"><span id="S1.I1.i2.p1.1.1">Balancing Guest Journey:</span> Journey Ranker introduces a Combination module (Section <a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#S4.SS3"><span>4.3</span></a>) to balance the positive and negative milestones across the guest journey.</p>
+</div></li>
+<li id="S1.I1.i3"><span>•</span>
+<div id="S1.I1.i3.p1">
+<p id="S1.I1.i3.p1.1"><span id="S1.I1.i3.p1.1.1">Modular and Extensible Model Architecture:</span> Journey Ranker is designed to consist of four modules with clear separation of concerns. This modular design allows it to be easily extended to other use cases beyond Airbnb stays ranking, which will be discussed in Section <a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#S5.SS6"><span>5.6</span></a>.</p>
+</div></li>
+</ul>
+</div>
+<div id="S1.p8">
+<p id="S1.p8.1">In this paper, we focus our presentation on a particular instantiation of the Journey Ranker for the Airbnb Stays ranking. Nevertheless, Journey Ranker is applicable to other search use cases where the user decision journey is long (e.g. e-commerce sites, real-estate listing sites, dating sites, etc), by choosing the appropriate milestones in the Base Module described in  <a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#S4.SS1"><span>4.1</span></a>. Journey Ranker is also applicable when there are negative business outcomes (e.g. customer support tickets, poor product rating, product returns, etc) to be avoided, by modeling them in the Twiddler Module described in  <a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#S4.SS2"><span>4.2</span></a> and then balanced by the Combination Module described in  <a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#S4.SS3"><span>4.3</span></a>. Journey Ranker could also be applied to other non-search journeys (e.g. email marketing, customer acquisition, etc) by configuring different positive and negative milestones. We present our successes in deployment in other use cases in Section  <a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#S5.SS6"><span>5.6</span></a>.</p>
+</div>
+<div id="S1.p9">
+<p id="S1.p9.1">The rest of the paper is organized as follows: In Section <a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#S2"><span>2</span></a>, we describe related work on search and recommendation systems. In Section <a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#S3"><span>3</span></a>, we present the Airbnb Stays Ranking problem formulation and the baseline. Next, we present Journey Ranker in Section <a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#S4"><span>4</span></a> and the offline and online experiment results in Section <a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#S5"><span>5</span></a>. Finally, we discuss possible future directions in Section <a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#S6"><span>6</span></a>.</p>
+</div>
+<figure id="S1.F1"><img alt="An example Airbnb guest journey who makes multiple searches, clicks, and reservation requests, before finally resulting in an uncancelled booking and check-in." height="284" src="https://arxiv.org/html/2305.18431v1/images/airbnb_user_journey.png" width="476"/><figcaption><span><span id="S1.F1.3">Figure 1</span>. </span><span id="S1.F1.4">An example Airbnb search journey for a guest who makes multiple searches, clicks, and reservation requests, before finally resulting in a realized stay.</span><span id="acmlabel1">An example Airbnb guest journey who makes multiple searches, clicks, and reservation requests, before finally resulting in an uncancelled booking and check-in.</span></figcaption></figure>
+</section>
+<section id="S2">
+<h2><span>2. </span>Related Work</h2>
+<div id="S2.p1">
+<p id="S2.p1.1">The majority of previous works in Search and Recommendation involves training deep learning models to optimize for a single business objective such as app installs in Mobile App Store (<a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#reference-6">Cheng et al., 2016</a>), watch time in video recommendation (<a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#reference-7">Covington et al., 2016</a>), pCTR in advertisement (<a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#reference-15">Wang et al., 2017</a>), bookings of vacation rentals (<a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#reference-8">Haldar et al., 2019</a>), etc. To deal with multiple potentially conflicting business objectives, one approach is to build an ecosystem of stand-alone models for each business objective (<a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#reference-8">Haldar et al., 2019</a>), and apply them as "second-stage re-rankers" to finetune the top K results after the main ranker. In contrast, Journey Ranker incorporates all the different guest actions corresponding to various objectives in a single multi-task model trained end-to-end (<a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#reference-4">Caruana, 2004</a>).</p>
+</div>
+<div id="S2.p2">
+<p id="S2.p2.1">Recently, multi-task modeling has been an active topic in many Search and Recommendation use cases such as video recommendation (<a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#reference-20">Zhao et al., 2019</a>), feed ads (<a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#reference-11">Ma et al., 2022</a>), etc., when there are multiple business metrics. Leveraging a multi-task approach allows sharing of feature representation, resulting in better performance for each task through transfer learning, while achieving lower overall serving cost. In contrast, for Airbnb Stays ranking, the main objective is uncancelled booking. Improving other metrics such as clicks without moving uncancelled booking implies a degraded ease of search experience for guests. Thus, our application of multi-task modeling is different from standard multi-objective settings in the sense that we are not trying to improve each of the objectives through shared representation. Rather, we leverage multi-task approach to let the model have a more comprehensive view of the guest search journey when optimizing for the uncancelled booking objective.</p>
+</div>
+<div id="S2.p3">
+<p id="S2.p3.1">Such a strategy is similar to previous industry use cases that leverage multi-task modeling to model multi-step conversions, such as in e-commerce (<a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#reference-12">Ma et al., 2018</a>) and in customer acquisition (<a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#reference-18">Xi et al., 2021</a>). Journey Ranker is inspired by these previous works, especially (<a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#reference-12">Ma et al., 2018</a>) in our design of Base Module in Section <a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#S4.SS1"><span>4.1</span></a>. In addition, we also extend previous work by adding new modules such as the Twiddler Module to model other negative search milestones and the Combination Module to better balance conflicting milestones throughout the guest search journey.</p>
+</div>
+<figure id="S2.F2"><img alt="A guest makes four searches across three different days, and clicked a few items before finally booking an item." height="150" src="https://arxiv.org/html/2305.18431v1/images/example_user_search_journey.png" width="238"/><img alt="The booked item is marked with booking label across all the three searches that contains it" height="150" src="https://arxiv.org/html/2305.18431v1/images/example_attribution.png" width="238"/><figcaption><span><span id="S2.F2.fig1.1">(a)</span> </span><span id="S2.F2.fig1.2">Example search journey</span><span id="acmlabel2">A guest makes four searches across three different days, and clicked a few items before finally booking an item.</span></figcaption></figure>
+</section>
+<section id="S3">
+<h2><span>3. </span>Airbnb Stays Ranking</h2>
+<section id="S3.SS1">
+<h3><span>3.1. </span>Notations</h3>
+<div id="S3.SS1.p1">
+<p id="S3.SS1.p1.1">To ease presentation, here are the notations we will use throughout the paper to describe an Airbnb user action, which will be used to denote an output, or a loss.</p>
+</div>
+<div id="S3.SS1.p2">
+<ul id="S3.I1">
+<li id="S3.I1.i1"><span>•</span>
+<div id="S3.I1.i1.p1">
+<p id="S3.I1.i1.p1.1"><span id="S3.I1.i1.p1.1.1">imp</span> - An impression of a search result in a search.</p>
+</div></li>
+<li id="S3.I1.i2"><span>•</span>
+<div id="S3.I1.i2.p1">
+<p id="S3.I1.i2.p1.1"><span id="S3.I1.i2.p1.1.1">c</span> - A click of a search impression.</p>
+</div></li>
+<li id="S3.I1.i3"><span>•</span>
+<div id="S3.I1.i3.p1">
+<p id="S3.I1.i3.p1.1"><span id="S3.I1.i3.p1.1.1">lc</span> - A long click of a search impression, defined by engagement of the listing details page after a click.</p>
+</div></li>
+<li id="S3.I1.i4"><span>•</span>
+<div id="S3.I1.i4.p1">
+<p id="S3.I1.i4.p1.1"><span id="S3.I1.i4.p1.1.1">pp</span> - A click to open the payment page for a listing.</p>
+</div></li>
+<li id="S3.I1.i5"><span>•</span>
+<div id="S3.I1.i5.p1">
+<p id="S3.I1.i5.p1.1"><span id="S3.I1.i5.p1.1.1">req</span> - A reservation request for a listing from a guest.</p>
+</div></li>
+<li id="S3.I1.i6"><span>•</span>
+<div id="S3.I1.i6.p1">
+<p id="S3.I1.i6.p1.1"><span id="S3.I1.i6.p1.1.1">book</span> - An acceptance (by host) of a reservation request.</p>
+</div></li>
+<li id="S3.I1.i7"><span>•</span>
+<div id="S3.I1.i7.p1">
+<p id="S3.I1.i7.p1.1"><span id="S3.I1.i7.p1.1.1">unc</span> - An uncancelled booking of a listing.</p>
+</div></li>
+<li id="S3.I1.i8"><span>•</span>
+<div id="S3.I1.i8.p1">
+<p id="S3.I1.i8.p1.1"><span id="S3.I1.i8.p1.1.1">rej</span> - A rejection of a reservation request.</p>
+</div></li>
+<li id="S3.I1.i9"><span>•</span>
+<div id="S3.I1.i9.p1">
+<p id="S3.I1.i9.p1.1"><span id="S3.I1.i9.p1.1.1">cbh</span> - A cancellation by host.</p>
+</div></li>
+<li id="S3.I1.i10"><span>•</span>
+<div id="S3.I1.i10.p1">
+<p id="S3.I1.i10.p1.1"><span id="S3.I1.i10.p1.1.1">cbg</span> - A cancellation by guest.</p>
+</div></li>
+</ul>
+</div>
+<div id="S3.SS1.p3">
+<p id="S3.SS1.p3.1">We use <span id="S3.SS1.p3.1.1">U</span>ppercase to denote a Set, <span id="S3.SS1.p3.1.2">l</span>owercase to denote an instance of a Set, and subscript to denote relationship between two sets, for example:</p>
+</div>
+<div id="S3.SS1.p4">
+<ul id="S3.I2">
+<li id="S3.I2.i1"><span>•</span>
+<div id="S3.I2.i1.p1">
+<p id="S3.I2.i1.p1.1"><span id="S3.I2.i1.p1.1.1">U</span> is a set of guests.</p>
+</div></li>
+<li id="S3.I2.i2"><span>•</span>
+<div id="S3.I2.i2.p1">
+<p id="S3.I2.i2.p1.1"><span id="S3.I2.i2.p1.1.1">u</span> is a guest within <span id="S3.I2.i2.p1.1.2">U</span>.</p>
+</div></li>
+<li id="S3.I2.i3"><span>•</span>
+<div id="S3.I2.i3.p1">
+<p id="S3.I2.i3.p1.1"><math alttext="S_{u}" class="ltx_Math" display="inline" id="S3.I2.i3.p1.m1" intent=":literal"><semantics><msub><mi>S</mi><mi>u</mi></msub><annotation encoding="application/x-tex">S_{u}</annotation></semantics></math>is a set of searches for guest <span id="S3.I2.i3.p1.1.1">u</span>.</p>
+</div></li>
+</ul>
+</div>
+<div id="S3.SS1.p5">
+<p id="S3.SS1.p5.1">Finally, we use <math alttext="y_{t}" class="ltx_Math" display="inline" id="S3.SS1.p5.m1" intent=":literal"><semantics><msub><mi>y</mi><mi>t</mi></msub><annotation encoding="application/x-tex">y_{t}</annotation></semantics></math>, and <math alttext="Loss_{t}" class="ltx_Math" display="inline" id="S3.SS1.p5.m2" intent=":literal"><semantics><mrow><mi>L</mi><mo lspace="0em" rspace="0em">​</mo><mi>o</mi><mo lspace="0em" rspace="0em">​</mo><mi>s</mi><mo lspace="0em" rspace="0em">​</mo><msub><mi>s</mi><mi>t</mi></msub></mrow><annotation encoding="application/x-tex">Loss_{t}</annotation></semantics></math> to indicate the output, and loss for task (or module) <span id="S3.SS1.p5.1.1">t</span> respectively.</p>
+</div>
+</section>
+<section id="S3.SS2">
+<h3><span>3.2. </span>Previous Baseline</h3>
+<div id="S3.SS2.p1">
+<p id="S3.SS2.p1.1">Figure <a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#S2.F2"><span>2</span></a> (left diagram) shows a simplified example of a typical guest search journey, where the guest makes multiple searches over multiple days and clicks on multiple search results to view their detail pages, before finally making a reservation request for a listing. The reservation request is then instantly-accepted if it is an Instant Book listing, otherwise the host manually decides whether to accept or reject the reservation request. Finally, both the guest and host may also cancel the booking before check-in. Thus, an <span id="S3.SS2.p1.1.1">Uncancelled Booking</span> is one of the main metrics we use to evaluate the success of a guest search journey.</p>
+</div>
+<div id="S3.SS2.p2">
+<p id="S3.SS2.p2.1">During model training of previous baseline, we label all of the search impressions of the booked listing in all of the searches the guest made before the booking occurred as "positive labels" as shown in Figure <a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#S2.F2"><span>2</span></a> (right diagram). The goal of the Airbnb Stays Ranking model is then formulated as ranking the positive labels higher than all the other search impressions; and we do this for all guest searches across the search journey so that guests can find their ideal listing as early as possible.</p>
+</div>
+<div id="S3.SS2.p3">
+<p id="S3.SS2.p3.1">Specifically, we want to learn model parameters <math alttext="\theta" class="ltx_Math" display="inline" id="S3.SS2.p3.m1" intent=":literal"><semantics><mi>θ</mi><annotation encoding="application/x-tex">\theta</annotation></semantics></math> to minimize the loss across the searches, <math alttext="S_{u}" class="ltx_Math" display="inline" id="S3.SS2.p3.m2" intent=":literal"><semantics><msub><mi>S</mi><mi>u</mi></msub><annotation encoding="application/x-tex">S_{u}</annotation></semantics></math>, for all guests, <span id="S3.SS2.p3.1.1">U</span>.</p>
+</div>
+<div id="S3.SS2.p4">
+<p><math alttext="\argmin_{\theta}{\sum_{u\in U}{\sum_{s\in S_{u}}{Loss_{unc}{(s|\theta)}}}}" class="ltx_math_unparsed" display="block" id="S3.E1.m1" intent=":literal"><semantics><mrow><msub><mo>argmin</mo><mi>θ</mi></msub><munder><mo lspace="0.167em" movablelimits="false" rspace="0em">∑</mo><mrow><mi>u</mi><mo>∈</mo><mi>U</mi></mrow></munder><munder><mo movablelimits="false">∑</mo><mrow><mi>s</mi><mo>∈</mo><msub><mi>S</mi><mi>u</mi></msub></mrow></munder><mi>L</mi><mi>o</mi><mi>s</mi><msub><mi>s</mi><mrow><mi>u</mi><mo lspace="0em" rspace="0em">​</mo><mi>n</mi><mo lspace="0em" rspace="0em">​</mo><mi>c</mi></mrow></msub><mrow><mo stretchy="false">(</mo><mi>s</mi><mo lspace="0em" rspace="0em">|</mo><mi>θ</mi><mo stretchy="false">)</mo></mrow></mrow><annotation encoding="application/x-tex">\argmin_{\theta}{\sum_{u\in U}{\sum_{s\in S_{u}}{Loss_{unc}{(s|\theta)}}}}</annotation></semantics></math> (1)</p>
+</div>
+<div id="S3.SS2.p5">
+<p id="S3.SS2.p5.1">Note that the <math alttext="Loss_{unc}" class="ltx_Math" display="inline" id="S3.SS2.p5.m1" intent=":literal"><semantics><mrow><mi>L</mi><mo lspace="0em" rspace="0em">​</mo><mi>o</mi><mo lspace="0em" rspace="0em">​</mo><mi>s</mi><mo lspace="0em" rspace="0em">​</mo><msub><mi>s</mi><mrow><mi>u</mi><mo lspace="0em" rspace="0em">​</mo><mi>n</mi><mo lspace="0em" rspace="0em">​</mo><mi>c</mi></mrow></msub></mrow><annotation encoding="application/x-tex">Loss_{unc}</annotation></semantics></math> is defined per search with the goal of ranking the search impressions associated with the booking higher than every other search impressions. The loss could be either listwise, or pairwise loss using standard learning-to-rank approaches (<a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#reference-2">Burges, 2010</a>) (<a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#reference-3">Cao et al., 2007</a>).</p>
+</div>
+<div id="S3.SS2.p6">
+<p id="S3.SS2.p6.1">The previous production Airbnb Stays Ranking model then generates a score for each listing for ranking based on the model parameters <math alttext="\theta" class="ltx_Math" display="inline" id="S3.SS2.p6.m1" intent=":literal"><semantics><mi>θ</mi><annotation encoding="application/x-tex">\theta</annotation></semantics></math>, listing features <math alttext="F_{L}" class="ltx_Math" display="inline" id="S3.SS2.p6.m2" intent=":literal"><semantics><msub><mi>F</mi><mi>L</mi></msub><annotation encoding="application/x-tex">F_{L}</annotation></semantics></math>, and context (i.e query and guest) features <math alttext="F_{C}" class="ltx_Math" display="inline" id="S3.SS2.p6.m3" intent=":literal"><semantics><msub><mi>F</mi><mi>C</mi></msub><annotation encoding="application/x-tex">F_{C}</annotation></semantics></math> using a deep neural network consisting of two towers of fully connected layers with non-linear activation units (<a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#reference-9">Haldar et al., 2020</a>) to predict uncancelled booking.</p>
+</div>
+</section>
+<section id="S3.SS3">
+<h3><span>3.3. </span>Disadvantages of Previous Baseline</h3>
+<div id="S3.SS3.p1">
+<p id="S3.SS3.p1.1">While optimizing for booking aligns well with our business metric, there are a few disadvantages that are worth noting:</p>
+<ul id="S3.I3">
+<li id="S3.I3.i1"><span>•</span>
+<div id="S3.I3.i1.p1">
+<p id="S3.I3.i1.p1.1">We ignore searches from bookers without the booked listings, e.g. Search #1 in Figure <a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#S2.F2"><span>2</span></a> (right diagram).</p>
+</div></li>
+<li id="S3.I3.i2"><span>•</span>
+<div id="S3.I3.i2.p1">
+<p id="S3.I3.i2.p1.1">We equally treat all non-booked listings as negative examples, but in reality, some of them have clicks while others don’t, e.g. <span id="S3.I3.i2.p1.1.1">item-b</span> in Search #3 in Figure <a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#S2.F2"><span>2</span></a> (left diagram).</p>
+</div></li>
+<li id="S3.I3.i3"><span>•</span>
+<div id="S3.I3.i3.p1">
+<p id="S3.I3.i3.p1.1">We ignore all searches from non-bookers, including those guests who had reservation requests but were rejected by the hosts, which could provide useful insights for understanding guest and host preferences.</p>
+</div></li>
+</ul>
+</div>
+<div id="S3.SS3.p2">
+<p id="S3.SS3.p2.1">Given that both non-bookers and non-booking guest actions (eg. search clicks) are each one and two orders of magnitude bigger than bookers and booking events respectively, we are potentially missing out a significant amount of data to better extract guest and host preferences. Furthermore, we are also subject to <span id="S3.SS3.p2.1.1">sample selection bias</span> problem (<a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#reference-19">Zadrozny, 2004</a>) as we are serving a ranking model learned only from our past bookers to all our guests.</p>
+</div>
+<div id="S3.SS3.p3">
+<p id="S3.SS3.p3.1">One important consideration for Airbnb is that conversion remains the ultimate goal. Specifically, we don’t want a model that increases the number of clicks without increasing bookings, as that will imply that each booking involves more effort across a longer search journey to find the ideal listing.</p>
+</div>
+<div id="S3.SS3.p4">
+<p id="S3.SS3.p4.1">Our previous attempts to remedy these issues included building a single multi-task model with booking and long click (<a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#reference-8">Haldar et al., 2019</a>), and building multiple single-task models that are then combined online during serving using weights found through grid search. The former attempt increased long clicks but failed to move bookings. The latter attempt successfully increased bookings but had poor stability, resulting in out-of-date weights and a decline on on bookings a few months after the original launch.</p>
+</div>
+<div id="S3.SS3.p5">
+<p id="S3.SS3.p5.1">In the next section, we present <span id="S3.SS3.p5.1.1">Journey Ranker</span>, a novel multi-task model architecture trained end-to-end. Journey Ranker successfully drove significant business metric improvements without the downside of our previous approaches mentioned above.</p>
+</div>
+</section>
+</section>
+<section id="S4">
+<h2><span>4. </span>Journey Ranker for Stays Ranking</h2>
+<figure id="S4.F3"><img alt="A simplified view of the Journey Ranker model architecture, consisting of multiple modules - shared representation module, base module, twiddler module, and combination module." height="392" src="https://arxiv.org/html/2305.18431v1/images/simplified_architecture.png" width="381"/><figcaption><span><span id="S4.F3.3">Figure 3</span>. </span><span id="S4.F3.4">A simplified view of the Journey Ranker model architecture, consisting of multiple modules - Shared Representation Module, Base Module, Twiddler module, and Combination module.</span><span id="acmlabel4">A simplified view of the Journey Ranker model architecture, consisting of multiple modules - shared representation module, base module, twiddler module, and combination module.</span></figcaption></figure>
+<div id="S4.p1">
+<p id="S4.p1.1">Journey Ranker architecture consists of multiple modules trained end-to-end using multi-task techniques, and a simplified view of the architecture is shown in Figure <a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#S4.F3"><span>3</span></a> for the instantiation for our Airbnb Stays Ranking use case. The input to Journey Ranker are listing features <math alttext="F_{L}" class="ltx_Math" display="inline" id="S4.p1.m1" intent=":literal"><semantics><msub><mi>F</mi><mi>L</mi></msub><annotation encoding="application/x-tex">F_{L}</annotation></semantics></math>, and context (i.e query and guest) features <math alttext="F_{C}" class="ltx_Math" display="inline" id="S4.p1.m2" intent=":literal"><semantics><msub><mi>F</mi><mi>C</mi></msub><annotation encoding="application/x-tex">F_{C}</annotation></semantics></math>. Both <math alttext="F_{L}" class="ltx_Math" display="inline" id="S4.p1.m3" intent=":literal"><semantics><msub><mi>F</mi><mi>L</mi></msub><annotation encoding="application/x-tex">F_{L}</annotation></semantics></math> and <math alttext="F_{C}" class="ltx_Math" display="inline" id="S4.p1.m4" intent=":literal"><semantics><msub><mi>F</mi><mi>C</mi></msub><annotation encoding="application/x-tex">F_{C}</annotation></semantics></math> consist of both continuous and categorical features, and they are transformed accordingly through either normalization or embedding projection as described in previous work (<a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#reference-8">Haldar et al., 2019</a>).</p>
+</div>
+<div id="S4.p2">
+<p id="S4.p2.1">The Shared Representation Module takes both <math alttext="F_{L}" class="ltx_Math" display="inline" id="S4.p2.m1" intent=":literal"><semantics><msub><mi>F</mi><mi>L</mi></msub><annotation encoding="application/x-tex">F_{L}</annotation></semantics></math> and <math alttext="F_{C}" class="ltx_Math" display="inline" id="S4.p2.m2" intent=":literal"><semantics><msub><mi>F</mi><mi>C</mi></msub><annotation encoding="application/x-tex">F_{C}</annotation></semantics></math> as input and feeds them through multi-layer perceptrons (MLP) with non-linear activation units to generate listing embedding, <math alttext="Emb_{L}" class="ltx_Math" display="inline" id="S4.p2.m3" intent=":literal"><semantics><mrow><mi>E</mi><mo lspace="0em" rspace="0em">​</mo><mi>m</mi><mo lspace="0em" rspace="0em">​</mo><msub><mi>b</mi><mi>L</mi></msub></mrow><annotation encoding="application/x-tex">Emb_{L}</annotation></semantics></math> and context embedding, <math alttext="Emb_{C}" class="ltx_Math" display="inline" id="S4.p2.m4" intent=":literal"><semantics><mrow><mi>E</mi><mo lspace="0em" rspace="0em">​</mo><mi>m</mi><mo lspace="0em" rspace="0em">​</mo><msub><mi>b</mi><mi>C</mi></msub></mrow><annotation encoding="application/x-tex">Emb_{C}</annotation></semantics></math>. Finally, <math alttext="Emb_{L}" class="ltx_Math" display="inline" id="S4.p2.m5" intent=":literal"><semantics><mrow><mi>E</mi><mo lspace="0em" rspace="0em">​</mo><mi>m</mi><mo lspace="0em" rspace="0em">​</mo><msub><mi>b</mi><mi>L</mi></msub></mrow><annotation encoding="application/x-tex">Emb_{L}</annotation></semantics></math> and <math alttext="Emb_{C}" class="ltx_Math" display="inline" id="S4.p2.m6" intent=":literal"><semantics><mrow><mi>E</mi><mo lspace="0em" rspace="0em">​</mo><mi>m</mi><mo lspace="0em" rspace="0em">​</mo><msub><mi>b</mi><mi>C</mi></msub></mrow><annotation encoding="application/x-tex">Emb_{C}</annotation></semantics></math> are fed to the three remaining modules (Base Module, Twiddler Module, and Combination Module) to generate the final output score. These modules will be presented in detail in the following subsections.</p>
+</div>
+<div id="S4.p3">
+<p id="S4.p3.1">One thing to note is that if we remove the Twiddler Module and the Combination Module, and reduce the Base Module to be a single-task model optimizing for just uncancelled booking, then the output of the Base Module is equivalent to our previous production model architecture described in Section <a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#S3.SS2"><span>3.2</span></a>.</p>
+</div>
+<section id="S4.SS1">
+<h3><span>4.1. </span>Base Module: Reaching Positive Milestones</h3>
+<figure id="S4.F4"><img alt="Model architecture for the Base Module consisting of six sequential guest actions of clicks, long clicks, payment page views, reservation requests, bookings, and uncancelled bookings." height="134" src="https://arxiv.org/html/2305.18431v1/images/base_module_architecture.png" width="381"/><figcaption><span><span id="S4.F4.3">Figure 4</span>. </span><span id="S4.F4.4">Airbnb Stays Ranking’s Instantiation of Base Module.</span><span id="acmlabel5">Model architecture for the Base Module consisting of six sequential guest actions of clicks, long clicks, payment page views, reservation requests, bookings, and uncancelled bookings.</span></figcaption></figure>
+<div id="S4.SS1.p1">
+<p id="S4.SS1.p1.1">The responsibility of the Base Module is to produce a single score per search result that is optimized for the final positive milestone (e.g. uncancelled booking for Airbnb stays ranking). As described in Section <a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#S3.SS3"><span>3.3</span></a>, we withhold a lot of information from the model if we simplify the complex Airbnb Stays ranking use case into a binary formulation of uncancelled booking vs search impression.</p>
+</div>
+<div id="S4.SS1.p2">
+<p id="S4.SS1.p2.1">Thus, in Journey Ranker for Airbnb Stays Ranking, we reformulate the ML problem formulation for Base Module into helping guests reach each of the positive search milestones (i.e. improving the conversion funnel), culminating in an uncancelled booking. Motivated by (<a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#reference-12">Ma et al., 2018</a>), we also model the six positive guest search milestones as sequential guest actions that are linked together using the chain rule of probability. Specifically, we decompose the probability of uncancelled booking into each of the six guest milestones, i.e. Click <span id="S4.SS1.p2.1.1">c</span>, Long Click <span id="S4.SS1.p2.1.2">lc</span>, Payment page <span id="S4.SS1.p2.1.3">pp</span>, Reservation request from guest <span id="S4.SS1.p2.1.4">req</span>, Acceptance of reservation request by host <span id="S4.SS1.p2.1.5">book</span>, and Uncancelled Booking <span id="S4.SS1.p2.1.6">unc</span>, with the following equations:</p>
+</div>
+<div id="S4.SS1.p3">
+<p><math alttext="\displaystyle\begin{split}P(unc)=&amp;\ P(unc\ |\ book)*P(book)\\
+P(book)=&amp;\ P(book\ |\ req)\ *P(req)\\
+P(req)=&amp;\ P(req\ |\ pp)*P(pp)\\
+P(pp)=&amp;\ P(pp\ |\ lc)*P(lc)\\
+P(lc)=&amp;\ P(lc\ |\ c)*P(c)\end{split}" class="ltx_Math" display="inline" id="S4.E2.m1" intent=":literal"><semantics><mtable columnspacing="0pt" rowspacing="0pt"><mtr><mtd class="ltx_align_right" columnalign="right"><mrow><mrow><mi>P</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mrow><mi>u</mi><mo lspace="0em" rspace="0em">​</mo><mi>n</mi><mo lspace="0em" rspace="0em">​</mo><mi>c</mi></mrow><mo stretchy="false">)</mo></mrow></mrow><mo>=</mo><mphantom></mphantom></mrow></mtd><mtd class="ltx_align_left" columnalign="left"><mrow><mrow><mi>P</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mrow><mi>u</mi><mo lspace="0em" rspace="0em">​</mo><mi>n</mi><mo lspace="0em" rspace="0em">​</mo><mi>c</mi></mrow><mo lspace="1.000em" rspace="1.000em">|</mo><mrow><mi>b</mi><mo lspace="0em" rspace="0em">​</mo><mi>o</mi><mo lspace="0em" rspace="0em">​</mo><mi>o</mi><mo lspace="0em" rspace="0em">​</mo><mi>k</mi></mrow><mo rspace="0.055em" stretchy="false">)</mo></mrow></mrow><mo rspace="0.222em">∗</mo><mrow><mi>P</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mrow><mi>b</mi><mo lspace="0em" rspace="0em">​</mo><mi>o</mi><mo lspace="0em" rspace="0em">​</mo><mi>o</mi><mo lspace="0em" rspace="0em">​</mo><mi>k</mi></mrow><mo stretchy="false">)</mo></mrow></mrow></mrow></mtd></mtr><mtr><mtd class="ltx_align_right" columnalign="right"><mrow><mrow><mi>P</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mrow><mi>b</mi><mo lspace="0em" rspace="0em">​</mo><mi>o</mi><mo lspace="0em" rspace="0em">​</mo><mi>o</mi><mo lspace="0em" rspace="0em">​</mo><mi>k</mi></mrow><mo stretchy="false">)</mo></mrow></mrow><mo>=</mo><mphantom></mphantom></mrow></mtd><mtd class="ltx_align_left" columnalign="left"><mrow><mrow><mi>P</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mrow><mi>b</mi><mo lspace="0em" rspace="0em">​</mo><mi>o</mi><mo lspace="0em" rspace="0em">​</mo><mi>o</mi><mo lspace="0em" rspace="0em">​</mo><mi>k</mi></mrow><mo lspace="1.000em" rspace="1.000em">|</mo><mrow><mi>r</mi><mo lspace="0em" rspace="0em">​</mo><mi>e</mi><mo lspace="0em" rspace="0em">​</mo><mi>q</mi></mrow><mo rspace="1.055em" stretchy="false">)</mo></mrow></mrow><mo rspace="0.222em">∗</mo><mrow><mi>P</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mrow><mi>r</mi><mo lspace="0em" rspace="0em">​</mo><mi>e</mi><mo lspace="0em" rspace="0em">​</mo><mi>q</mi></mrow><mo stretchy="false">)</mo></mrow></mrow></mrow></mtd></mtr><mtr><mtd class="ltx_align_right" columnalign="right"><mrow><mrow><mi>P</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mrow><mi>r</mi><mo lspace="0em" rspace="0em">​</mo><mi>e</mi><mo lspace="0em" rspace="0em">​</mo><mi>q</mi></mrow><mo stretchy="false">)</mo></mrow></mrow><mo>=</mo><mphantom></mphantom></mrow></mtd><mtd class="ltx_align_left" columnalign="left"><mrow><mrow><mi>P</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mrow><mi>r</mi><mo lspace="0em" rspace="0em">​</mo><mi>e</mi><mo lspace="0em" rspace="0em">​</mo><mi>q</mi></mrow><mo lspace="1.000em" rspace="1.000em">|</mo><mrow><mi>p</mi><mo lspace="0em" rspace="0em">​</mo><mi>p</mi></mrow><mo rspace="0.055em" stretchy="false">)</mo></mrow></mrow><mo rspace="0.222em">∗</mo><mrow><mi>P</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mrow><mi>p</mi><mo lspace="0em" rspace="0em">​</mo><mi>p</mi></mrow><mo stretchy="false">)</mo></mrow></mrow></mrow></mtd></mtr><mtr><mtd class="ltx_align_right" columnalign="right"><mrow><mrow><mi>P</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mrow><mi>p</mi><mo lspace="0em" rspace="0em">​</mo><mi>p</mi></mrow><mo stretchy="false">)</mo></mrow></mrow><mo>=</mo><mphantom></mphantom></mrow></mtd><mtd class="ltx_align_left" columnalign="left"><mrow><mrow><mi>P</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mrow><mi>p</mi><mo lspace="0em" rspace="0em">​</mo><mi>p</mi></mrow><mo lspace="1.000em" rspace="1.000em">|</mo><mrow><mi>l</mi><mo lspace="0em" rspace="0em">​</mo><mi>c</mi></mrow><mo rspace="0.055em" stretchy="false">)</mo></mrow></mrow><mo rspace="0.222em">∗</mo><mrow><mi>P</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mrow><mi>l</mi><mo lspace="0em" rspace="0em">​</mo><mi>c</mi></mrow><mo stretchy="false">)</mo></mrow></mrow></mrow></mtd></mtr><mtr><mtd class="ltx_align_right" columnalign="right"><mrow><mrow><mi>P</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mrow><mi>l</mi><mo lspace="0em" rspace="0em">​</mo><mi>c</mi></mrow><mo stretchy="false">)</mo></mrow></mrow><mo>=</mo><mphantom></mphantom></mrow></mtd><mtd class="ltx_align_left" columnalign="left"><mrow><mrow><mi>P</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mrow><mi>l</mi><mo lspace="0em" rspace="0em">​</mo><mi>c</mi></mrow><mo lspace="1.000em" rspace="1.000em">|</mo><mi>c</mi><mo rspace="0.055em" stretchy="false">)</mo></mrow></mrow><mo rspace="0.222em">∗</mo><mrow><mi>P</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mi>c</mi><mo stretchy="false">)</mo></mrow></mrow></mrow></mtd></mtr></mtable><annotation encoding="application/x-tex">\displaystyle\begin{split}P(unc)=&amp;\ P(unc\ |\ book)*P(book)\\
+P(book)=&amp;\ P(book\ |\ req)\ *P(req)\\
+P(req)=&amp;\ P(req\ |\ pp)*P(pp)\\
+P(pp)=&amp;\ P(pp\ |\ lc)*P(lc)\\
+P(lc)=&amp;\ P(lc\ |\ c)*P(c)\end{split}</annotation></semantics></math> (2)</p>
+</div>
+<div id="S4.SS1.p4">
+<p id="S4.SS1.p4.1">where each of the terms on the left hand side of the equation is actually a joint probability of all its preceding guest milestones, omitted for brevity. For example, <math alttext="P(unc)" class="ltx_Math" display="inline" id="S4.SS1.p4.m1" intent=":literal"><semantics><mrow><mi>P</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mrow><mi>u</mi><mo lspace="0em" rspace="0em">​</mo><mi>n</mi><mo lspace="0em" rspace="0em">​</mo><mi>c</mi></mrow><mo stretchy="false">)</mo></mrow></mrow><annotation encoding="application/x-tex">P(unc)</annotation></semantics></math> is a joint probability, i.e. <math alttext="P(unc\cap book\cap req\cap pp\cap lc\cap c\ |\ imp)" class="ltx_Math" display="inline" id="S4.SS1.p4.m2" intent=":literal"><semantics><mrow><mi>P</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mrow><mrow><mi>u</mi><mo lspace="0em" rspace="0em">​</mo><mi>n</mi><mo lspace="0em" rspace="0em">​</mo><mi>c</mi></mrow><mo>∩</mo><mrow><mi>b</mi><mo lspace="0em" rspace="0em">​</mo><mi>o</mi><mo lspace="0em" rspace="0em">​</mo><mi>o</mi><mo lspace="0em" rspace="0em">​</mo><mi>k</mi></mrow><mo>∩</mo><mrow><mi>r</mi><mo lspace="0em" rspace="0em">​</mo><mi>e</mi><mo lspace="0em" rspace="0em">​</mo><mi>q</mi></mrow><mo>∩</mo><mrow><mi>p</mi><mo lspace="0em" rspace="0em">​</mo><mi>p</mi></mrow><mo>∩</mo><mrow><mi>l</mi><mo lspace="0em" rspace="0em">​</mo><mi>c</mi></mrow><mo>∩</mo><mi>c</mi></mrow><mo lspace="0.500em" rspace="0.500em">|</mo><mrow><mi>i</mi><mo lspace="0em" rspace="0em">​</mo><mi>m</mi><mo lspace="0em" rspace="0em">​</mo><mi>p</mi></mrow><mo stretchy="false">)</mo></mrow></mrow><annotation encoding="application/x-tex">P(unc\cap book\cap req\cap pp\cap lc\cap c\ |\ imp)</annotation></semantics></math>.</p>
+</div>
+<div id="S4.SS1.p5">
+<p id="S4.SS1.p5.1">The instantiation of the Base Module for Airbnb Stays Ranking is in Figure <a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#S4.F4"><span>4</span></a>, where for each of the guest milestones, we generate a corresponding task logit (i.e. blue box) by running a multi-layer perceptron (MLP) on top of the Listing Embedding <math alttext="Emb_{L}" class="ltx_Math" display="inline" id="S4.SS1.p5.m1" intent=":literal"><semantics><mrow><mi>E</mi><mo lspace="0em" rspace="0em">​</mo><mi>m</mi><mo lspace="0em" rspace="0em">​</mo><msub><mi>b</mi><mi>L</mi></msub></mrow><annotation encoding="application/x-tex">Emb_{L}</annotation></semantics></math> and Context Embedding <math alttext="Emb_{C}" class="ltx_Math" display="inline" id="S4.SS1.p5.m2" intent=":literal"><semantics><mrow><mi>E</mi><mo lspace="0em" rspace="0em">​</mo><mi>m</mi><mo lspace="0em" rspace="0em">​</mo><msub><mi>b</mi><mi>C</mi></msub></mrow><annotation encoding="application/x-tex">Emb_{C}</annotation></semantics></math> from the Shared Representation Module. In other words, the six blue boxes in Figure <a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#S4.F4"><span>4</span></a> correspond to the six conditional probabilities defined in Equation <a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#S4.E2"><span>2</span></a>.</p>
+</div>
+<div id="S4.SS1.p6">
+<p id="S4.SS1.p6.1">To train the Base Module for the Journey Ranker, we apply multiple losses, one for each of the joint probabilities in Equation <a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#S4.E2"><span>2</span></a> as shown in the Figure <a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#S4.F4"><span>4</span></a>. For example, for a specific task such as payment page, all the search impressions that led to a payment page view are considered positives and the rest are considered negatives.</p>
+</div>
+<div id="S4.SS1.p7">
+<p id="S4.SS1.p7.1">The final loss for the Base Module is the sum of each of the losses from each individual tasks:</p>
+</div>
+<div id="S4.SS1.p8">
+<p><math alttext="Loss_{Base}=\sum_{task}Loss_{task}" class="ltx_Math" display="block" id="S4.E3.m1" intent=":literal"><semantics><mrow><mrow><mi>L</mi><mo lspace="0em" rspace="0em">​</mo><mi>o</mi><mo lspace="0em" rspace="0em">​</mo><mi>s</mi><mo lspace="0em" rspace="0em">​</mo><msub><mi>s</mi><mrow><mi>B</mi><mo lspace="0em" rspace="0em">​</mo><mi>a</mi><mo lspace="0em" rspace="0em">​</mo><mi>s</mi><mo lspace="0em" rspace="0em">​</mo><mi>e</mi></mrow></msub></mrow><mo rspace="0.111em">=</mo><mrow><munder><mo movablelimits="false">∑</mo><mrow><mi>t</mi><mo lspace="0em" rspace="0em">​</mo><mi>a</mi><mo lspace="0em" rspace="0em">​</mo><mi>s</mi><mo lspace="0em" rspace="0em">​</mo><mi>k</mi></mrow></munder><mrow><mi>L</mi><mo lspace="0em" rspace="0em">​</mo><mi>o</mi><mo lspace="0em" rspace="0em">​</mo><mi>s</mi><mo lspace="0em" rspace="0em">​</mo><msub><mi>s</mi><mrow><mi>t</mi><mo lspace="0em" rspace="0em">​</mo><mi>a</mi><mo lspace="0em" rspace="0em">​</mo><mi>s</mi><mo lspace="0em" rspace="0em">​</mo><mi>k</mi></mrow></msub></mrow></mrow></mrow><annotation encoding="application/x-tex">Loss_{Base}=\sum_{task}Loss_{task}</annotation></semantics></math> (3)</p>
+</div>
+<div id="S4.SS1.p9">
+<p id="S4.SS1.p9.1">where, using the same notation as Equation <a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#S3.E1"><span>1</span></a>, <math alttext="Loss_{task}" class="ltx_Math" display="inline" id="S4.SS1.p9.m1" intent=":literal"><semantics><mrow><mi>L</mi><mo lspace="0em" rspace="0em">​</mo><mi>o</mi><mo lspace="0em" rspace="0em">​</mo><mi>s</mi><mo lspace="0em" rspace="0em">​</mo><msub><mi>s</mi><mrow><mi>t</mi><mo lspace="0em" rspace="0em">​</mo><mi>a</mi><mo lspace="0em" rspace="0em">​</mo><mi>s</mi><mo lspace="0em" rspace="0em">​</mo><mi>k</mi></mrow></msub></mrow><annotation encoding="application/x-tex">Loss_{task}</annotation></semantics></math> is:</p>
+</div>
+<div id="S4.SS1.p10">
+<p><math alttext="Loss_{task}=\sum_{u\in U}\sum_{s\in S_{u}}loss_{task}(s|\theta)*w_{task}" class="ltx_Math" display="block" id="S4.E4.m1" intent=":literal"><semantics><mrow><mrow><mi>L</mi><mo lspace="0em" rspace="0em">​</mo><mi>o</mi><mo lspace="0em" rspace="0em">​</mo><mi>s</mi><mo lspace="0em" rspace="0em">​</mo><msub><mi>s</mi><mrow><mi>t</mi><mo lspace="0em" rspace="0em">​</mo><mi>a</mi><mo lspace="0em" rspace="0em">​</mo><mi>s</mi><mo lspace="0em" rspace="0em">​</mo><mi>k</mi></mrow></msub></mrow><mo rspace="0.111em">=</mo><mrow><mrow><munder><mo movablelimits="false" rspace="0em">∑</mo><mrow><mi>u</mi><mo>∈</mo><mi>U</mi></mrow></munder><mrow><munder><mo movablelimits="false">∑</mo><mrow><mi>s</mi><mo>∈</mo><msub><mi>S</mi><mi>u</mi></msub></mrow></munder><mrow><mi>l</mi><mo lspace="0em" rspace="0em">​</mo><mi>o</mi><mo lspace="0em" rspace="0em">​</mo><mi>s</mi><mo lspace="0em" rspace="0em">​</mo><msub><mi>s</mi><mrow><mi>t</mi><mo lspace="0em" rspace="0em">​</mo><mi>a</mi><mo lspace="0em" rspace="0em">​</mo><mi>s</mi><mo lspace="0em" rspace="0em">​</mo><mi>k</mi></mrow></msub><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><mi>s</mi><mo lspace="0em" rspace="0em">|</mo><mi>θ</mi><mo rspace="0.055em" stretchy="false">)</mo></mrow></mrow></mrow></mrow><mo rspace="0.222em">∗</mo><msub><mi>w</mi><mrow><mi>t</mi><mo lspace="0em" rspace="0em">​</mo><mi>a</mi><mo lspace="0em" rspace="0em">​</mo><mi>s</mi><mo lspace="0em" rspace="0em">​</mo><mi>k</mi></mrow></msub></mrow></mrow><annotation encoding="application/x-tex">Loss_{task}=\sum_{u\in U}\sum_{s\in S_{u}}loss_{task}(s|\theta)*w_{task}</annotation></semantics></math> (4)</p>
+</div>
+<div id="S4.SS1.p11">
+<p id="S4.SS1.p11.1">where <math alttext="loss_{task}(s|\theta)" class="ltx_Math" display="inline" id="S4.SS1.p11.m1" intent=":literal"><semantics><mrow><mi>l</mi><mo lspace="0em" rspace="0em">​</mo><mi>o</mi><mo lspace="0em" rspace="0em">​</mo><mi>s</mi><mo lspace="0em" rspace="0em">​</mo><msub><mi>s</mi><mrow><mi>t</mi><mo lspace="0em" rspace="0em">​</mo><mi>a</mi><mo lspace="0em" rspace="0em">​</mo><mi>s</mi><mo lspace="0em" rspace="0em">​</mo><mi>k</mi></mrow></msub><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><mi>s</mi><mo lspace="0em" rspace="0em">|</mo><mi>θ</mi><mo stretchy="false">)</mo></mrow></mrow><annotation encoding="application/x-tex">loss_{task}(s|\theta)</annotation></semantics></math> corresponds to loss for a given search <span id="S4.SS1.p11.1.1">s</span> computed using standard learning-to-rank approaches (<a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#reference-2">Burges, 2010</a>) (<a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#reference-3">Cao et al., 2007</a>), and <math alttext="w_{task}" class="ltx_Math" display="inline" id="S4.SS1.p11.m2" intent=":literal"><semantics><msub><mi>w</mi><mrow><mi>t</mi><mo lspace="0em" rspace="0em">​</mo><mi>a</mi><mo lspace="0em" rspace="0em">​</mo><mi>s</mi><mo lspace="0em" rspace="0em">​</mo><mi>k</mi></mrow></msub><annotation encoding="application/x-tex">w_{task}</annotation></semantics></math> is a normalization term for a given task to avoid tasks with a lot of occurrences (e.g. clicks) from dominating the final loss.</p>
+</div>
+<div id="S4.SS1.p12">
+<p id="S4.SS1.p12.1">E.g., suppose for the long click task, we use softmax listwise loss for <math alttext="loss_{lc}(s|\theta)" class="ltx_Math" display="inline" id="S4.SS1.p12.m1" intent=":literal"><semantics><mrow><mi>l</mi><mo lspace="0em" rspace="0em">​</mo><mi>o</mi><mo lspace="0em" rspace="0em">​</mo><mi>s</mi><mo lspace="0em" rspace="0em">​</mo><msub><mi>s</mi><mrow><mi>l</mi><mo lspace="0em" rspace="0em">​</mo><mi>c</mi></mrow></msub><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><mi>s</mi><mo lspace="0em" rspace="0em">|</mo><mi>θ</mi><mo stretchy="false">)</mo></mrow></mrow><annotation encoding="application/x-tex">loss_{lc}(s|\theta)</annotation></semantics></math>, where each search that consists of N long clicks will result in N softmax loss. In that case, <math alttext="w_{lc}" class="ltx_Math" display="inline" id="S4.SS1.p12.m2" intent=":literal"><semantics><msub><mi>w</mi><mrow><mi>l</mi><mo lspace="0em" rspace="0em">​</mo><mi>c</mi></mrow></msub><annotation encoding="application/x-tex">w_{lc}</annotation></semantics></math> will be the empirical fraction of long clicks that will convert into an uncancelled booking in our training data. The intention behind designing such normalization term is:</p>
+<ul id="S4.I1">
+<li id="S4.I1.i1"><span>•</span>
+<div id="S4.I1.i1.p1">
+<p id="S4.I1.i1.p1.1">Each positive milestone is assigned credit proportional to its likelihood to convert into the final uncancelled booking.</p>
+</div></li>
+<li id="S4.I1.i2"><span>•</span>
+<div id="S4.I1.i2.p1">
+<p id="S4.I1.i2.p1.1">The Base Module is learning multiple different but related reformulations of an uncancelled booking (i.e. through intermediate search milestones), which could help the model learn a better Shared Representation Module.</p>
+</div></li>
+</ul>
+</div>
+<div id="S4.SS1.p13">
+<p id="S4.SS1.p13.1">Overall, the design of Base Module as described above allows us to better capture the sparse, long-duration, exploratory, and assorted guest activities at Airbnb, which is an important challenge for the Airbnb product use case, as described in the Section <a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#S1"><span>1</span></a>. Note that other use cases could have different number of positive milestones corresponding to their specific guest journey.</p>
+</div>
+</section>
+<section id="S4.SS2">
+<h3><span>4.2. </span>Twiddler Module: Avoiding Negative Milestones</h3>
+<figure id="S4.F5"><img alt="Airbnb Stays Ranking's Instantiation for the Twiddler Module consisting of three negative milestones of rejections (of reservation requests by host), cancellation by guest (CBG), and cancellation by host (CBH)." height="253" src="https://arxiv.org/html/2305.18431v1/images/twiddler_module_architecture.png" width="381"/><figcaption><span><span id="S4.F5.3">Figure 5</span>. </span><span id="S4.F5.4">Airbnb Stays Ranking’s Instantiation for the Twiddler Module.</span><span id="acmlabel6">Airbnb Stays Ranking's Instantiation for the Twiddler Module consisting of three negative milestones of rejections (of reservation requests by host), cancellation by guest (CBG), and cancellation by host (CBH).</span></figcaption></figure>
+<div id="S4.SS2.p1">
+<p id="S4.SS2.p1.1">The responsibility of the Twiddler Module is to produce a score per search result for each of the negative milestones. The instantiation of Twiddler Module for Airbnb Stays Ranking can be found in Figure <a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#S4.F5"><span>5</span></a>, where we have three Twiddler tasks, i.e. rejection, cancellation by host, and cancellation by guest. Twiddler Module is learned in the same multi-task setting with each of the Twiddler tasks receiving as input the embeddings from the Shared Representation Module, and passing the embeddings through a multi-layer perceptron (MLP) to generate the final logit. Similar to Equation <a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#S4.E3"><span>3</span></a>, the loss for Twiddler Module is just the sum of each of the twiddler losses:</p>
+</div>
+<div id="S4.SS2.p2">
+<p><math alttext="Loss_{Twiddler}=\sum_{task}Loss_{task}" class="ltx_Math" display="block" id="S4.E5.m1" intent=":literal"><semantics><mrow><mrow><mi>L</mi><mo lspace="0em" rspace="0em">​</mo><mi>o</mi><mo lspace="0em" rspace="0em">​</mo><mi>s</mi><mo lspace="0em" rspace="0em">​</mo><msub><mi>s</mi><mrow><mi>T</mi><mo lspace="0em" rspace="0em">​</mo><mi>w</mi><mo lspace="0em" rspace="0em">​</mo><mi>i</mi><mo lspace="0em" rspace="0em">​</mo><mi>d</mi><mo lspace="0em" rspace="0em">​</mo><mi>d</mi><mo lspace="0em" rspace="0em">​</mo><mi>l</mi><mo lspace="0em" rspace="0em">​</mo><mi>e</mi><mo lspace="0em" rspace="0em">​</mo><mi>r</mi></mrow></msub></mrow><mo rspace="0.111em">=</mo><mrow><munder><mo movablelimits="false">∑</mo><mrow><mi>t</mi><mo lspace="0em" rspace="0em">​</mo><mi>a</mi><mo lspace="0em" rspace="0em">​</mo><mi>s</mi><mo lspace="0em" rspace="0em">​</mo><mi>k</mi></mrow></munder><mrow><mi>L</mi><mo lspace="0em" rspace="0em">​</mo><mi>o</mi><mo lspace="0em" rspace="0em">​</mo><mi>s</mi><mo lspace="0em" rspace="0em">​</mo><msub><mi>s</mi><mrow><mi>t</mi><mo lspace="0em" rspace="0em">​</mo><mi>a</mi><mo lspace="0em" rspace="0em">​</mo><mi>s</mi><mo lspace="0em" rspace="0em">​</mo><mi>k</mi></mrow></msub></mrow></mrow></mrow><annotation encoding="application/x-tex">Loss_{Twiddler}=\sum_{task}Loss_{task}</annotation></semantics></math> (5)</p>
+</div>
+<div id="S4.SS2.p3">
+<p id="S4.SS2.p3.1">where <math alttext="Loss_{task}" class="ltx_Math" display="inline" id="S4.SS2.p3.m1" intent=":literal"><semantics><mrow><mi>L</mi><mo lspace="0em" rspace="0em">​</mo><mi>o</mi><mo lspace="0em" rspace="0em">​</mo><mi>s</mi><mo lspace="0em" rspace="0em">​</mo><msub><mi>s</mi><mrow><mi>t</mi><mo lspace="0em" rspace="0em">​</mo><mi>a</mi><mo lspace="0em" rspace="0em">​</mo><mi>s</mi><mo lspace="0em" rspace="0em">​</mo><mi>k</mi></mrow></msub></mrow><annotation encoding="application/x-tex">Loss_{task}</annotation></semantics></math> is a binary classification loss for each of the negative milestones (eg. rejected reservation request vs accepted reservation request for the Rejection Twiddler task).</p>
+</div>
+<div id="S4.SS2.p4">
+<p id="S4.SS2.p4.1">One might wonder why we can’t reuse the corresponding conditional probabilities (eg. <math alttext="P(book\ |\ req)" class="ltx_Math" display="inline" id="S4.SS2.p4.m1" intent=":literal"><semantics><mrow><mi>P</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mrow><mi>b</mi><mo lspace="0em" rspace="0em">​</mo><mi>o</mi><mo lspace="0em" rspace="0em">​</mo><mi>o</mi><mo lspace="0em" rspace="0em">​</mo><mi>k</mi></mrow><mo lspace="0.500em" rspace="0.500em">|</mo><mrow><mi>r</mi><mo lspace="0em" rspace="0em">​</mo><mi>e</mi><mo lspace="0em" rspace="0em">​</mo><mi>q</mi></mrow><mo stretchy="false">)</mo></mrow></mrow><annotation encoding="application/x-tex">P(book\ |\ req)</annotation></semantics></math>) in Equation <a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#S4.E2"><span>2</span></a> from the Base Module in Section <a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#S4.SS1"><span>4.1</span></a> for the twiddlers here. The reasons are:</p>
+</div>
+<div id="S4.SS2.p5">
+<ul id="S4.I2">
+<li id="S4.I2.i1"><span>•</span>
+<div id="S4.I2.i1.p1">
+<p id="S4.I2.i1.p1.1">In Base Module, we apply the losses directly on the joint probabilities instead of the conditional probabilities. Thus, the conditional probabilities are biased and not accurate (<a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#reference-14">Wang et al., 2022a</a>).</p>
+</div></li>
+<li id="S4.I2.i2"><span>•</span>
+<div id="S4.I2.i2.p1">
+<p id="S4.I2.i2.p1.1">We achieve more accurate modeling of cancellations by separately modeling cancellations initiated by the guest and host. However, since the Base Module currently uses a linear multi-step conversion setup, it cannot implement this separation (i.e. requires a "forked" conversion funnel instead of a linear conversion funnel).</p>
+</div></li>
+<li id="S4.I2.i3"><span>•</span>
+<div id="S4.I2.i3.p1">
+<p id="S4.I2.i3.p1.1">These negative search milestones are rarer (&lt;1% to  10% depending on the action), leading to class imbalance. They are also delayed outcomes where the final label could arrive after a long time has elapsed. By designing them as its own separate module, we can optimize each of the twiddlers further to account for its unique circumstances such as different sampling strategies, etc. in future works.</p>
+</div></li>
+</ul>
+</div>
+<div id="S4.SS2.p6">
+<p id="S4.SS2.p6.1">Overall, the Twiddler Module allows us to incorporate negative milestones from both guest and host in the search journey, which is one of the unique challenges for Airbnb product described in Section <a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#S1"><span>1</span></a>. Note that other use cases would have different twiddlers, corresponding to different use case specific negative milestones.</p>
+</div>
+</section>
+<section id="S4.SS3">
+<h3><span>4.3. </span>Combination Module: Balancing Guest Journey</h3>
+<figure id="S4.F6"><img alt="Model architecture for the Combination Module." height="133" src="https://arxiv.org/html/2305.18431v1/images/combination_module_architecture.png" width="381"/><figcaption><span><span id="S4.F6.3">Figure 6</span>. </span><span id="S4.F6.4">Airbnb Stays Ranking’s Instantiation for the Combination Module.</span><span id="acmlabel7">Model architecture for the Combination Module.</span></figcaption></figure>
+<div id="S4.SS3.p1">
+<p id="S4.SS3.p1.1">Finally, the responsibility of the Combination Module is to balance the output from the Base Module that is optimized for positive milestones and the outputs from the Twiddler Module that are optimized for negative milestones. Figure <a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#S4.F6"><span>6</span></a> shows the Airbnb Stays Ranking’s instantiation for the Combination Module, which can be represented as the following:</p>
+</div>
+<div id="S4.SS3.p2">
+<p><math alttext="\displaystyle\begin{split}y_{Combination}=y_{Base}*\alpha_{Base}+\sum_{t\in twiddler}y_{t}*\alpha_{t}\end{split}" class="ltx_Math" display="inline" id="S4.E6.m1" intent=":literal"><semantics><mtable><mtr><mtd class="ltx_align_right" columnalign="right"><mrow><msub><mi>y</mi><mrow><mi>C</mi><mo lspace="0em" rspace="0em">​</mo><mi>o</mi><mo lspace="0em" rspace="0em">​</mo><mi>m</mi><mo lspace="0em" rspace="0em">​</mo><mi>b</mi><mo lspace="0em" rspace="0em">​</mo><mi>i</mi><mo lspace="0em" rspace="0em">​</mo><mi>n</mi><mo lspace="0em" rspace="0em">​</mo><mi>a</mi><mo lspace="0em" rspace="0em">​</mo><mi>t</mi><mo lspace="0em" rspace="0em">​</mo><mi>i</mi><mo lspace="0em" rspace="0em">​</mo><mi>o</mi><mo lspace="0em" rspace="0em">​</mo><mi>n</mi></mrow></msub><mo>=</mo><mrow><mrow><msub><mi>y</mi><mrow><mi>B</mi><mo lspace="0em" rspace="0em">​</mo><mi>a</mi><mo lspace="0em" rspace="0em">​</mo><mi>s</mi><mo lspace="0em" rspace="0em">​</mo><mi>e</mi></mrow></msub><mo lspace="0.222em" rspace="0.222em">∗</mo><msub><mi>α</mi><mrow><mi>B</mi><mo lspace="0em" rspace="0em">​</mo><mi>a</mi><mo lspace="0em" rspace="0em">​</mo><mi>s</mi><mo lspace="0em" rspace="0em">​</mo><mi>e</mi></mrow></msub></mrow><mo>+</mo><mrow><mrow><mstyle displaystyle="true"><munder><mo movablelimits="false">∑</mo><mrow><mi>t</mi><mo>∈</mo><mrow><mi>t</mi><mo lspace="0em" rspace="0em">​</mo><mi>w</mi><mo lspace="0em" rspace="0em">​</mo><mi>i</mi><mo lspace="0em" rspace="0em">​</mo><mi>d</mi><mo lspace="0em" rspace="0em">​</mo><mi>d</mi><mo lspace="0em" rspace="0em">​</mo><mi>l</mi><mo lspace="0em" rspace="0em">​</mo><mi>e</mi><mo lspace="0em" rspace="0em">​</mo><mi>r</mi></mrow></mrow></munder></mstyle><msub><mi>y</mi><mi>t</mi></msub></mrow><mo lspace="0.222em" rspace="0.222em">∗</mo><msub><mi>α</mi><mi>t</mi></msub></mrow></mrow></mrow></mtd></mtr></mtable><annotation encoding="application/x-tex">\displaystyle\begin{split}y_{Combination}=y_{Base}*\alpha_{Base}+\sum_{t\in twiddler}y_{t}*\alpha_{t}\end{split}</annotation></semantics></math> (6)</p>
+</div>
+<div id="S4.SS3.p3">
+<p id="S4.SS3.p3.1">where the final output score, <math alttext="y_{Combination}" class="ltx_Math" display="inline" id="S4.SS3.p3.m1" intent=":literal"><semantics><msub><mi>y</mi><mrow><mi>C</mi><mo lspace="0em" rspace="0em">​</mo><mi>o</mi><mo lspace="0em" rspace="0em">​</mo><mi>m</mi><mo lspace="0em" rspace="0em">​</mo><mi>b</mi><mo lspace="0em" rspace="0em">​</mo><mi>i</mi><mo lspace="0em" rspace="0em">​</mo><mi>n</mi><mo lspace="0em" rspace="0em">​</mo><mi>a</mi><mo lspace="0em" rspace="0em">​</mo><mi>t</mi><mo lspace="0em" rspace="0em">​</mo><mi>i</mi><mo lspace="0em" rspace="0em">​</mo><mi>o</mi><mo lspace="0em" rspace="0em">​</mo><mi>n</mi></mrow></msub><annotation encoding="application/x-tex">y_{Combination}</annotation></semantics></math>, is obtained by applying a linear combination on top of the Base Module score, <math alttext="y_{Base}" class="ltx_Math" display="inline" id="S4.SS3.p3.m2" intent=":literal"><semantics><msub><mi>y</mi><mrow><mi>B</mi><mo lspace="0em" rspace="0em">​</mo><mi>a</mi><mo lspace="0em" rspace="0em">​</mo><mi>s</mi><mo lspace="0em" rspace="0em">​</mo><mi>e</mi></mrow></msub><annotation encoding="application/x-tex">y_{Base}</annotation></semantics></math>, and the Twiddler Module scores, <math alttext="y_{t}" class="ltx_Math" display="inline" id="S4.SS3.p3.m3" intent=":literal"><semantics><msub><mi>y</mi><mi>t</mi></msub><annotation encoding="application/x-tex">y_{t}</annotation></semantics></math>. Note that each coefficient <math alttext="\alpha_{x}" class="ltx_Math" display="inline" id="S4.SS3.p3.m4" intent=":literal"><semantics><msub><mi>α</mi><mi>x</mi></msub><annotation encoding="application/x-tex">\alpha_{x}</annotation></semantics></math> in the linear combination is a scalar learned end-to-end in the Combination Module, generated using a MLP that takes in the Context Embedding <math alttext="Emb_{C}" class="ltx_Math" display="inline" id="S4.SS3.p3.m5" intent=":literal"><semantics><mrow><mi>E</mi><mo lspace="0em" rspace="0em">​</mo><mi>m</mi><mo lspace="0em" rspace="0em">​</mo><msub><mi>b</mi><mi>C</mi></msub></mrow><annotation encoding="application/x-tex">Emb_{C}</annotation></semantics></math> from the Shared Representation Module.</p>
+</div>
+<div id="S4.SS3.p4">
+<p id="S4.SS3.p4.1">There were several key design choices made, i.e.:</p>
+</div>
+<div id="S4.SS3.p5">
+<ul id="S4.I3">
+<li id="S4.I3.i1"><span>•</span>
+<div id="S4.I3.i1.p1">
+<p id="S4.I3.i1.p1.1"><span id="S4.I3.i1.p1.1.1">A context-dependent coefficient <math alttext="\alpha" class="ltx_Math" display="inline" id="S4.I3.i1.p1.m1" intent=":literal"><semantics><mi>α</mi><annotation encoding="application/x-tex">\alpha</annotation></semantics></math> instead of a global coefficient:</span> As shown in Figure <a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#S1.F1"><span>1</span></a>, the Airbnb search journey is very long and the needs of the guest change as they gather more information along the journey. E.g., if a guest already experienced a negative search milestone in the journey, we want to emphasize avoiding another negative search milestone to prevent churn. A context-dependent coefficient allows the model to learn to balance the guest search journey better as we know more about the guest.</p>
+</div></li>
+<li id="S4.I3.i2"><span>•</span>
+<div id="S4.I3.i2.p1">
+<p id="S4.I3.i2.p1.1"><span id="S4.I3.i2.p1.1.1">A linear combination instead of a non-linear combination of the various outputs:</span> We attempted both options and they perform similarly in the offline evaluation. Thus, we opted for the simpler linear combination manner as it allows better product interpretability, which will be presented in more details in Section <a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#S5.SS4"><span>5.4</span></a>.</p>
+</div></li>
+<li id="S4.I3.i3"><span>•</span>
+<div id="S4.I3.i3.p1">
+<p id="S4.I3.i3.p1.1"><span id="S4.I3.i3.p1.1.1">Freezing the gradient update from Combination Module to the Base and Twiddler Module:</span> Note that in the Figure <a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#S4.F6"><span>6</span></a>, we do not have backward pass from the Combination Module to the output from the Base Module and Twiddler Module. We designed it this way so that the Combination Module can focus merely on learning how to combine these outputs without changing their semantics.</p>
+</div></li>
+</ul>
+</div>
+<div id="S4.SS3.p6">
+<p id="S4.SS3.p6.1">Such designs allow us to better understand what the module is learning, which is explored further in Section <a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#S5.SS4"><span>5.4</span></a>.</p>
+</div>
+<div id="S4.SS3.p7">
+<p id="S4.SS3.p7.1">Finally, we devise an objective function for the Combination Module so that it learns to properly balance positive and negative search milestones. To do that, we construct a pairwise loss for the final output of the Combination Module to learn graded relevance of different guest actions based on the following pairwise relationship:</p>
+<p><math alttext="unc&gt;click&gt;imp&gt;cbg\ /\ cbh\ /\ rej" class="ltx_Math" display="block" id="S4.E7.m1" intent=":literal"><semantics><mrow><mrow><mi>u</mi><mo lspace="0em" rspace="0em">​</mo><mi>n</mi><mo lspace="0em" rspace="0em">​</mo><mi>c</mi></mrow><mo>&gt;</mo><mrow><mi>c</mi><mo lspace="0em" rspace="0em">​</mo><mi>l</mi><mo lspace="0em" rspace="0em">​</mo><mi>i</mi><mo lspace="0em" rspace="0em">​</mo><mi>c</mi><mo lspace="0em" rspace="0em">​</mo><mi>k</mi></mrow><mo>&gt;</mo><mrow><mi>i</mi><mo lspace="0em" rspace="0em">​</mo><mi>m</mi><mo lspace="0em" rspace="0em">​</mo><mi>p</mi></mrow><mo>&gt;</mo><mrow><mrow><mrow><mrow><mrow><mi>c</mi><mo lspace="0em" rspace="0em">​</mo><mi>b</mi><mo lspace="0em" rspace="0em">​</mo><mi>g</mi></mrow><mo lspace="0.722em" rspace="0.722em">/</mo><mi>c</mi></mrow><mo lspace="0em" rspace="0em">​</mo><mi>b</mi><mo lspace="0em" rspace="0em">​</mo><mi>h</mi></mrow><mo lspace="0.722em" rspace="0.722em">/</mo><mi>r</mi></mrow><mo lspace="0em" rspace="0em">​</mo><mi>e</mi><mo lspace="0em" rspace="0em">​</mo><mi>j</mi></mrow></mrow><annotation encoding="application/x-tex">unc&gt;click&gt;imp&gt;cbg\ /\ cbh\ /\ rej</annotation></semantics></math> (7)</p>
+</div>
+<div id="S4.SS3.p8">
+<p id="S4.SS3.p8.1">Specifically, uncancelled booking is considered the best outcome, followed by clicks and then all of the unclicked search impressions. All the negative search milestones (i.e. cancellation by guest, cancellation by host, and rejection) are considered the worst outcomes, even worse than the unclicked search impressions.</p>
+</div>
+<div id="S4.SS3.p9">
+<p id="S4.SS3.p9.1">Finally, the full loss is the sum of losses across all modules, i.e.</p>
+<p><math alttext="Loss_{Total}=Loss_{Base}+Loss_{Twiddler}+Loss_{Combination}" class="ltx_Math" display="block" id="S4.E8.m1" intent=":literal"><semantics><mrow><mrow><mi>L</mi><mo lspace="0em" rspace="0em">​</mo><mi>o</mi><mo lspace="0em" rspace="0em">​</mo><mi>s</mi><mo lspace="0em" rspace="0em">​</mo><msub><mi>s</mi><mrow><mi>T</mi><mo lspace="0em" rspace="0em">​</mo><mi>o</mi><mo lspace="0em" rspace="0em">​</mo><mi>t</mi><mo lspace="0em" rspace="0em">​</mo><mi>a</mi><mo lspace="0em" rspace="0em">​</mo><mi>l</mi></mrow></msub></mrow><mo>=</mo><mrow><mrow><mi>L</mi><mo lspace="0em" rspace="0em">​</mo><mi>o</mi><mo lspace="0em" rspace="0em">​</mo><mi>s</mi><mo lspace="0em" rspace="0em">​</mo><msub><mi>s</mi><mrow><mi>B</mi><mo lspace="0em" rspace="0em">​</mo><mi>a</mi><mo lspace="0em" rspace="0em">​</mo><mi>s</mi><mo lspace="0em" rspace="0em">​</mo><mi>e</mi></mrow></msub></mrow><mo>+</mo><mrow><mi>L</mi><mo lspace="0em" rspace="0em">​</mo><mi>o</mi><mo lspace="0em" rspace="0em">​</mo><mi>s</mi><mo lspace="0em" rspace="0em">​</mo><msub><mi>s</mi><mrow><mi>T</mi><mo lspace="0em" rspace="0em">​</mo><mi>w</mi><mo lspace="0em" rspace="0em">​</mo><mi>i</mi><mo lspace="0em" rspace="0em">​</mo><mi>d</mi><mo lspace="0em" rspace="0em">​</mo><mi>d</mi><mo lspace="0em" rspace="0em">​</mo><mi>l</mi><mo lspace="0em" rspace="0em">​</mo><mi>e</mi><mo lspace="0em" rspace="0em">​</mo><mi>r</mi></mrow></msub></mrow><mo>+</mo><mrow><mi>L</mi><mo lspace="0em" rspace="0em">​</mo><mi>o</mi><mo lspace="0em" rspace="0em">​</mo><mi>s</mi><mo lspace="0em" rspace="0em">​</mo><msub><mi>s</mi><mrow><mi>C</mi><mo lspace="0em" rspace="0em">​</mo><mi>o</mi><mo lspace="0em" rspace="0em">​</mo><mi>m</mi><mo lspace="0em" rspace="0em">​</mo><mi>b</mi><mo lspace="0em" rspace="0em">​</mo><mi>i</mi><mo lspace="0em" rspace="0em">​</mo><mi>n</mi><mo lspace="0em" rspace="0em">​</mo><mi>a</mi><mo lspace="0em" rspace="0em">​</mo><mi>t</mi><mo lspace="0em" rspace="0em">​</mo><mi>i</mi><mo lspace="0em" rspace="0em">​</mo><mi>o</mi><mo lspace="0em" rspace="0em">​</mo><mi>n</mi></mrow></msub></mrow></mrow></mrow><annotation encoding="application/x-tex">Loss_{Total}=Loss_{Base}+Loss_{Twiddler}+Loss_{Combination}</annotation></semantics></math> (8)</p>
+</div>
+<div id="S4.SS3.p10">
+<p id="S4.SS3.p10.1">Note that other use cases could define Equation  <a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#S4.E7"><span>7</span></a> differently to optimize for their own version of a satisfied user (e.g. good product rating without product returns in e-commerce sites).</p>
+</div>
+</section>
+<section id="S4.SS4">
+<h3><span>4.4. </span>Richer Training Data</h3>
+<div id="S4.SS4.p1">
+<p id="S4.SS4.p1.1">To enable Journey Ranker to learn from various different guest actions, we make the following changes to the training data:</p>
+<ul id="S4.I4">
+<li id="S4.I4.i1"><span>•</span>
+<div id="S4.I4.i1.p1">
+<p id="S4.I4.i1.p1.1"><span id="S4.I4.i1.p1.1.1">Labeling of Search Impressions:</span> We label each search impression with all the labels that are applicable (i.e. multi-label) - both positive guest actions (i.e. click, long click, payment page, reservation request, accepted booking, and uncancelled booking) and negative guest actions (i.e. rejection, cancellation by guest, and cancellation by host).</p>
+</div></li>
+<li id="S4.I4.i2"><span>•</span>
+<div id="S4.I4.i2.p1">
+<p id="S4.I4.i2.p1.1"><span id="S4.I4.i2.p1.1.1">Number of Searches:</span> By leveraging guest actions such as clicks, we can now leverage two orders of magnitude more data for our model training. However, this introduces both scalability complexity and more noise to our model training due to lower intent exploratory guests. In the end, we included only all the searches that led to a payment page view after evaluating empirically the trade off between number of searches and the model performance. This leads to just around 50% more searches compared to before.</p>
+</div></li>
+</ul>
+</div>
+</section>
+</section>
+<section id="S5">
+<h2><span>5. </span>Experimental Result</h2>
+<div id="S5.p1">
+<p id="S5.p1.1">For offline evaluation, we use Normalized Discounted Cumulative Gain (NDCG) with binary relevance score, where uncancelled booking is assigned a relevance score of 1 and all other search impressions are assigned a relevance score of 0.</p>
+</div>
+<div id="S5.p2">
+<p id="S5.p2.1">For model training, we use around 500 millions searches for training, and all the models are trained using Tensorflow. All the models are trained with five different initializations and we report the average offline performance along with its 95% confidence interval. Both the training throughput and the end-to-end model latency are similar compared to the previous baseline, as we are only adding +9.2% parameters.</p>
+</div>
+<section id="S5.SS1">
+<h3><span>5.1. </span>End-to-end Offline Evaluation</h3>
+<figure id="S5.T1"><img alt="Table 1 . End-to-end offline evaluation for the Airbnb Stays’ instantiation of Journey Ranker described in Section 4 ." height="148" src="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/table-1.jpg" width="804"/><figcaption><span><span id="S5.T1.4">Table 1</span>. </span><span id="S5.T1.5">End-to-end offline evaluation for the Airbnb Stays’ instantiation of Journey Ranker described in Section <a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#S4"><span>4</span></a>.</span></figcaption></figure>
+<div id="S5.SS1.p1">
+<p id="S5.SS1.p1.1">Table <a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#S5.T1"><span>1</span></a> shows the offline evaluation of the Journey Ranker described in Section <a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#S4"><span>4</span></a> compared to the previous Baseline model described in Section <a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#S3.SS2"><span>3.2</span></a>. Overall, Journey Ranker has a statistically significant improvement of +0.48% NDCG compared to the baseline, with a small 9.2% increase in number of trainable parameters. The offline result is encouraging because for Airbnb Stays ranking use case:</p>
+<ul id="S5.I1">
+<li id="S5.I1.i1"><span>•</span>
+<div id="S5.I1.i1.p1">
+<p id="S5.I1.i1.p1.1">An offline evaluation of +0.3% is considered promising to land a statistically significant booking gain in online A/B test, which we will present in Section <a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#S5.SS5"><span>5.5</span></a> later.</p>
+</div></li>
+<li id="S5.I1.i2"><span>•</span>
+<div id="S5.I1.i2.p1">
+<p id="S5.I1.i2.p1.1">For the baseline Airbnb Stays Ranking, a +50% in trainable parameters (through making the network deeper or wider) will only have about 0.05-0.1% offline NDCG gain.</p>
+</div></li>
+<li id="S5.I1.i3"><span>•</span>
+<div id="S5.I1.i3.p1">
+<p id="S5.I1.i3.p1.1">Despite having a more complicated model architecture (10 tasks!), we only incur a small 9.2% increase in number of trainable parameters because each of the new task-specific networks is a small (single-layer) network that shares the same representation layers before it. This means we still have more opportunity to improve gain further by increasing the capacity for each task using other techniques (<a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#reference-13">Meyerson and Miikkulainen, 2018</a>) (<a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#reference-16">Wang et al., 2022b</a>).</p>
+</div></li>
+</ul>
+</div>
+<div id="S5.SS1.p2">
+<p id="S5.SS1.p2.1">In the following subsections, we will examine in more detail how each of the Modules within Journey
+Ranker behaves to shed some light on where the improvements come from.</p>
+</div>
+</section>
+<section id="S5.SS2">
+<h3><span>5.2. </span>Discussion of Alternative Designs</h3>
+<div id="S5.SS2.p1">
+<p id="S5.SS2.p1.1">In this section, we describe some of the alternative designs that we attempted and present our findings.</p>
+</div>
+<div id="S5.SS2.p2">
+<p id="S5.SS2.p2.1"><span id="S5.SS2.p2.1.1">A single end-to-end module</span> - Could we design a single task model that directly optimizes for graded relevance described in the Equation <a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#S4.E7"><span>7</span></a>? We attempted this and the naive application of the same graded relevance resulted in &gt; 1% drop in offline NDCG. We can get a better result (but still worse than Journey Ranker’s) if we tune the relative weights between each of the labels in the graded relevance setup. We hypothesize that by giving the model full freedom, the different labels will interfere with each other to compete for the same model parameters, causing the more prevalent tasks (eg. click) to dominate the final output. By designing the model architecture using well-defined modules and tasks with separation of concerns, each of the tasks will have its own task-specific parameters to learn knowledge specific to itself, while contributing to the shared representation layer for the common knowledge.</p>
+</div>
+<div id="S5.SS2.p3">
+<p id="S5.SS2.p3.1"><span id="S5.SS2.p3.1.1">Non-uniform loss weights</span> - This motivates another question of whether we should tune the relative weights of losses for each of the tasks in Journey Ranker? Note that, as described in Equation <a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#S4.E8"><span>8</span></a>, Journey Ranker currently uses a simple unweighted sum of losses across each of the modules (and thus each of the tasks). Interestingly, we tried to manually tune these weights but did not achieve very statistically significant offline results that could justify the increase in complexity. However, we believe there is opportunity in the future to revisit using an auto-hyperparameter tuning service or other surrogate tricks (<a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#reference-11">Ma et al., 2022</a>) to improve this further.</p>
+</div>
+<div id="S5.SS2.p4">
+<p id="S5.SS2.p4.1"><span id="S5.SS2.p4.1.1">Dealing with negative transfer</span> - We also tried various previous works on dealing with gradient interference (<a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#reference-5">Chen et al., 2017</a>) and multi-task loss weighting (<a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#reference-10">Kendall et al., 2017</a>) for Journey Ranker and did not see stat-sig improvement in offline NDCG. We hypothesize that this is because all of the ten tasks we leverage in Journey Ranker are ten different aspects of understanding the same guest preference (i.e. uncancelled booking), and thus don’t suffer from standard multi-task challenges where the tasks are very different from each other.</p>
+</div>
+</section>
+<section id="S5.SS3">
+<h3><span>5.3. </span>Can we simplify the Base Module?</h3>
+<figure id="S5.T2"><img alt="Table 2 . Ablation study on the tasks used in the Base Module for Airbnb Stays Ranking, without Twiddler and Combination Module. We present four settings that have both practical product semantics in Airbnb Stays Ranking and also stat-sig d" height="236" src="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/table-2.jpg" width="929"/><figcaption><span><span id="S5.T2.4">Table 2</span>. </span><span id="S5.T2.5">Ablation study on the tasks used in the Base Module for Airbnb Stays Ranking, without Twiddler and Combination Module. We present four settings that have both practical product semantics in Airbnb Stays Ranking and also stat-sig difference in offline NDCG across each pairs.</span></figcaption></figure>
+<div id="S5.SS3.p1">
+<p id="S5.SS3.p1.1">In the Base Module, we have six tasks (clicks, long clicks, payment page, requests, accepted bookings, and uncancelled bookings) corresponding to six different search milestones in the guest search journey. One might wonder whether we need all six of these?</p>
+</div>
+<div id="S5.SS3.p2">
+<p id="S5.SS3.p2.1">Table <a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#S5.T2"><span>2</span></a> shows the ablation study of the tasks used in the Base Module, without the Twiddler and Combination Module to better understand the effect. We presented four choices of tasks that have useful product semantics in Airbnb and also statistically significant improvement in offline NDCG across each pair in the setup. There are a few useful learnings:</p>
+<ul id="S5.I2">
+<li id="S5.I2.i1"><span>•</span>
+<div id="S5.I2.i1.p1">
+<p id="S5.I2.i1.p1.1"><span id="S5.I2.i1.p1.1.1">Quantity of searches:</span> As expected, as the number of searches used for training the Base Module increases, the offline NDCG improves (i.e. from row 1 to 3 in Table <a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#S5.T2"><span>2</span></a>).</p>
+</div></li>
+<li id="S5.I2.i2"><span>•</span>
+<div id="S5.I2.i2.p1">
+<p id="S5.I2.i2.p1.1"><span id="S5.I2.i2.p1.1.1">"Diversity" of searches:</span> Adding new searches that are more different from existing searches could lead to more gain. E.g., in Table <a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#S5.T2"><span>2</span></a>, adding +25% more searches with reservation requests (that was ultimately rejected or cancelled) only had a +0.06% NDCG improvement (row 2 vs row 1). In contrast, if we add +20% more searches with clickers (that didn’t have any reservation requests), we had a +0.16% NDCG improvement (row 3 vs row 2). This aligns with our hypothesis that by only utilizing searches from uncancelled bookers, we might not generalize well to the non-bookers, who might have very different guest behavior.</p>
+</div></li>
+<li id="S5.I2.i3"><span>•</span>
+<div id="S5.I2.i3.p1">
+<p id="S5.I2.i3.p1.1"><span id="S5.I2.i3.p1.1.1">Usefulness of intermediate search milestones:</span> In table <a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#S5.T2"><span>2</span></a>, if we compare row 4 vs row 3, we have a +0.09% offline NDCG improvement despite having the same number of searches. This suggests that adding more intermediate search milestone labels to better differentiate the guest preference on each of the search impressions is useful. In the future, we plan to try other efforts to maximize the signals derived from each search, such as through different model architectures for Base Module (<a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#reference-1">Bao et al., 2020</a>) (<a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#reference-17">Wen et al., 2020</a>).</p>
+</div></li>
+</ul>
+</div>
+<div id="S5.SS3.p3">
+<p id="S5.SS3.p3.1">In addition to offline NDCG for the uncancelled booking as the label, we also look at the offline NDCG for all the other labels such as clicks, long clicks, payment pages, and requests. We omit the detailed result for brevity, and the high level observation is that the offline NDCG for each of these search milestones also has a statistically significant gain. This gives another insight on where the offline NDCG gain for uncancelled booking comes from - by improving conversion for each of the intermediate search milestones, the final uncancelled booking will also naturally increase.</p>
+</div>
+</section>
+<section id="S5.SS4">
+<h3><span>5.4. </span>What does the Combination Module learn?</h3>
+<figure id="S5.F7"><img alt="For rejection and cancellation by host, the coefficients have a U-shaped while for the cancellation by guest, the coefficients is increasing." height="249" src="https://arxiv.org/html/2305.18431v1/images/days_ahead_combination_coeff.png" width="381"/><figcaption><span><span id="S5.F7.3">Figure 7</span>. </span><span id="S5.F7.4">NTC when segmented by days ahead of the check-in for a search query. Each NTC curve is normalized by NTC when days before check-in = 0 for ease of visualization.</span><span id="acmlabel8">For rejection and cancellation by host, the coefficients have a U-shaped while for the cancellation by guest, the coefficients is increasing.</span></figcaption></figure>
+<figure id="S5.F8"><img alt="As guest progresses further in the search journey with more number of previous searches, the twiddler coefficients increase." height="255" src="https://arxiv.org/html/2305.18431v1/images/num_searches_combination_coeff.png" width="381"/><figcaption><span><span id="S5.F8.3">Figure 8</span>. </span><span id="S5.F8.4">NTC when segmented by guest’s number of previous searches. Each NTC curve is normalized by NTC when num searches = 0 for ease of visualization.</span><span id="acmlabel9">As guest progresses further in the search journey with more number of previous searches, the twiddler coefficients increase.</span></figcaption></figure>
+<div id="S5.SS4.p1">
+<p id="S5.SS4.p1.1">As described in Equation <a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#S4.E6"><span>6</span></a>, the output of the Combination Module is a linear combination of the outputs from the Base Module and the Twiddler Module. Recall that each coefficient is learned end-to-end based on the Context Embedding <math alttext="Emb_{C}" class="ltx_Math" display="inline" id="S5.SS4.p1.m1" intent=":literal"><semantics><mrow><mi>E</mi><mo lspace="0em" rspace="0em">​</mo><mi>m</mi><mo lspace="0em" rspace="0em">​</mo><msub><mi>b</mi><mi>C</mi></msub></mrow><annotation encoding="application/x-tex">Emb_{C}</annotation></semantics></math>, and thus are dependent on Context Features. This allows us to study how these coefficients change given different guest or query features to try to decipher what the Combination Module learns.</p>
+</div>
+<div id="S5.SS4.p2">
+<p id="S5.SS4.p2.1"><span id="S5.SS4.p2.1.1">Definition</span> - We compute the "<span id="S5.SS4.p2.1.2">Normalized Twiddler coefficient</span>" (NTC), which normalizes the coefficient for each of the Twiddler outputs, <math alttext="\alpha_{twiddler}" class="ltx_Math" display="inline" id="S5.SS4.p2.m1" intent=":literal"><semantics><msub><mi>α</mi><mrow><mi>t</mi><mo lspace="0em" rspace="0em">​</mo><mi>w</mi><mo lspace="0em" rspace="0em">​</mo><mi>i</mi><mo lspace="0em" rspace="0em">​</mo><mi>d</mi><mo lspace="0em" rspace="0em">​</mo><mi>d</mi><mo lspace="0em" rspace="0em">​</mo><mi>l</mi><mo lspace="0em" rspace="0em">​</mo><mi>e</mi><mo lspace="0em" rspace="0em">​</mo><mi>r</mi></mrow></msub><annotation encoding="application/x-tex">\alpha_{twiddler}</annotation></semantics></math> against the coefficient of the Base Module, <math alttext="\alpha_{base}" class="ltx_Math" display="inline" id="S5.SS4.p2.m2" intent=":literal"><semantics><msub><mi>α</mi><mrow><mi>b</mi><mo lspace="0em" rspace="0em">​</mo><mi>a</mi><mo lspace="0em" rspace="0em">​</mo><mi>s</mi><mo lspace="0em" rspace="0em">​</mo><mi>e</mi></mrow></msub><annotation encoding="application/x-tex">\alpha_{base}</annotation></semantics></math>. We can now plot a diagram for each context feature, where the x-axis is the various values for a particular feature, and the y-axis is the NTC metric to understand how the NTC changes as the feature value changes. Note that a higher NTC indicates that the Combination Module is giving more importance to a particular Twiddler task, i.e. more importance to avoiding a specific negative search milestone, compared to the Base Module.</p>
+</div>
+<div id="S5.SS4.p3">
+<p id="S5.SS4.p3.1">Next, we present examples of what the Combination Module learns with respect to two context features:</p>
+</div>
+<div id="S5.SS4.p4">
+<p id="S5.SS4.p4.1"><span id="S5.SS4.p4.1.1">An example query feature</span> - Figure <a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#S5.F7"><span>7</span></a> shows how NTC moves with respect to the query feature "days ahead of check-in". Here, we notice that there are two different shapes for the NTCs:</p>
+<ul id="S5.I3">
+<li id="S5.I3.i1"><span>•</span>
+<div id="S5.I3.i1.p1">
+<p id="S5.I3.i1.p1.1">Rejection and cancellation by host are both negative search milestones initiated by the host, and thus it makes sense that both of their NTC curves are similar - i.e. a U-shaped curve. This shape aligns with our product intuitions for when the search product should try to minimize rejections or cancellation by hosts with respect to this query feature. Specifically, if the trip is close to the query time, there is not enough time for guests to rebook. On the other hand, if the trip is far from the query time, minimizing the likelihood of future unforeseen circumstances that cause the host to to reject / cancel before the trip is crucial.</p>
+</div></li>
+<li id="S5.I3.i2"><span>•</span>
+<div id="S5.I3.i2.p1">
+<p id="S5.I3.i2.p1.1">We hypothesize that the NTC curve for cancellation by guest is increasing for trips that are further out to prevent the guest from cancelling due to buyer’s remorse (eg. found a better listing or realizing that the listing does not satisfy their need due to location or missing amenities etc).</p>
+</div></li>
+</ul>
+</div>
+<div id="S5.SS4.p5">
+<p id="S5.SS4.p5.1">We hypothesize that the model learns these NTC curves through a mixture of reasons, such as:</p>
+<ul id="S5.I4">
+<li id="S5.I4.i1"><span>•</span>
+<div id="S5.I4.i1.p1">
+<p id="S5.I4.i1.p1.1">Differences in prevalence of the negative search milestones for each query segment.</p>
+</div></li>
+<li id="S5.I4.i2"><span>•</span>
+<div id="S5.I4.i2.p1">
+<p id="S5.I4.i2.p1.1">Label attribution in training data - E.g., if the trip is coming up soon, the guest might not have time to rebook on Airbnb or might have opted for other options such as a traditional hotel. On the other hand, if the trip is far into the future, the guest still has plenty of time to rebook. Since we use a max window of K days to define a guest search journey, the successive searches might be grouped into a separate search journey. Regardless of the cases, the original search journey is now considered a failed journey, and the model learns to try to avoid these negative outcomes.</p>
+</div></li>
+</ul>
+</div>
+<div id="S5.SS4.p6">
+<p id="S5.SS4.p6.1"><span id="S5.SS4.p6.1.1">An example guest feature</span> - Figure <a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#S5.F8"><span>8</span></a> shows how NTC varies against the guest’s number of previous searches. We observe that as the guest conducts more searches, the NTC increases. This implies that the model is focusing more on avoiding the negative search milestones as the guest is further into their guest journey.</p>
+</div>
+<div id="S5.SS4.p7">
+<p id="S5.SS4.p7.1">To understand this further, we analyzed the Pearson correlation coefficients between the historical click-through-rate of a listing and the rejection rate &amp; cancellation rate of a listing and noticed that the correlations are positive. Recall that click is modeled as a positive search milestone in the Base Module while the rejection and cancellations are modeled as negative search milestones in the Twiddler Module. Thus, a higher NTC for a Twiddler task implies the model is trying to avoid the corresponding negative outcome, and thus indirectly aiming for a lower click-through rate due to the positive correlation between the two.</p>
+</div>
+<div id="S5.SS4.p8">
+<p id="S5.SS4.p8.1">In other words, what the model learned aligns with our product intuition. Specifically, we want the guest to explore more in the beginning of the search journey, by showing listings with high click-through rate, even though they could lead to negative outcomes. As the guest narrows down to the final decision, we want to rank higher the listings that will not result in rejection or cancellation.</p>
+</div>
+<div id="S5.SS4.p9">
+<p id="S5.SS4.p9.1">We hypothesize that the model manages to learn such information exactly due to the different guest behaviors displayed across the search journey. E.g., during the early searches, the guest normally clicks more to better understand the inventory, but narrows down to just a few choices in the latter part of the journey.</p>
+</div>
+<div id="S5.SS4.p10">
+<p id="S5.SS4.p10.1"><span id="S5.SS4.p10.1.1">Summary</span> - We found that what the Combination Module learns aligns well with our product intuitions in how we might try to balance the guest search journey across guest state and query segment. One might also wonder whether each of the tasks (eg. Base Module output or the three outputs from the Twiddler Module) might already pick up such information through their output score. We plot similar curves for the outputs, <math alttext="y_{t}" class="ltx_Math" display="inline" id="S5.SS4.p10.m1" intent=":literal"><semantics><msub><mi>y</mi><mi>t</mi></msub><annotation encoding="application/x-tex">y_{t}</annotation></semantics></math> from Equation <a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#S4.E6"><span>6</span></a> in the Combination Module with respect to the same context features and observe that the curves are flat. We hypothesize that the model was unable (or unnecessary) to learn such journey-level information because it has access to both the context features, <math alttext="F_{C}" class="ltx_Math" display="inline" id="S5.SS4.p10.m2" intent=":literal"><semantics><msub><mi>F</mi><mi>C</mi></msub><annotation encoding="application/x-tex">F_{C}</annotation></semantics></math>, and the listing features, <math alttext="F_{L}" class="ltx_Math" display="inline" id="S5.SS4.p10.m3" intent=":literal"><semantics><msub><mi>F</mi><mi>L</mi></msub><annotation encoding="application/x-tex">F_{L}</annotation></semantics></math>, during the model training. Since the listing features, <math alttext="F_{L}" class="ltx_Math" display="inline" id="S5.SS4.p10.m4" intent=":literal"><semantics><msub><mi>F</mi><mi>L</mi></msub><annotation encoding="application/x-tex">F_{L}</annotation></semantics></math> are likely more predictive of the negative search milestones, it dominates the final prediction. By using just the Context Embedding, <math alttext="Emb_{C}" class="ltx_Math" display="inline" id="S5.SS4.p10.m5" intent=":literal"><semantics><mrow><mi>E</mi><mo lspace="0em" rspace="0em">​</mo><mi>m</mi><mo lspace="0em" rspace="0em">​</mo><msub><mi>b</mi><mi>C</mi></msub></mrow><annotation encoding="application/x-tex">Emb_{C}</annotation></semantics></math>, to learn the coefficients in the Combination Module, we essentially guide the module to focus on how these context features could affect the various negative search milestones.</p>
+</div>
+<div id="S5.SS4.p11">
+<p id="S5.SS4.p11.1">Overall, the ability to interpret what the model learns is extremely helpful from the product perspective, and this helps us to tackle the challenges that we highlighted in Section <a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#S1"><span>1</span></a>.</p>
+</div>
+</section>
+<section id="S5.SS5">
+<h3><span>5.5. </span>Online Experiments for Stays Ranking</h3>
+<figure id="S5.T3"><img alt="Table 3 . Online experiment results across different Airbnb Search Products, all gains have p-values &lt; 0.01" height="192" src="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/table-3.jpg" width="968"/><figcaption><span><span id="S5.T3.4">Table 3</span>. </span><span id="S5.T3.5">Online experiment results across different Airbnb Search Products, all gains have p-values &lt; 0.01</span></figcaption></figure>
+<div id="S5.SS5.p1">
+<p id="S5.SS5.p1.1">As shown in Row 1 of Table <a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#S5.T3"><span>3</span></a>, Journey Ranker drove +0.61% gain in uncancelled bookers compared to the baseline when tested in online A/B experiment. We also saw strong gain throughout the whole conversion funnel, such as an increase of +0.14% from searchers to clickers, and an increase of +0.48% from clickers to uncancelled bookers, which aligns with our observation in the offline evaluation.</p>
+</div>
+</section>
+<section id="S5.SS6">
+<h3><span>5.6. </span>Online Experiments Beyond Stays Ranking</h3>
+<div id="S5.SS6.p1">
+<p id="S5.SS6.p1.1">In addition to stays ranking, we also successfully applied the Journey Ranker architecture to other search use cases in Airbnb. E.g., row 2 and row 3 in Table <a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#S5.T3"><span>3</span></a> show +2.0% bookers for experiences ranking and +9.0% bookers for online experiences ranking. Note that the absolute metric gains for both of these use cases are much higher compared to the Airbnb stays ranking. This is expected since the newer products have a lot less bookings for the model to learn from. Thus, by considering the full guest search journey, we are able to add more incremental value towards better learning guest preference. This also implies that Journey Ranker is most useful for the cold start problem where the absolute number of conversions is smaller, leading to model underfitting, allowing us to more easily ramp up new businesses in the future.</p>
+</div>
+<div id="S5.SS6.p2">
+<p id="S5.SS6.p2.1">It is worth noting that the implementation for the Experiences use cases is a trimmed down version (i.e. less tasks) of the Airbnb Stays’ instantiation described before. This is because the Experiences product lacks reliable telemetry for some intermediate guest actions described. Experiences product also does not have rejection outcomes since all experiences are auto-accepted. Based on offline results for Airbnb stays ranking presented in Table <a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#S5.T1"><span>1</span></a> and Table <a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#S5.T2"><span>2</span></a>, we hypothesize that we can achieve even more gain for the Experiences product once reliable telemetry is added for all of the experience guest actions throughout the search journey.</p>
+</div>
+<div id="S5.SS6.p3">
+<p id="S5.SS6.p3.1">We also successfully applied the Journey Ranker architecture in Airbnb beyond these search applications. E.g., we collaborated with the Airbnb Email marketing team to leverage the Journey Ranker architecture for the email recommendation use case and achieved +0.7% nights booked and -3.7% email unsubscribes.</p>
+</div>
+<div id="S5.SS6.p4">
+<p id="S5.SS6.p4.1">This is the first modeling effort within Airbnb to achieve significant business gains across multiple Airbnb products with minimal customization thanks to the modular and extensible model architecture. The main considerations needed to leverage this architecture is grouping the guest actions as either multi-step positive milestones in the Base Module or negative milestones in the Twiddler Module and then defining a graded relevance to balance the two.</p>
+</div>
+</section>
+</section>
+<section id="S6">
+<h2><span>6. </span>Conclusion and Future Work</h2>
+<div id="S6.p1">
+<p id="S6.p1.1">We presented Journey Ranker, a novel multi-task learning framework for Airbnb Stays ranking that balances positive and negative milestones throughout the guest search journey. Journey Ranker significantly outperforms the previous baseline in both offline and online evaluation, and we presented some of the offline study to provide insight into what the model learns. We also saw great results applying Journey Ranker architecture in three other search and non-search use cases in Airbnb. For future work, we believe that other research ideas could easily fit in the Journey Ranker architecture. E.g., we could extend the Base Module with even more micro-tasks that don’t follow a sequential multi-step conversion through graph convolution networks (<a href="https://theopinard.github.io/vrac/articles/optimizing-airbnb-search-journey-with-multi-task-learning/#reference-1">Bao et al., 2020</a>). We could also easily extend the Twiddler Module with even more negative milestones such as customer support tickets, trip quality etc. Finally, we can modify the Combination Module to directly optimize for business Overall Evaluation Criteria (OEC) and weigh various outcomes using Future Incremental Value (FIV) estimations.</p>
+</div>
+<div id="S6.acknowledgements1">
+<h6>Acknowledgements.</h6>
+No journey (pun intended) is possible without contributions from a lot of people. Specifically, we would like to thank Francisco Selame and Bo Yu for collaborating on the Airbnb Experiences use case; and Teng Wang for the Airbnb Email Marketing use case. We would also like to extend our thanks to Alex Deng, Michelle Du, Anna Matlin, and Tatiana Xifara for their help in the online experiment analysis to enable the deployment of the Journey Ranker into production across multiple Airbnb product use cases. Finally, we would like to thank the entire Airbnb Relevance team for valuable discussions.
+
+</div>
+</section>
+<div><h2 id="works-cited">References</h2><p id="reference-1">[1]
+<span>
+Wentian Bao, Hong Wen,
+Sha Li, Xiao-Yang Liu,
+Quan Lin, and Keping Yang.
+2020.
+
+</span>
+<span>GMCM: Graph-Based Micro-Behavior Conversion Model
+for Post-Click Conversion Rate Estimation. In
+<em id="bib.bib2.3">Proceedings of the 43rd International ACM SIGIR
+Conference on Research and Development in Information Retrieval</em> (Virtual
+Event, China) <em id="bib.bib2.4">(SIGIR ’20)</em>.
+Association for Computing Machinery,
+New York, NY, USA, 2201–2210.
+
+</span>
+<span>
+<a href="https://doi.org/10.1145/3397271.3401425">https://doi.org/10.1145/3397271.3401425</a>
+</span></p><p id="reference-2">[2]
+<span>
+Christopher JC Burges.
+2010.
+
+</span>
+<span>From ranknet to lambdarank to lambdamart: An
+overview.
+
+</span>
+<span><em id="bib.bib3.1">Learning</em> 11,
+23-581 (2010), 81.
+
+</span>
+<span>
+</span></p><p id="reference-3">[3]
+<span>
+Zhe Cao, Tao Qin,
+Tie-Yan Liu, Ming-Feng Tsai, and
+Hang Li. 2007.
+
+</span>
+<span>Learning to Rank: From Pairwise Approach to
+Listwise Approach. In <em id="bib.bib4.3">Proceedings of the 24th
+International Conference on Machine Learning</em> (Corvalis, Oregon, USA)
+<em id="bib.bib4.4">(ICML ’07)</em>. Association for
+Computing Machinery, New York, NY, USA,
+129–136.
+
+</span>
+<span>
+<a href="https://doi.org/10.1145/1273496.1273513">https://doi.org/10.1145/1273496.1273513</a>
+</span></p><p id="reference-4">[4]
+<span>
+Rich Caruana.
+2004.
+
+</span>
+<span>Multitask Learning.
+
+</span>
+<span><em id="bib.bib5.1">Machine Learning</em> 28
+(2004), 41–75.
+
+</span>
+<span>
+</span></p><p id="reference-5">[5]
+<span>
+Zhao Chen, Vijay
+Badrinarayanan, Chen-Yu Lee, and Andrew
+Rabinovich. 2017.
+
+</span>
+<span>GradNorm: Gradient Normalization for Adaptive Loss
+Balancing in Deep Multitask Networks.
+
+</span>
+<span>(2017).
+
+</span>
+<span>
+<a href="https://doi.org/10.48550/ARXIV.1711.02257">https://doi.org/10.48550/ARXIV.1711.02257</a>
+</span></p><p id="reference-6">[6]
+<span>
+Heng-Tze Cheng, Levent
+Koc, Jeremiah Harmsen, Tal Shaked,
+Tushar Chandra, Hrishi Aradhye,
+Glen Anderson, Greg Corrado,
+Wei Chai, Mustafa Ispir,
+Rohan Anil, Zakaria Haque,
+Lichan Hong, Vihan Jain,
+Xiaobing Liu, and Hemal Shah.
+2016.
+
+</span>
+<span>Wide &amp; Deep Learning for Recommender Systems. In
+<em id="bib.bib7.3">Proceedings of the 1st Workshop on Deep Learning
+for Recommender Systems</em> (Boston, MA, USA) <em id="bib.bib7.4">(DLRS
+2016)</em>. Association for Computing Machinery,
+New York, NY, USA, 7–10.
+
+</span>
+<span>
+<a href="https://doi.org/10.1145/2988450.2988454">https://doi.org/10.1145/2988450.2988454</a>
+</span></p><p id="reference-7">[7]
+<span>
+Paul Covington, Jay
+Adams, and Emre Sargin.
+2016.
+
+</span>
+<span>Deep Neural Networks for YouTube Recommendations.
+In <em id="bib.bib8.3">Proceedings of the 10th ACM Conference on
+Recommender Systems</em> (Boston, Massachusetts, USA)
+<em id="bib.bib8.4">(RecSys ’16)</em>. Association for
+Computing Machinery, New York, NY, USA,
+191–198.
+
+</span>
+<span>
+<a href="https://doi.org/10.1145/2959100.2959190">https://doi.org/10.1145/2959100.2959190</a>
+</span></p><p id="reference-8">[8]
+<span>
+Malay Haldar, Mustafa
+Abdool, Prashant Ramanathan, Tao Xu,
+Shulin Yang, Huizhong Duan,
+Qing Zhang, Nick Barrow-Williams,
+Bradley C. Turnbull, Brendan M. Collins,
+and Thomas Legrand. 2019.
+
+</span>
+<span>Applying Deep Learning to Airbnb Search. In
+<em id="bib.bib9.3">Proceedings of the 25th ACM SIGKDD
+International Conference on Knowledge Discovery &amp; Data Mining</em>.
+ACM.
+
+</span>
+<span>
+<a href="https://doi.org/10.1145/3292500.3330658">https://doi.org/10.1145/3292500.3330658</a>
+</span></p><p id="reference-9">[9]
+<span>
+Malay Haldar, Prashant
+Ramanathan, Tyler Sax, Mustafa Abdool,
+Lanbo Zhang, Aamir Mansawala,
+Shulin Yang, Bradley Turnbull, and
+Junshuo Liao. 2020.
+
+</span>
+<span>Improving Deep Learning for Airbnb Search. In
+<em id="bib.bib10.3">Proceedings of the 26th ACM SIGKDD International
+Conference on Knowledge Discovery &amp; Data Mining</em> (Virtual Event, CA, USA)
+<em id="bib.bib10.4">(KDD ’20)</em>. Association for
+Computing Machinery, New York, NY, USA,
+2822–2830.
+
+</span>
+<span>
+<a href="https://doi.org/10.1145/3394486.3403333">https://doi.org/10.1145/3394486.3403333</a>
+</span></p><p id="reference-10">[10]
+<span>
+Alex Kendall, Yarin Gal,
+and Roberto Cipolla. 2017.
+
+</span>
+<span>Multi-Task Learning Using Uncertainty to Weigh Losses
+for Scene Geometry and Semantics.
+
+</span>
+<span>
+</span>
+<span>
+<a href="https://doi.org/10.48550/ARXIV.1705.07115">https://doi.org/10.48550/ARXIV.1705.07115</a>
+</span></p><p id="reference-11">[11]
+<span>
+Ning Ma, Mustafa Ispir,
+Yuan Li, Yongpeng Yang,
+Zhe Chen, Derek Zhiyuan Cheng,
+Lan Nie, and Kishor Barman.
+2022.
+
+</span>
+<span>An Online Multi-Task Learning Framework for Google
+Feed Ads Auction Models. In <em id="bib.bib12.3">Proceedings of the
+28th ACM SIGKDD Conference on Knowledge Discovery and Data Mining</em>
+(Washington DC, USA) <em id="bib.bib12.4">(KDD ’22)</em>.
+Association for Computing Machinery,
+New York, NY, USA, 3477–3485.
+
+</span>
+<span>
+<a href="https://doi.org/10.1145/3534678.3539055">https://doi.org/10.1145/3534678.3539055</a>
+</span></p><p id="reference-12">[12]
+<span>
+Xiao Ma, Liqin Zhao,
+Guan Huang, Zhi Wang,
+Zelin Hu, Xiaoqiang Zhu, and
+Kun Gai. 2018.
+
+</span>
+<span>Entire Space Multi-Task Model: An Effective
+Approach for Estimating Post-Click Conversion Rate. In
+<em id="bib.bib13.3">The 41st International ACM SIGIR Conference on
+Research &amp; Development in Information Retrieval</em> (Ann Arbor, MI, USA)
+<em id="bib.bib13.4">(SIGIR ’18)</em>. Association for
+Computing Machinery, New York, NY, USA,
+1137–1140.
+
+</span>
+<span>
+<a href="https://doi.org/10.1145/3209978.3210104">https://doi.org/10.1145/3209978.3210104</a>
+</span></p><p id="reference-13">[13]
+<span>
+Elliot Meyerson and
+Risto Miikkulainen. 2018.
+
+</span>
+<span>Pseudo-task Augmentation: From Deep Multitask
+Learning to Intratask Sharing - and Back. In
+<em id="bib.bib14.1">ICML</em>.
+
+</span>
+<span>
+</span></p><p id="reference-14">[14]
+<span>
+Hao Wang, Tai-Wei Chang,
+Tianqiao Liu, Jianmin Huang,
+Zhichao Chen, Chao Yu,
+Ruopeng Li, and Wei Chu.
+2022a.
+
+</span>
+<span>ESCM2: Entire Space Counterfactual Multi-Task Model
+for Post-Click Conversion Rate Estimation. In
+<em id="bib.bib15.3">Proceedings of the 45th International ACM SIGIR
+Conference on Research and Development in Information Retrieval</em> (Madrid,
+Spain) <em id="bib.bib15.4">(SIGIR ’22)</em>. Association
+for Computing Machinery, New York, NY, USA,
+363–372.
+
+</span>
+<span>
+<a href="https://doi.org/10.1145/3477495.3531972">https://doi.org/10.1145/3477495.3531972</a>
+</span></p><p id="reference-15">[15]
+<span>
+Ruoxi Wang, Bin Fu,
+Gang Fu, and Mingliang Wang.
+2017.
+
+</span>
+<span>Deep &amp; Cross Network for Ad Click Predictions. In
+<em id="bib.bib16.3">Proceedings of the ADKDD’17</em> (Halifax, NS, Canada)
+<em id="bib.bib16.4">(ADKDD’17)</em>. Association for
+Computing Machinery, New York, NY, USA, Article
+12, 7 pages.
+
+</span>
+<span>
+<a href="https://doi.org/10.1145/3124749.3124754">https://doi.org/10.1145/3124749.3124754</a>
+</span></p><p id="reference-16">[16]
+<span>
+Yuyan Wang, Zhe Zhao,
+Bo Dai, Christopher Fifty,
+Dong Lin, Lichan Hong,
+Li Wei, and Ed H. Chi.
+2022b.
+
+</span>
+<span>Can Small Heads Help? Understanding and Improving
+Multi-Task Generalization. In <em id="bib.bib17.3">Proceedings of the
+ACM Web Conference 2022</em> (Virtual Event, Lyon, France)
+<em id="bib.bib17.4">(WWW ’22)</em>. Association for
+Computing Machinery, New York, NY, USA,
+3009–3019.
+
+</span>
+<span>
+<a href="https://doi.org/10.1145/3485447.3512021">https://doi.org/10.1145/3485447.3512021</a>
+</span></p><p id="reference-17">[17]
+<span>
+Hong Wen, Jing Zhang,
+Yuan Wang, Fuyu Lv,
+Wentian Bao, Quan Lin, and
+Keping Yang. 2020.
+
+</span>
+<span>Entire Space Multi-Task Modeling via Post-Click
+Behavior Decomposition for Conversion Rate Prediction. In
+<em id="bib.bib18.3">Proceedings of the 43rd International ACM SIGIR
+Conference on Research and Development in Information Retrieval</em> (Virtual
+Event, China) <em id="bib.bib18.4">(SIGIR ’20)</em>.
+Association for Computing Machinery,
+New York, NY, USA, 2377–2386.
+
+</span>
+<span>
+<a href="https://doi.org/10.1145/3397271.3401443">https://doi.org/10.1145/3397271.3401443</a>
+</span></p><p id="reference-18">[18]
+<span>
+Dongbo Xi, Zhen Zi Chen,
+Peng Yan, Yinger Zhang,
+Yongchun Zhu, Fuzhen Zhuang, and
+Yu Chen. 2021.
+
+</span>
+<span>Modeling the Sequential Dependence among Audience
+Multi-step Conversions with Multi-task Learning in Targeted Display
+Advertising.
+
+</span>
+<span><em id="bib.bib19.3">Proceedings of the 27th ACM SIGKDD Conference
+on Knowledge Discovery &amp; Data Mining</em> (2021).
+
+</span>
+<span>
+</span></p><p id="reference-19">[19]
+<span>
+Bianca Zadrozny.
+2004.
+
+</span>
+<span>Learning and Evaluating Classifiers under Sample
+Selection Bias. In <em id="bib.bib20.1">Proceedings of the Twenty-First
+International Conference on Machine Learning</em> (Banff, Alberta, Canada)
+<em id="bib.bib20.2">(ICML ’04)</em>. Association for
+Computing Machinery, New York, NY, USA,
+114.
+
+</span>
+<span>
+<a href="https://doi.org/10.1145/1015330.1015425">https://doi.org/10.1145/1015330.1015425</a>
+</span></p><p id="reference-20">[20]
+<span>
+Zhe Zhao, Lichan Hong,
+Li Wei, Jilin Chen,
+Aniruddh Nath, Shawn Andrews,
+Aditee Kumthekar, Maheswaran
+Sathiamoorthy, Xinyang Yi, and Ed
+Chi. 2019.
+
+</span>
+<span>Recommending What Video to Watch next: A Multitask
+Ranking System. In <em id="bib.bib21.3">Proceedings of the 13th ACM
+Conference on Recommender Systems</em> (Copenhagen, Denmark)
+<em id="bib.bib21.4">(RecSys ’19)</em>. Association for
+Computing Machinery, New York, NY, USA,
+43–51.
+
+</span>
+<span>
+<a href="https://doi.org/10.1145/3298689.3346997">https://doi.org/10.1145/3298689.3346997</a>
+</span></p></div>
+</article></body></html>
