@@ -1,0 +1,760 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1" name="viewport"/><title>SMART: LLM-Augmented Hybrid Retrieval for Dynamic Product Ads</title><style>body {
+  max-width: 760px;
+  margin: 2rem auto;
+  padding: 0 1rem;
+  color: #202020;
+  background: #fff;
+  font-family: Georgia, serif;
+  line-height: 1.55;
+}
+a { color: #315f8c; }
+.library-link { margin-bottom: 2rem; }
+img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 1.5rem auto;
+}
+figure { margin: 2rem 0; }
+figcaption, .article-meta { font-size: 0.9em; }
+pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+blockquote {
+  margin-left: 0;
+  padding-left: 1rem;
+  border-left: 3px solid #999;
+}
+math[display="block"] { margin: 1rem auto; overflow-x: auto; }</style><meta content="smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads" name="vrac-slug"/><meta content="arxiv" name="vrac-source-type"/><meta content="https://arxiv.org/abs/2607.23121" name="vrac-source-url"/><meta content="SMART: LLM-Augmented Hybrid Retrieval for Dynamic Product Ads" name="vrac-title"/><meta content="Congfei Zhang, Jingxiao Ma, Xiaodong Liu, Hsiang-wei Chao, Siman Wang, Ge Liu, Shantanu Aggarwal, Vincent Zhang, Meghana Missula, Rachel Liao, Zichu Li, Xiao Bai, Yunzhi Zhou, Yajun Wang, Zhe Liu, Jinchao Li, Yu Zhang" name="vrac-author"/><meta content="arXiv:2607.23121v1" name="vrac-publication"/><meta content="25 Jul 2026" name="vrac-published"/><meta content="3f97a4e151cc908ba1bbf936603414bdce1d06a0e371b15310b8025d4dfb92bb" name="vrac-content-sha256"/></head><body><p class="library-link"><a href="https://theopinard.github.io/vrac/">All articles</a></p><article><h1>SMART: LLM-Augmented Hybrid Retrieval for Dynamic Product Ads</h1><p class="article-meta">Congfei Zhang, Jingxiao Ma, Xiaodong Liu, Hsiang-wei Chao, Siman Wang, Ge Liu, Shantanu Aggarwal, Vincent Zhang, Meghana Missula, Rachel Liao, Zichu Li, Xiao Bai, Yunzhi Zhou, Yajun Wang, Zhe Liu, Jinchao Li, Yu Zhang · arXiv:2607.23121v1 · 25 Jul 2026</p><p class="article-meta">Original: <a href="https://arxiv.org/html/2607.23121v1">arXiv HTML</a> · <a href="https://arxiv.org/pdf/2607.23121v1">PDF</a></p>
+<span><span><span><span>CCS: </span>Information systems Language models</span><span><span>CCS: </span>Information systems Recommender systems</span><span><span>CCS: </span>Information systems Online advertising</span></span></span>
+<div id="abstract1"><h2>Abstract</h2>
+<p id="abstract1.1">Dynamic Product Ads (DPA) require retrieving relevant items from multi-million product catalogs, balancing two competing objectives: retargeting (re-surfacing known interests) and prospecting (discovering new categories). While Large Language Models (LLMs) capture semantic intent better than traditional embedding models, deploying them at scale introduces prohibitive inference costs and lexical mismatch issues. Through controlled experiments on millions of users, we demonstrate a critical retrieval decomposition: rule-generated queries excel at retargeting on a lexical BM25 index, while LLM-generated queries excel at prospecting on a dense ANN index. Building on this, we propose SMART (SeMantic-aware Adaptive ReTrieval). To manage costs, a lightweight quality gate identifies coverage gaps in initial keyword results, adaptively routing only the <math alttext="\sim" class="ltx_Math" display="inline" id="abstract1.m1" intent=":literal"><semantics><mo>∼</mo><annotation encoding="application/x-tex">\sim</annotation></semantics></math>10% of users who benefit from semantic prospecting to the LLM path. Offline evaluation demonstrates that this gated approach captures the bulk of semantic prospecting gains in Relevance Score while maintaining competitive re-targeting performance at a 90% reduction in LLM costs. Finally, in a 2-week online A/B test at Snap, SMART improved the ad conversion rate by <math alttext="+" class="ltx_Math" display="inline" id="abstract1.m2" intent=":literal"><semantics><mo>+</mo><annotation encoding="application/x-tex">+</annotation></semantics></math>27.6% over a strong embedding-based baseline.</p>
+</div>
+<div>
+<h6>Keywords: </h6>Dynamic Product Ads, Large Language Models, hybrid retrieval, query generation, adaptive routing, cost-aware serving
+</div>
+<figure id="S0.F1"><img alt="Figure 1. SMART system architecture. All users receive rule-generated queries for BM25 retargeting. The quality gate evaluates coverage gaps and routes ∼ \sim 10% of users to LLM prospecting queries on a dense ANN index. Candidates are merg" height="451" src="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/figure-1.jpg" width="1199"/><figcaption><span>Figure 1. </span>SMART system architecture. All users receive rule-generated queries for BM25 retargeting. The quality gate evaluates coverage gaps and routes <math alttext="\sim" class="ltx_Math" display="inline" id="S0.F1.m2" intent=":literal"><semantics><mo>∼</mo><annotation encoding="application/x-tex">\sim</annotation></semantics></math>10% of users to LLM prospecting queries on a dense ANN index. Candidates are merged, reranked, and sent to ad serving.</figcaption></figure>
+<section id="S1">
+<h2><span>1. </span>Introduction</h2>
+<div id="S1.p1">
+<p id="S1.p1.1">Dynamic Product Ads (DPA) drive personalized recommendations by analyzing a user’s shopping behavior. The core retrieval challenge involves sifting through millions of items to identify the most relevant products based on a user’s browsing, cart, and purchase history. This task is uniquely difficult because it requires balancing two competing objectives. On one hand, systems must excel at retargeting—re-surfacing products from known brands and categories to drive immediate conversions. On the other hand, they must support prospecting—discovering relevant items in new categories to expand the user’s consideration set.</p>
+</div>
+<div id="S1.p2">
+<p id="S1.p2.1">Existing DPA retrieval systems rely heavily on collaborative filtering or embedding-based models (<a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#reference-2">Abutbul et al., 2023</a>; <a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#reference-11">Covington et al., 2016</a>). While these approaches capture behavioral similarity, they struggle to express semantic intent (e.g., inferring “running accessories” from an athletic-footwear purchase). Large Language Models (LLMs) offer a promising alternative, as their pre-trained world knowledge allows them to interpret user histories and generate semantically rich search queries (<a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#reference-29">Zhu et al., 2025</a>; <a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#reference-27">Wang et al., 2023</a>). However, deploying LLMs in ad retrieval introduces three major challenges. First, there is a query–backend mismatch: LLM-generated text often fails to align with the strict lexical patterns required by traditional BM25 indexes (<a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#reference-15">Gao et al., 2023</a>; <a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#reference-18">Jagerman et al., 2023</a>). Second, invoking an LLM for every user is cost-prohibitive and impractical under strict millisecond latency constraints (<a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#reference-17">Hu et al., 2026</a>). Finally, the industry lacks a controlled, production-scale comparison detailing when LLM-generated queries outperform simpler rule-based approaches.</p>
+</div>
+<div id="S1.p3">
+<p id="S1.p3.1">To address these challenges, we propose SMART (SeMantic-aware Adaptive ReTrieval), which serves every user via a zero-cost rule-generated keyword pass and uses a lightweight quality gate to audit candidate coverage—invoking an LLM-driven dense retrieval path only for users left under-covered, as Figure <a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#S0.F1"><span>1</span></a> illustrates. We show that rule-generated and LLM-generated queries are not substitutes, but serve distinct, complementary purposes. Rule-generated queries emit exact tokens from the user’s history, making them ideal for retargeting on a lexical BM25 index. Conversely, LLMs are uniquely suited for semantic prospecting on a dense Approximate Nearest Neighbor (ANN) index, where their world knowledge surfaces complementary products that cannot be extracted from the user’s history. This gated pairing achieves the best retrieval quality while reducing LLM costs by 90%.</p>
+</div>
+<div id="S1.p4">
+<p id="S1.p4.1">We dissect the efficacy of SMART through extensive offline experiments and a 2-week online A/B test against Snap’s existing embedding-based baseline—a two-tower user-to-product (U2I) model with ANN retrieval. Our main contributions are:</p>
+<ul id="S1.I1">
+<li id="S1.I1.i1"><span>•</span>
+<div id="S1.I1.i1.p1">
+<p id="S1.I1.i1.p1.1"><span id="S1.I1.i1.p1.1.1">A retargeting–prospecting decomposition:</span> We validate on a large-scale production cohort that rule-generated queries excel at retargeting (measured by CatRecall@<math alttext="K" class="ltx_Math" display="inline" id="S1.I1.i1.p1.m1" intent=":literal"><semantics><mi>K</mi><annotation encoding="application/x-tex">K</annotation></semantics></math>), while LLMs excel at prospecting (measured by Relevance Score).</p>
+</div></li>
+<li id="S1.I1.i2"><span>•</span>
+<div id="S1.I1.i2.p1">
+<p id="S1.I1.i2.p1.1"><span id="S1.I1.i2.p1.1.1">A cross-metric evaluation:</span> We empirically demonstrate that CatRecall@<math alttext="K" class="ltx_Math" display="inline" id="S1.I1.i2.p1.m1" intent=":literal"><semantics><mi>K</mi><annotation encoding="application/x-tex">K</annotation></semantics></math> and Relevance Score yield opposite rankings on the same systems, confirming that retargeting and prospecting necessitate different query strategies and backends.</p>
+</div></li>
+<li id="S1.I1.i3"><span>•</span>
+<div id="S1.I1.i3.p1">
+<p id="S1.I1.i3.p1.1"><span id="S1.I1.i3.p1.1.1">A learned output-auditing quality gate:</span> We introduce a lightweight GBDT router that audits the output of the zero-cost keyword pass by measuring coverage gaps relative to user historical interests. By adaptively routing only the <math alttext="\sim" class="ltx_Math" display="inline" id="S1.I1.i3.p1.m1" intent=":literal"><semantics><mo>∼</mo><annotation encoding="application/x-tex">\sim</annotation></semantics></math>10% of users with the highest predicted coverage deficits to the LLM path, SMART captures peak retrieval quality while achieving a 90% reduction in LLM inference costs.</p>
+</div></li>
+<li id="S1.I1.i4"><span>•</span>
+<div id="S1.I1.i4.p1">
+<p id="S1.I1.i4.p1.1"><span id="S1.I1.i4.p1.1.1">Production impact:</span> We detail the deployed SMART system, which successfully routes rule-generated queries to BM25 and LLM queries to ANN, driving a <math alttext="+" class="ltx_Math" display="inline" id="S1.I1.i4.p1.m1" intent=":literal"><semantics><mo>+</mo><annotation encoding="application/x-tex">+</annotation></semantics></math>27.6% relative improvement in conversion rate during a 2-week online A/B test at Snap.</p>
+</div></li>
+</ul>
+</div>
+</section>
+<section id="S2">
+<h2><span>2. </span>Related Work</h2>
+<section id="S2.SS0.SSS0.Px1">
+<h4>LLM-Based Query Expansion.</h4>
+<div id="S2.SS0.SSS0.Px1.p1">
+<p id="S2.SS0.SSS0.Px1.p1.1">Early generative query expansion techniques like Query2Doc (<a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#reference-27">Wang et al., 2023</a>) append LLM-generated pseudo-documents to user queries, demonstrating consistent improvements on dense retrieval benchmarks but showing less reliable gains on sparse indices. Similarly, architectures like HyDE (<a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#reference-15">Gao et al., 2023</a>) generate hypothetical documents specifically for dense embedding vector spaces while avoiding lexical matching entirely due to term-frequency discrepancies. Comparative evaluations across sparse and dense retrievers confirm that LLM query expansions provide significantly larger and more stable performance lifts when paired with semantic backends (<a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#reference-18">Jagerman et al., 2023</a>). Rather than direct query execution, frameworks like InPars (<a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#reference-5">Bonifácio et al., 2022</a>) restrict the use of generative text to synthesizing offline training data for neural models. Collectively, these methodologies indicate that synthetic, LLM-generated text aligns far better with latent semantic spaces than with strict term-matching mechanics. Our work provides empirical confirmation of this behavior at production scale within a commercial catalog framework.</p>
+</div>
+</section>
+<section id="S2.SS0.SSS0.Px2">
+<h4>LLM Query Expansion Failures.</h4>
+<div id="S2.SS0.SSS0.Px2.p1">
+<p id="S2.SS0.SSS0.Px2.p1.1">Generative query expansion is susceptible to specific systemic vulnerabilities, particularly when handling unfamiliar topics or ambiguous source inputs that trigger narrow, biased refinements (<a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#reference-1">Abe et al., 2025</a>). Furthermore, rewriting queries without factoring in the specific index capabilities of the underlying retrieval engine can produce fundamentally invalid retrieval plans. To mitigate this issue, probe-based architectures have been proposed to inspect the target index state before executing a plan (<a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#reference-9">Chen et al., 2026</a>). Our observation that LLM-generated retargeting queries function as degraded paraphrases of exact keywords serves as a clear instance of this backend-agnostic failure mode when applied to highly structured product catalog fields.</p>
+</div>
+</section>
+<section id="S2.SS0.SSS0.Px3">
+<h4>Cost-Aware LLM Routing.</h4>
+<div id="S2.SS0.SSS0.Px3.p1">
+<p id="S2.SS0.SSS0.Px3.p1.1">Managing the high computational overhead of generative models is typically addressed via dynamic routing cascades like FrugalGPT (<a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#reference-8">Chen et al., 2023</a>), which uses learned scorers to direct inputs to cheaper or more complex model tiers to achieve up to a 98% reduction in cost. Similarly, frameworks like RouteLLM (<a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#reference-21">Ong et al., 2024</a>) utilize human preference data to train efficient multi-tier routers, while systems like AutoMix (<a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#reference-3">Aggarwal et al., 2024</a>) apply self-verification loops to decide when an output requires escalation to a larger foundational model. Operational deployments like Hybrid LLM (<a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#reference-12">Ding et al., 2024</a>) establish thresholds to split inference workloads between edge devices and cloud infrastructure, and architectures like COEF-VQ (<a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#reference-13">Dong et al., 2025</a>) leverage cheap entropy-based filtering to gate heavy multimodal pipelines. Alternatively, Self-RAG (<a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#reference-4">Asai et al., 2024</a>) introduces internal critique tokens to dictate exactly when external knowledge retrieval is warranted. While most of these frameworks route between language models of varying sizes based on properties of the input, SMART applies the routing idea at a different decision point: a learned gate audits the <em id="S2.SS0.SSS0.Px3.p1.1.1">output</em> of a zero-cost deterministic keyword pass and decides whether invoking a generative engine is warranted at all.</p>
+</div>
+</section>
+<section id="S2.SS0.SSS0.Px4">
+<h4>Product Retrieval for Ads.</h4>
+<div id="S2.SS0.SSS0.Px4.p1">
+<p id="S2.SS0.SSS0.Px4.p1.1">DPA systems typically adapt the collaborative filtering and embedding-based candidate-generation paradigms developed for large-scale recommenders (<a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#reference-11">Covington et al., 2016</a>).
+Hybrid sparse–dense retrieval is likewise established practice, from unsupervised rank fusion (<a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#reference-10">Cormack et al., 2009</a>) to systematic analyses of sparse, dense, and hybrid representations (<a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#reference-20">Luan et al., 2021</a>); we treat the hybrid itself as prior art and focus on when each path helps and whether the expensive path should run at all.
+Abutbul et al. (<a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#reference-2">Abutbul et al., 2023</a>) describe audience prospecting for DPA at Yahoo using retargeting and search-based approaches without LLM query generation.
+Hu et al. (<a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#reference-17">Hu et al., 2026</a>) note that deploying LLMs directly in online ad systems is “impractical due to millisecond latency constraints,” using LLMs only for offline tasks.
+Pinterest (<a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#reference-26">Wang et al., 2024</a>) integrates LLMs for search relevance scoring but not for query generation.
+To our knowledge, no prior work provides a controlled study of when LLM-generated queries help or hurt in production ad retrieval.</p>
+</div>
+</section>
+</section>
+<section id="S3">
+<h2><span>3. </span>Preliminary Study: Retargeting vs. Prospecting</h2>
+<div id="S3.p1">
+<p id="S3.p1.1">Before describing the architecture of SMART, we present a diagnostic production study run on live traffic logs. This empirical analysis exposes the core behavior and limitations of traditional lexical retrieval and generative retrieval paths, defining the requirements for an optimized production setup.</p>
+</div>
+<section id="S3.SS1">
+<h3><span>3.1. </span>Diagnostic Setup and Metrics</h3>
+<div id="S3.SS1.p1">
+<p id="S3.SS1.p1.1">We sample an offline evaluation group of over 20K unique users from production DPA logs across multiple countries. For each user, their full interaction behavior (browsing, cart, and purchase events) recorded up to day <math alttext="T-1" class="ltx_Math" display="inline" id="S3.SS1.p1.m1" intent=":literal"><semantics><mrow><mi>T</mi><mo>−</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">T-1</annotation></semantics></math> serves as the sole input to query generation. This mirrors the deployed system, where no current-session context is used: query generation consumes the accumulated history alone, while the routing gate conditions on that history, static profile attributes, and the keyword-pass output (Section <a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#S4"><span>4</span></a>). The candidate configurations retrieve the top-200 products from an active catalog of tens of millions of listings, which are then evaluated against the user’s actual purchases documented on day <math alttext="T" class="ltx_Math" display="inline" id="S3.SS1.p1.m2" intent=":literal"><semantics><mi>T</mi><annotation encoding="application/x-tex">T</annotation></semantics></math> and against an offline LLM judge that emits a Relevance Score. All conditions share identical underlying indices, reranker models, and pipeline layouts to isolate query generation performance. Full implementation parameters are detailed in Section <a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#S4.SS3"><span>4.3</span></a>. Performance is tracked through two distinct, structurally opposing lenses:</p>
+<ul id="S3.I1">
+<li id="S3.I1.i1"><span>•</span>
+<div id="S3.I1.i1.p1">
+<p id="S3.I1.i1.p1.1"><span id="S3.I1.i1.p1.1.1">CatRecall@<math alttext="K" class="ltx_Math" display="inline" id="S3.I1.i1.p1.m1" intent=":literal"><semantics><mi>K</mi><annotation encoding="application/x-tex">K</annotation></semantics></math></span> (Retargeting Metric): The fraction of Google Product Categories (GPC) purchased on day <math alttext="T" class="ltx_Math" display="inline" id="S3.I1.i1.p1.m2" intent=":literal"><semantics><mi>T</mi><annotation encoding="application/x-tex">T</annotation></semantics></math> that are successfully surfaced within the top-<math alttext="K" class="ltx_Math" display="inline" id="S3.I1.i1.p1.m3" intent=":literal"><semantics><mi>K</mi><annotation encoding="application/x-tex">K</annotation></semantics></math> retrieved items. Category-level evaluation is matching at the natural granularity for DPA systems because exact product-ID recall is vanishingly sparse at scale.</p>
+</div></li>
+<li id="S3.I1.i2"><span>•</span>
+<div id="S3.I1.i2.p1">
+<p id="S3.I1.i2.p1.1"><span id="S3.I1.i2.p1.1.1">Relevance Score</span> (Prospecting Metric): An LLM-as-a-judge (<a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#reference-28">Zheng et al., 2023</a>) evaluation using Gemini 3 Flash (<a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#reference-16">Gemini Team, Google, 2023</a>) (with thinking mode enabled) scores the top-10 retrieved items against the user’s full shopping history on a 0–3 scale (<math alttext="3=" class="ltx_Math" display="inline" id="S3.I1.i2.p1.m1" intent=":literal"><semantics><mrow><mn>3</mn><mo>=</mo><mphantom></mphantom></mrow><annotation encoding="application/x-tex">3=</annotation></semantics></math> highly relevant, <math alttext="2=" class="ltx_Math" display="inline" id="S3.I1.i2.p1.m2" intent=":literal"><semantics><mrow><mn>2</mn><mo>=</mo><mphantom></mphantom></mrow><annotation encoding="application/x-tex">2=</annotation></semantics></math> matches intent, <math alttext="1=\text{adjacent}" class="ltx_Math" display="inline" id="S3.I1.i2.p1.m3" intent=":literal"><semantics><mrow><mn>1</mn><mo>=</mo><mtext>adjacent</mtext></mrow><annotation encoding="application/x-tex">1=\text{adjacent}</annotation></semantics></math>, <math alttext="0=\text{irrelevant}" class="ltx_Math" display="inline" id="S3.I1.i2.p1.m4" intent=":literal"><semantics><mrow><mn>0</mn><mo>=</mo><mtext>irrelevant</mtext></mrow><annotation encoding="application/x-tex">0=\text{irrelevant}</annotation></semantics></math>). This metric explicitly captures semantic alignment to broader intent, rewarding discovery within categories the user has not yet purchased.</p>
+</div></li>
+</ul>
+</div>
+<div id="S3.SS1.p2">
+<p id="S3.SS1.p2.1">We evaluate two distinct query strategies: <span id="S3.SS1.p2.1.1">rule-generated keywords</span> and <span id="S3.SS1.p2.1.2">LLM-generated queries</span> across two retrieval backends: a Tantivy-based BM25 lexical index and a dense FAISS-based Approximate Nearest Neighbor (ANN) index.</p>
+</div>
+</section>
+<section id="S3.SS2">
+<h3><span>3.2. </span>Token-Frequency Limits on Lexical Search</h3>
+<div id="S3.SS2.p1">
+<p id="S3.SS2.p1.1">We first cross-examine the behavior of both query strategies on a shared BM25 index to isolate the characteristics of pure lexical matching.</p>
+</div>
+<figure id="S3.T1"><img alt="Table 1. Lexical retrieval comparison on BM25. Rule-generated keyword queries achieve higher CatRecall@ K K at every evaluation depth, reflecting their structural alignment with token-frequency matching." height="230" src="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/table-1.jpg" width="860"/><figcaption><span>Table 1. </span>Lexical retrieval comparison on BM25. Rule-generated keyword queries achieve higher CatRecall@<math alttext="K" class="ltx_Math" display="inline" id="S3.T1.m2" intent=":literal"><semantics><mi>K</mi><annotation encoding="application/x-tex">K</annotation></semantics></math> at every evaluation depth, reflecting their structural alignment with token-frequency matching.</figcaption></figure>
+<div id="S3.SS2.p2">
+<p id="S3.SS2.p2.1">Table <a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#S3.T1"><span>1</span></a> reveals an explicit performance gap: the deterministic Keyword baseline outperforms the generative LLM strategy across every depth, securing a <math alttext="+15.9\%" class="ltx_Math" display="inline" id="S3.SS2.p2.m1" intent=":literal"><semantics><mrow><mo>+</mo><mrow><mn>15.9</mn><mo>%</mo></mrow></mrow><annotation encoding="application/x-tex">+15.9\%</annotation></semantics></math> relative advantage at <math alttext="K=5" class="ltx_Math" display="inline" id="S3.SS2.p2.m2" intent=":literal"><semantics><mrow><mi>K</mi><mo>=</mo><mn>5</mn></mrow><annotation encoding="application/x-tex">K=5</annotation></semantics></math> and a <math alttext="+24.1\%" class="ltx_Math" display="inline" id="S3.SS2.p2.m3" intent=":literal"><semantics><mrow><mo>+</mo><mrow><mn>24.1</mn><mo>%</mo></mrow></mrow><annotation encoding="application/x-tex">+24.1\%</annotation></semantics></math> lead at <math alttext="K=200" class="ltx_Math" display="inline" id="S3.SS2.p2.m4" intent=":literal"><semantics><mrow><mi>K</mi><mo>=</mo><mn>200</mn></mrow><annotation encoding="application/x-tex">K=200</annotation></semantics></math>. This behavior is a direct consequence of index mechanics: BM25 functions as a token-frequency matcher that weights fields by inverse document frequency. Rule-generated queries emit exact brand and category strings drawn directly from user text logs, matching indexed product metadata exactly. When an LLM paraphrases this precise intent (e.g., expanding a brand title into natural description strings), it introduces vocabulary permutations that do not exist verbatim within catalog fields, effectively diluting term frequency and degrading lexical precision. Thus, rule-generated keywords are superior for exact retargeting objectives.</p>
+</div>
+</section>
+<section id="S3.SS3">
+<h3><span>3.3. </span>Cross-Metric Index Inversion</h3>
+<div id="S3.SS3.p1">
+<p id="S3.SS3.p1.1">The narrative completely reverses when moving candidates into a dense vector space. Table <a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#S3.T2"><span>2</span></a> maps both query generation styles across both the BM25 and dense ANN indices evaluated across both key metrics.</p>
+</div>
+<figure id="S3.T2"><img alt="Table 2. Cross-metric backend comparison. CatRecall is evaluated at K = 200 K=200 ; Relevance Score is checked at K = 10 K=10 on a 0–3 scale. Rule-generated keyword + BM25 leads on CatRecall (retargeting), while LLM + ANN dominates on Relev" height="270" src="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/table-2.jpg" width="961"/><figcaption><span>Table 2. </span>Cross-metric backend comparison. CatRecall is evaluated at <math alttext="K=200" class="ltx_Math" display="inline" id="S3.T2.m3" intent=":literal"><semantics><mrow><mi>K</mi><mo>=</mo><mn>200</mn></mrow><annotation encoding="application/x-tex">K=200</annotation></semantics></math>; Relevance Score is checked at <math alttext="K=10" class="ltx_Math" display="inline" id="S3.T2.m4" intent=":literal"><semantics><mrow><mi>K</mi><mo>=</mo><mn>10</mn></mrow><annotation encoding="application/x-tex">K=10</annotation></semantics></math> on a 0–3 scale. Rule-generated keyword + BM25 leads on CatRecall (retargeting), while LLM + ANN dominates on Relevance Score (prospecting).</figcaption></figure>
+<div id="S3.SS3.p2">
+<p id="S3.SS3.p2.1">We observe a clear cross-metric inversion: LLM queries improve Relevance Score across any backend (<math alttext="+18.9\%" class="ltx_Math" display="inline" id="S3.SS3.p2.m1" intent=":literal"><semantics><mrow><mo>+</mo><mrow><mn>18.9</mn><mo>%</mo></mrow></mrow><annotation encoding="application/x-tex">+18.9\%</annotation></semantics></math> on BM25, <math alttext="+22.6\%" class="ltx_Math" display="inline" id="S3.SS3.p2.m2" intent=":literal"><semantics><mrow><mo>+</mo><mrow><mn>22.6</mn><mo>%</mo></mrow></mrow><annotation encoding="application/x-tex">+22.6\%</annotation></semantics></math> on ANN), yet the keyword rules cleanly dominate on CatRecall@200. Crucially, each query style is best served by its matched backend: switching from BM25 to ANN boosts CatRecall@200 by <math alttext="+19.3\%" class="ltx_Math" display="inline" id="S3.SS3.p2.m3" intent=":literal"><semantics><mrow><mo>+</mo><mrow><mn>19.3</mn><mo>%</mo></mrow></mrow><annotation encoding="application/x-tex">+19.3\%</annotation></semantics></math> relative for the LLM path, while the same switch costs keyword queries <math alttext="3.8\%" class="ltx_Math" display="inline" id="S3.SS3.p2.m4" intent=":literal"><semantics><mrow><mn>3.8</mn><mo>%</mo></mrow><annotation encoding="application/x-tex">3.8\%</annotation></semantics></math>. Because dense indices reward conceptual vector proximity over strict token matching, they enable the LLM queries to exploit pre-trained world knowledge, successfully surfacing highly relevant, out-of-history discovery items (prospecting). These findings confirm that keywords + BM25 and LLM + ANN serve completely different retrieval objectives.</p>
+</div>
+</section>
+<section id="S3.SS4">
+<h3><span>3.4. </span>Quantifying Gating Opportunities</h3>
+<div id="S3.SS4.p1">
+<p id="S3.SS4.p1.1">While running both paths simultaneously for all incoming traffic would technically maximize candidate pools, two production constraints make a universal configuration impossible. First, global LLM inference introduces massive computational costs and violates strict millisecond ad serving response budgets. Second, our user-level impact analysis (Table <a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#S3.T3"><span>3</span></a>) indicates that the benefits of semantic prospecting are heavily concentrated.</p>
+</div>
+<figure id="S3.T3"><img alt="Table 3. Per-user impact of adding LLM queries to retrieval. Only 14.4% of users see clear metric improvement, while 73% achieve optimal coverage via exact keywords alone." height="808" src="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/table-3.jpg" width="961"/><figcaption><span>Table 3. </span>Per-user impact of adding LLM queries to retrieval. Only 14.4% of users see clear metric improvement, while 73% achieve optimal coverage via exact keywords alone.</figcaption></figure>
+<div id="S3.SS4.p2">
+<p id="S3.SS4.p2.1">A striking <math alttext="73.0\%" class="ltx_Math" display="inline" id="S3.SS4.p2.m1" intent=":literal"><semantics><mrow><mn>73.0</mn><mo>%</mo></mrow><annotation encoding="application/x-tex">73.0\%</annotation></semantics></math> of users experience absolutely no metric change when generative expansion is appended, as their intent is already completely satisfied by the cheap keyword path. Processing universal traffic through an LLM would yield massive infrastructure waste and introduce candidate noise for the majority of requests. Nor can the downstream reranker fully absorb this noise: it demotes weakly matching items within the merged pool, but candidates displaced from the finite retrieval pool are unrecoverable—indeed, indiscriminate LLM augmentation lowers CatRecall@200 even after reranking (Table <a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#S5.T6"><span>6</span></a>). This structural asymmetry motivates the proposed architecture: a framework that routes all traffic through the zero-cost keyword path, paired with an adaptive gate that conditionally invokes the expensive LLM vector path only for the targeted <math alttext="\sim" class="ltx_Math" display="inline" id="S3.SS4.p2.m2" intent=":literal"><semantics><mo>∼</mo><annotation encoding="application/x-tex">\sim</annotation></semantics></math>10% of users facing a candidate coverage gap.</p>
+</div>
+</section>
+</section>
+<section id="S4">
+<h2><span>4. </span>The SMART System Architecture</h2>
+<div id="S4.p1">
+<p id="S4.p1.1">The SMART system orchestrates a dual candidate generation loop managed by an online output-auditing routing layer, matching each query strategy to its empirically optimized index backend, as Figure <a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#S0.F1"><span>1</span></a> shows.</p>
+</div>
+<section id="S4.SS1">
+<h3><span>4.1. </span>Multi-Stage Retrieval Pipeline</h3>
+<div id="S4.SS1.p1">
+<p id="S4.SS1.p1.1">The core pipeline processes incoming requests across four sequential operational stages:</p>
+</div>
+<section id="S4.SS1.SSS0.Px1">
+<h4>1. Query Generation.</h4>
+<div id="S4.SS1.SSS0.Px1.p1">
+<p id="S4.SS1.SSS0.Px1.p1.1">For a user history <math alttext="H_{u}=\{(e_{i},t_{i},p_{i})\}" class="ltx_Math" display="inline" id="S4.SS1.SSS0.Px1.p1.m1" intent=":literal"><semantics><mrow><msub><mi>H</mi><mi>u</mi></msub><mo>=</mo><mrow><mo stretchy="false">{</mo><mrow><mo stretchy="false">(</mo><msub><mi>e</mi><mi>i</mi></msub><mo>,</mo><msub><mi>t</mi><mi>i</mi></msub><mo>,</mo><msub><mi>p</mi><mi>i</mi></msub><mo stretchy="false">)</mo></mrow><mo stretchy="false">}</mo></mrow></mrow><annotation encoding="application/x-tex">H_{u}=\{(e_{i},t_{i},p_{i})\}</annotation></semantics></math>, SMART combines a deterministic keyword query generator with a selective generative path.
+Algorithm <a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#alg1"><span>1</span></a> describes the rule-generated keyword component, which is explicitly constructed to be backend-aware, emitting tokens guaranteed to appear within the BM25 catalog fields. It tracks brand engagement by computing a score <math alttext="s(b)=\sum w(e_{i})" class="ltx_Math" display="inline" id="S4.SS1.SSS0.Px1.p1.m2" intent=":literal"><semantics><mrow><mrow><mi>s</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mi>b</mi><mo stretchy="false">)</mo></mrow></mrow><mo rspace="0.111em">=</mo><mrow><mo>∑</mo><mrow><mi>w</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><msub><mi>e</mi><mi>i</mi></msub><mo stretchy="false">)</mo></mrow></mrow></mrow></mrow><annotation encoding="application/x-tex">s(b)=\sum w(e_{i})</annotation></semantics></math>, where weights prioritize down-funnel conversions (<math alttext="w(\text{Purchase})=3" class="ltx_Math" display="inline" id="S4.SS1.SSS0.Px1.p1.m3" intent=":literal"><semantics><mrow><mrow><mi>w</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mtext>Purchase</mtext><mo stretchy="false">)</mo></mrow></mrow><mo>=</mo><mn>3</mn></mrow><annotation encoding="application/x-tex">w(\text{Purchase})=3</annotation></semantics></math>, <math alttext="w(\text{Add-to-Cart})=2" class="ltx_Math" display="inline" id="S4.SS1.SSS0.Px1.p1.m4" intent=":literal"><semantics><mrow><mrow><mi>w</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mtext>Add-to-Cart</mtext><mo stretchy="false">)</mo></mrow></mrow><mo>=</mo><mn>2</mn></mrow><annotation encoding="application/x-tex">w(\text{Add-to-Cart})=2</annotation></semantics></math>, <math alttext="w(\text{View})=1" class="ltx_Math" display="inline" id="S4.SS1.SSS0.Px1.p1.m5" intent=":literal"><semantics><mrow><mrow><mi>w</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mtext>View</mtext><mo stretchy="false">)</mo></mrow></mrow><mo>=</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">w(\text{View})=1</annotation></semantics></math>). The top <math alttext="n/2" class="ltx_Math" display="inline" id="S4.SS1.SSS0.Px1.p1.m6" intent=":literal"><semantics><mrow><mi>n</mi><mo>/</mo><mn>2</mn></mrow><annotation encoding="application/x-tex">n/2</annotation></semantics></math> brands by descending engagement are paired with their most frequent historical leaf categories to form exact search tokens, and remaining slots are filled with high-frequency category strings to broaden baseline coverage.</p>
+</div>
+<figure id="alg1">
+<figcaption><span><span id="alg1.3">Algorithm 1</span> </span> Backend-Aware Keyword Query Generation</figcaption>
+<div id="alg1.4">
+<div id="alg1.l0">
+<span><span id="alg1.l0.1">0:</span></span>
+
+
+               User history <math alttext="H_{u}=\{(e_{i},t_{i},p_{i})\}" class="ltx_Math" display="inline" id="alg1.l0.m1" intent=":literal"><semantics><mrow><msub><mi>H</mi><mi>u</mi></msub><mo>=</mo><mrow><mo stretchy="false">{</mo><mrow><mo stretchy="false">(</mo><msub><mi>e</mi><mi>i</mi></msub><mo>,</mo><msub><mi>t</mi><mi>i</mi></msub><mo>,</mo><msub><mi>p</mi><mi>i</mi></msub><mo stretchy="false">)</mo></mrow><mo stretchy="false">}</mo></mrow></mrow><annotation encoding="application/x-tex">H_{u}=\{(e_{i},t_{i},p_{i})\}</annotation></semantics></math>, budget <math alttext="n" class="ltx_Math" display="inline" id="alg1.l0.m2" intent=":literal"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> queries
+
+</div>
+<div id="alg1.l0a">
+<span><span id="alg1.l0a.1">0:</span></span>
+
+
+               Query set <math alttext="Q_{\text{kw}}" class="ltx_Math" display="inline" id="alg1.l0a.m1" intent=":literal"><semantics><msub><mi>Q</mi><mtext>kw</mtext></msub><annotation encoding="application/x-tex">Q_{\text{kw}}</annotation></semantics></math>
+</div>
+<div id="alg1.l1">
+<span><span id="alg1.l1.1">1:</span></span>
+
+
+               <span id="alg1.l1.3">for</span> each brand <math alttext="b" class="ltx_Math" display="inline" id="alg1.l1.m1" intent=":literal"><semantics><mi>b</mi><annotation encoding="application/x-tex">b</annotation></semantics></math> in <math alttext="H_{u}" class="ltx_Math" display="inline" id="alg1.l1.m2" intent=":literal"><semantics><msub><mi>H</mi><mi>u</mi></msub><annotation encoding="application/x-tex">H_{u}</annotation></semantics></math> <span id="alg1.l1.4">do</span>
+</div>
+<div id="alg1.l2">
+<span><span id="alg1.l2.1">2:</span></span>
+
+
+                <math alttext="s(b)\leftarrow\sum_{e_{i}:\text{brand}(p_{i})=b}w(e_{i})" class="ltx_math_unparsed" display="inline" id="alg1.l2.m1" intent=":literal"><semantics><mrow><mi>s</mi><mrow><mo stretchy="false">(</mo><mi>b</mi><mo stretchy="false">)</mo></mrow><mo rspace="0.111em" stretchy="false">←</mo><msub><mo>∑</mo><mrow><msub><mi>e</mi><mi>i</mi></msub><mo lspace="0.278em" rspace="0.278em">:</mo><mrow><mrow><mtext>brand</mtext><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><msub><mi>p</mi><mi>i</mi></msub><mo stretchy="false">)</mo></mrow></mrow><mo>=</mo><mi>b</mi></mrow></mrow></msub><mi>w</mi><mrow><mo stretchy="false">(</mo><msub><mi>e</mi><mi>i</mi></msub><mo stretchy="false">)</mo></mrow></mrow><annotation encoding="application/x-tex">s(b)\leftarrow\sum_{e_{i}:\text{brand}(p_{i})=b}w(e_{i})</annotation></semantics></math> <span id="alg1.l2.3"><math alttext="\triangleright" class="ltx_Math" display="inline" id="alg1.l2.m2" intent=":literal"><semantics><mo>⊳</mo><annotation encoding="application/x-tex">\triangleright</annotation></semantics></math> Purchase=3, Add-to-cart=2, View=1
+</span>
+</div>
+<div id="alg1.l3">
+<span><span id="alg1.l3.1">3:</span></span>
+
+
+               <span id="alg1.l3.3">end</span> <span id="alg1.l3.4">for</span>
+</div>
+<div id="alg1.l4">
+<span><span id="alg1.l4.1">4:</span></span>
+
+
+               <math alttext="B\leftarrow\text{top-}(n/2)" class="ltx_Math" display="inline" id="alg1.l4.m1" intent=":literal"><semantics><mrow><mi>B</mi><mo stretchy="false">←</mo><mrow><mtext>top-</mtext><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><mrow><mi>n</mi><mo>/</mo><mn>2</mn></mrow><mo stretchy="false">)</mo></mrow></mrow></mrow><annotation encoding="application/x-tex">B\leftarrow\text{top-}(n/2)</annotation></semantics></math> brands by <math alttext="s(b)" class="ltx_Math" display="inline" id="alg1.l4.m2" intent=":literal"><semantics><mrow><mi>s</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mi>b</mi><mo stretchy="false">)</mo></mrow></mrow><annotation encoding="application/x-tex">s(b)</annotation></semantics></math> descending
+
+</div>
+<div id="alg1.l5">
+<span><span id="alg1.l5.1">5:</span></span>
+
+
+               <span id="alg1.l5.3">for</span> each <math alttext="b\in B" class="ltx_Math" display="inline" id="alg1.l5.m1" intent=":literal"><semantics><mrow><mi>b</mi><mo>∈</mo><mi>B</mi></mrow><annotation encoding="application/x-tex">b\in B</annotation></semantics></math> <span id="alg1.l5.4">do</span>
+</div>
+<div id="alg1.l6">
+<span><span id="alg1.l6.1">6:</span></span>
+
+
+                <math alttext="c_{b}\leftarrow" class="ltx_Math" display="inline" id="alg1.l6.m1" intent=":literal"><semantics><mrow><msub><mi>c</mi><mi>b</mi></msub><mo stretchy="false">←</mo><mphantom></mphantom></mrow><annotation encoding="application/x-tex">c_{b}\leftarrow</annotation></semantics></math> most frequent leaf category for <math alttext="b" class="ltx_Math" display="inline" id="alg1.l6.m2" intent=":literal"><semantics><mi>b</mi><annotation encoding="application/x-tex">b</annotation></semantics></math> in <math alttext="H_{u}" class="ltx_Math" display="inline" id="alg1.l6.m3" intent=":literal"><semantics><msub><mi>H</mi><mi>u</mi></msub><annotation encoding="application/x-tex">H_{u}</annotation></semantics></math>
+</div>
+<div id="alg1.l7">
+<span><span id="alg1.l7.1">7:</span></span>
+
+
+                <math alttext="Q_{\text{kw}}\leftarrow Q_{\text{kw}}\cup\{b\oplus c_{b}\}" class="ltx_Math" display="inline" id="alg1.l7.m1" intent=":literal"><semantics><mrow><msub><mi>Q</mi><mtext>kw</mtext></msub><mo stretchy="false">←</mo><mrow><msub><mi>Q</mi><mtext>kw</mtext></msub><mo>∪</mo><mrow><mo stretchy="false">{</mo><mrow><mi>b</mi><mo>⊕</mo><msub><mi>c</mi><mi>b</mi></msub></mrow><mo stretchy="false">}</mo></mrow></mrow></mrow><annotation encoding="application/x-tex">Q_{\text{kw}}\leftarrow Q_{\text{kw}}\cup\{b\oplus c_{b}\}</annotation></semantics></math> <span id="alg1.l7.3"><math alttext="\triangleright" class="ltx_Math" display="inline" id="alg1.l7.m2" intent=":literal"><semantics><mo>⊳</mo><annotation encoding="application/x-tex">\triangleright</annotation></semantics></math> e.g., “Brand-X Running Shoes”
+</span>
+</div>
+<div id="alg1.l8">
+<span><span id="alg1.l8.1">8:</span></span>
+
+
+               <span id="alg1.l8.3">end</span> <span id="alg1.l8.4">for</span>
+</div>
+<div id="alg1.l9">
+<span><span id="alg1.l9.1">9:</span></span>
+
+
+               <math alttext="C\leftarrow" class="ltx_Math" display="inline" id="alg1.l9.m1" intent=":literal"><semantics><mrow><mi>C</mi><mo stretchy="false">←</mo><mphantom></mphantom></mrow><annotation encoding="application/x-tex">C\leftarrow</annotation></semantics></math> top-<math alttext="(n-|Q_{\text{kw}}|)" class="ltx_Math" display="inline" id="alg1.l9.m2" intent=":literal"><semantics><mrow><mo stretchy="false">(</mo><mrow><mi>n</mi><mo>−</mo><mrow><mo stretchy="false">|</mo><msub><mi>Q</mi><mtext>kw</mtext></msub><mo stretchy="false">|</mo></mrow></mrow><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">(n-|Q_{\text{kw}}|)</annotation></semantics></math> categories by frequency, excluding covered
+
+</div>
+<div id="alg1.l10">
+<span><span id="alg1.l10.1">10:</span></span>
+
+
+               <span id="alg1.l10.3">for</span> each <math alttext="c\in C" class="ltx_Math" display="inline" id="alg1.l10.m1" intent=":literal"><semantics><mrow><mi>c</mi><mo>∈</mo><mi>C</mi></mrow><annotation encoding="application/x-tex">c\in C</annotation></semantics></math> <span id="alg1.l10.4">do</span>
+</div>
+<div id="alg1.l11">
+<span><span id="alg1.l11.1">11:</span></span>
+
+
+                <math alttext="Q_{\text{kw}}\leftarrow Q_{\text{kw}}\cup\{c\}" class="ltx_Math" display="inline" id="alg1.l11.m1" intent=":literal"><semantics><mrow><msub><mi>Q</mi><mtext>kw</mtext></msub><mo stretchy="false">←</mo><mrow><msub><mi>Q</mi><mtext>kw</mtext></msub><mo>∪</mo><mrow><mo stretchy="false">{</mo><mi>c</mi><mo stretchy="false">}</mo></mrow></mrow></mrow><annotation encoding="application/x-tex">Q_{\text{kw}}\leftarrow Q_{\text{kw}}\cup\{c\}</annotation></semantics></math> <span id="alg1.l11.3"><math alttext="\triangleright" class="ltx_Math" display="inline" id="alg1.l11.m2" intent=":literal"><semantics><mo>⊳</mo><annotation encoding="application/x-tex">\triangleright</annotation></semantics></math> e.g., “Baby Clothing”
+</span>
+</div>
+<div id="alg1.l12">
+<span><span id="alg1.l12.1">12:</span></span>
+
+
+               <span id="alg1.l12.3">end</span> <span id="alg1.l12.4">for</span>
+</div>
+<div id="alg1.l13">
+<span><span id="alg1.l13.1">13:</span></span>
+
+
+               <span id="alg1.l13.3">return</span> <math alttext="Q_{\text{kw}}" class="ltx_Math" display="inline" id="alg1.l13.m1" intent=":literal"><semantics><msub><mi>Q</mi><mtext>kw</mtext></msub><annotation encoding="application/x-tex">Q_{\text{kw}}</annotation></semantics></math>
+</div>
+</div>
+</figure>
+</section>
+<section id="S4.SS1.SSS0.Px2">
+<h4>2. Retrieval.</h4>
+<div id="S4.SS1.SSS0.Px2.p1">
+<p id="S4.SS1.SSS0.Px2.p1.1">Keyword queries run against a Tantivy (<a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#reference-24">Tantivy Contributors, 2023</a>) BM25 (<a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#reference-23">Robertson and Zaragoza, 2009</a>) index built from the catalog.
+Each product document is indexed with title, brand, Google Product Category, product type, and a 5-level hierarchical semantic ID following the TIGER framework (<a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#reference-22">Rajput et al., 2023</a>).
+The semantic IDs are generated by fine-tuning a SigLIP2 (<a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#reference-25">Tschannen et al., 2025</a>) multimodal vision-language encoder on the Snap product catalog to produce product embeddings, then applying Residual Quantization <math alttext="k" class="ltx_Math" display="inline" id="S4.SS1.SSS0.Px2.p1.m1" intent=":literal"><semantics><mi>k</mi><annotation encoding="application/x-tex">k</annotation></semantics></math>-means (RQ-KMeans) to discretize the continuous embedding space into a 5-level hierarchy—L1 captures broad product domains (e.g., “Electronics”), while L5 identifies near-duplicate products.
+When selectively invoked by the quality gate, semantic prospecting queries are processed via a single LLM call and executed against a dense ANN index managed via FAISS (<a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#reference-14">Douze et al., 2025</a>).</p>
+</div>
+</section>
+<section id="S4.SS1.SSS0.Px3">
+<h4>3. Reranking.</h4>
+<div id="S4.SS1.SSS0.Px3.p1">
+<p id="S4.SS1.SSS0.Px3.p1.1">Candidates retrieved from both paths are merged and scored using a LambdaMART (<a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#reference-6">Burges, 2010</a>) learning-to-rank model trained with LightGBM (<a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#reference-19">Ke et al., 2017</a>), followed by a Maximal Marginal Relevance (MMR) (<a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#reference-7">Carbonell and Goldstein, 1998</a>) layer to enforce brand, category, and semantic diversity.</p>
+</div>
+</section>
+<section id="S4.SS1.SSS0.Px4">
+<h4>4. Ad Serving.</h4>
+<div id="S4.SS1.SSS0.Px4.p1">
+<p id="S4.SS1.SSS0.Px4.p1.1">Top-ranked products are mapped to active advertiser product sets to ensure absolute alignment with live ad campaigns before serving.</p>
+</div>
+</section>
+</section>
+<section id="S4.SS2">
+<h3><span>4.2. </span>Adaptive Quality Gate Mechanism</h3>
+<div id="S4.SS2.p1">
+<p id="S4.SS2.p1.1">To bypass expensive generative processing for users already well-served by rule generated keywords, SMART places an adaptive classifier directly after the zero-cost keyword retrieval pass, deciding whether to invoke the generative prospecting path, as Algorithm <a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#alg2"><span>2</span></a> describes.</p>
+</div>
+<figure id="alg2">
+<figcaption><span><span id="alg2.3">Algorithm 2</span> </span> Adaptive Query Routing</figcaption>
+<div id="alg2.4">
+<div id="alg2.l0">
+<span><span id="alg2.l0.1">0:</span></span>
+
+
+             User history <math alttext="H_{u}" class="ltx_Math" display="inline" id="alg2.l0.m1" intent=":literal"><semantics><msub><mi>H</mi><mi>u</mi></msub><annotation encoding="application/x-tex">H_{u}</annotation></semantics></math>, gate model <math alttext="g" class="ltx_Math" display="inline" id="alg2.l0.m2" intent=":literal"><semantics><mi>g</mi><annotation encoding="application/x-tex">g</annotation></semantics></math>, threshold <math alttext="\theta" class="ltx_Math" display="inline" id="alg2.l0.m3" intent=":literal"><semantics><mi>θ</mi><annotation encoding="application/x-tex">\theta</annotation></semantics></math>
+</div>
+<div id="alg2.l0a">
+<span><span id="alg2.l0a.1">0:</span></span>
+
+
+             Retrieved product set <math alttext="\mathcal{R}(u)" class="ltx_Math" display="inline" id="alg2.l0a.m1" intent=":literal"><semantics><mrow><mi class="ltx_font_mathcaligraphic">ℛ</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mi>u</mi><mo stretchy="false">)</mo></mrow></mrow><annotation encoding="application/x-tex">\mathcal{R}(u)</annotation></semantics></math>
+</div>
+<div id="alg2.l1">
+<span><span id="alg2.l1.1">1:</span></span>
+
+
+             <math alttext="Q_{\text{kw}}\leftarrow\textsc{KeywordQueries}(H_{u})" class="ltx_Math" display="inline" id="alg2.l1.m1" intent=":literal"><semantics><mrow><msub><mi>Q</mi><mtext>kw</mtext></msub><mo stretchy="false">←</mo><mrow><mtext class="ltx_font_smallcaps">KeywordQueries</mtext><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><msub><mi>H</mi><mi>u</mi></msub><mo stretchy="false">)</mo></mrow></mrow></mrow><annotation encoding="application/x-tex">Q_{\text{kw}}\leftarrow\textsc{KeywordQueries}(H_{u})</annotation></semantics></math> <span id="alg2.l1.3"><math alttext="\triangleright" class="ltx_Math" display="inline" id="alg2.l1.m2" intent=":literal"><semantics><mo>⊳</mo><annotation encoding="application/x-tex">\triangleright</annotation></semantics></math> Algorithm <a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#alg1"><span>1</span></a>, zero cost
+</span>
+</div>
+<div id="alg2.l2">
+<span><span id="alg2.l2.1">2:</span></span>
+
+
+             <math alttext="\mathcal{R}_{\text{kw}}\leftarrow\textsc{BM25Search}(Q_{\text{kw}})" class="ltx_Math" display="inline" id="alg2.l2.m1" intent=":literal"><semantics><mrow><msub><mi class="ltx_font_mathcaligraphic">ℛ</mi><mtext>kw</mtext></msub><mo stretchy="false">←</mo><mrow><mtext class="ltx_font_smallcaps">BM25Search</mtext><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><msub><mi>Q</mi><mtext>kw</mtext></msub><mo stretchy="false">)</mo></mrow></mrow></mrow><annotation encoding="application/x-tex">\mathcal{R}_{\text{kw}}\leftarrow\textsc{BM25Search}(Q_{\text{kw}})</annotation></semantics></math>
+</div>
+<div id="alg2.l3">
+<span><span id="alg2.l3.1">3:</span></span>
+
+
+             <math alttext="\mathbf{x}\leftarrow f(H_{u},\mathcal{R}_{\text{kw}})" class="ltx_Math" display="inline" id="alg2.l3.m1" intent=":literal"><semantics><mrow><mi>𝐱</mi><mo stretchy="false">←</mo><mrow><mi>f</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><msub><mi>H</mi><mi>u</mi></msub><mo>,</mo><msub><mi class="ltx_font_mathcaligraphic">ℛ</mi><mtext>kw</mtext></msub><mo stretchy="false">)</mo></mrow></mrow></mrow><annotation encoding="application/x-tex">\mathbf{x}\leftarrow f(H_{u},\mathcal{R}_{\text{kw}})</annotation></semantics></math> <span id="alg2.l3.3"><math alttext="\triangleright" class="ltx_Math" display="inline" id="alg2.l3.m2" intent=":literal"><semantics><mo>⊳</mo><annotation encoding="application/x-tex">\triangleright</annotation></semantics></math> Coverage gap features
+</span>
+</div>
+<div id="alg2.l4">
+<span><span id="alg2.l4.1">4:</span></span>
+
+
+             <span id="alg2.l4.3">if</span> <math alttext="g(\mathbf{x})\geq\theta" class="ltx_Math" display="inline" id="alg2.l4.m1" intent=":literal"><semantics><mrow><mrow><mi>g</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mi>𝐱</mi><mo stretchy="false">)</mo></mrow></mrow><mo>≥</mo><mi>θ</mi></mrow><annotation encoding="application/x-tex">g(\mathbf{x})\geq\theta</annotation></semantics></math> <span id="alg2.l4.4">then</span>
+</div>
+<div id="alg2.l5">
+<span><span id="alg2.l5.1">5:</span></span>
+
+
+              <math alttext="Q_{\text{llm}}\leftarrow\textsc{LLM}(H_{u},Q_{\text{kw}})" class="ltx_Math" display="inline" id="alg2.l5.m1" intent=":literal"><semantics><mrow><msub><mi>Q</mi><mtext>llm</mtext></msub><mo stretchy="false">←</mo><mrow><mtext class="ltx_font_smallcaps">LLM</mtext><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><msub><mi>H</mi><mi>u</mi></msub><mo>,</mo><msub><mi>Q</mi><mtext>kw</mtext></msub><mo stretchy="false">)</mo></mrow></mrow></mrow><annotation encoding="application/x-tex">Q_{\text{llm}}\leftarrow\textsc{LLM}(H_{u},Q_{\text{kw}})</annotation></semantics></math> <span id="alg2.l5.3"><math alttext="\triangleright" class="ltx_Math" display="inline" id="alg2.l5.m2" intent=":literal"><semantics><mo>⊳</mo><annotation encoding="application/x-tex">\triangleright</annotation></semantics></math> coverage gap: prospecting queries
+</span>
+</div>
+<div id="alg2.l6">
+<span><span id="alg2.l6.1">6:</span></span>
+
+
+              <math alttext="\mathcal{R}_{\text{llm}}\leftarrow\textsc{ANNSearch}(Q_{\text{llm}})" class="ltx_Math" display="inline" id="alg2.l6.m1" intent=":literal"><semantics><mrow><msub><mi class="ltx_font_mathcaligraphic">ℛ</mi><mtext>llm</mtext></msub><mo stretchy="false">←</mo><mrow><mtext class="ltx_font_smallcaps">ANNSearch</mtext><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><msub><mi>Q</mi><mtext>llm</mtext></msub><mo stretchy="false">)</mo></mrow></mrow></mrow><annotation encoding="application/x-tex">\mathcal{R}_{\text{llm}}\leftarrow\textsc{ANNSearch}(Q_{\text{llm}})</annotation></semantics></math>
+</div>
+<div id="alg2.l7">
+<span><span id="alg2.l7.1">7:</span></span>
+
+
+              <math alttext="\mathcal{R}(u)\leftarrow\textsc{Rerank}(\mathcal{R}_{\text{kw}}\cup\mathcal{R}_{\text{llm}})" class="ltx_Math" display="inline" id="alg2.l7.m1" intent=":literal"><semantics><mrow><mrow><mi class="ltx_font_mathcaligraphic">ℛ</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mi>u</mi><mo stretchy="false">)</mo></mrow></mrow><mo stretchy="false">←</mo><mrow><mtext class="ltx_font_smallcaps">Rerank</mtext><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><mrow><msub><mi class="ltx_font_mathcaligraphic">ℛ</mi><mtext>kw</mtext></msub><mo>∪</mo><msub><mi class="ltx_font_mathcaligraphic">ℛ</mi><mtext>llm</mtext></msub></mrow><mo stretchy="false">)</mo></mrow></mrow></mrow><annotation encoding="application/x-tex">\mathcal{R}(u)\leftarrow\textsc{Rerank}(\mathcal{R}_{\text{kw}}\cup\mathcal{R}_{\text{llm}})</annotation></semantics></math>
+</div>
+<div id="alg2.l8">
+<span><span id="alg2.l8.1">8:</span></span>
+
+
+             <span id="alg2.l8.3">else</span>
+</div>
+<div id="alg2.l9">
+<span><span id="alg2.l9.1">9:</span></span>
+
+
+              <math alttext="\mathcal{R}(u)\leftarrow\textsc{Rerank}(\mathcal{R}_{\text{kw}})" class="ltx_Math" display="inline" id="alg2.l9.m1" intent=":literal"><semantics><mrow><mrow><mi class="ltx_font_mathcaligraphic">ℛ</mi><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><mi>u</mi><mo stretchy="false">)</mo></mrow></mrow><mo stretchy="false">←</mo><mrow><mtext class="ltx_font_smallcaps">Rerank</mtext><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><msub><mi class="ltx_font_mathcaligraphic">ℛ</mi><mtext>kw</mtext></msub><mo stretchy="false">)</mo></mrow></mrow></mrow><annotation encoding="application/x-tex">\mathcal{R}(u)\leftarrow\textsc{Rerank}(\mathcal{R}_{\text{kw}})</annotation></semantics></math>
+</div>
+<div id="alg2.l10">
+<span><span id="alg2.l10.1">10:</span></span>
+
+
+             <span id="alg2.l10.3">end</span> <span id="alg2.l10.4">if</span>
+</div>
+<div id="alg2.l11">
+<span><span id="alg2.l11.1">11:</span></span>
+
+
+             <span id="alg2.l11.3">return</span> <math alttext="\mathcal{R}(u)" class="ltx_Math" display="inline" id="alg2.l11.m1" intent=":literal"><semantics><mrow><mi class="ltx_font_mathcaligraphic">ℛ</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mi>u</mi><mo stretchy="false">)</mo></mrow></mrow><annotation encoding="application/x-tex">\mathcal{R}(u)</annotation></semantics></math>
+</div>
+</div>
+</figure>
+<section id="S4.SS2.SSS0.Px1">
+<h4>Problem Formulation.</h4>
+<div id="S4.SS2.SSS0.Px1.p1">
+<p id="S4.SS2.SSS0.Px1.p1.1">Let <math alttext="\mathcal{R}_{\text{kw}}(u)" class="ltx_Math" display="inline" id="S4.SS2.SSS0.Px1.p1.m1" intent=":literal"><semantics><mrow><msub><mi class="ltx_font_mathcaligraphic">ℛ</mi><mtext>kw</mtext></msub><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><mi>u</mi><mo stretchy="false">)</mo></mrow></mrow><annotation encoding="application/x-tex">\mathcal{R}_{\text{kw}}(u)</annotation></semantics></math> denote candidates retrieved via the zero-cost keyword pass, and <math alttext="\mathcal{R}_{\text{smart}}(u)" class="ltx_Math" display="inline" id="S4.SS2.SSS0.Px1.p1.m2" intent=":literal"><semantics><mrow><msub><mi class="ltx_font_mathcaligraphic">ℛ</mi><mtext>smart</mtext></msub><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><mi>u</mi><mo stretchy="false">)</mo></mrow></mrow><annotation encoding="application/x-tex">\mathcal{R}_{\text{smart}}(u)</annotation></semantics></math> denote the combined multi-backend candidate pool. The incremental retrieval benefit <math alttext="\Delta(u)" class="ltx_Math" display="inline" id="S4.SS2.SSS0.Px1.p1.m3" intent=":literal"><semantics><mrow><mi mathvariant="normal">Δ</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mi>u</mi><mo stretchy="false">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Delta(u)</annotation></semantics></math> is defined as:</p>
+<p><math alttext="\Delta(u)=m(\mathcal{R}_{\text{smart}}(u))-m(\mathcal{R}_{\text{kw}}(u))" class="ltx_Math" display="block" id="S4.E1.m1" intent=":literal"><semantics><mrow><mrow><mi mathvariant="normal">Δ</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mi>u</mi><mo stretchy="false">)</mo></mrow></mrow><mo>=</mo><mrow><mrow><mi>m</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mrow><msub><mi class="ltx_font_mathcaligraphic">ℛ</mi><mtext>smart</mtext></msub><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><mi>u</mi><mo stretchy="false">)</mo></mrow></mrow><mo stretchy="false">)</mo></mrow></mrow><mo>−</mo><mrow><mi>m</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mrow><msub><mi class="ltx_font_mathcaligraphic">ℛ</mi><mtext>kw</mtext></msub><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><mi>u</mi><mo stretchy="false">)</mo></mrow></mrow><mo stretchy="false">)</mo></mrow></mrow></mrow></mrow><annotation encoding="application/x-tex">\Delta(u)=m(\mathcal{R}_{\text{smart}}(u))-m(\mathcal{R}_{\text{kw}}(u))</annotation></semantics></math> (1)</p>
+<p id="S4.SS2.SSS0.Px1.p1.2">where <math alttext="m(\cdot)" class="ltx_Math" display="inline" id="S4.SS2.SSS0.Px1.p1.m4" intent=":literal"><semantics><mrow><mi>m</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mo lspace="0em" rspace="0em">⋅</mo><mo stretchy="false">)</mo></mrow></mrow><annotation encoding="application/x-tex">m(\cdot)</annotation></semantics></math> represents retrieval quality via category recall. The routing objective maximizes global retrieval quality over all users subject to a strict maximum allowable LLM budget fraction <math alttext="B" class="ltx_Math" display="inline" id="S4.SS2.SSS0.Px1.p1.m5" intent=":literal"><semantics><mi>B</mi><annotation encoding="application/x-tex">B</annotation></semantics></math>:</p>
+<p><math alttext="\max_{\theta}\sum_{u\in\mathcal{U}}m\!\left(\mathcal{R}_{\theta}(u)\right)\quad\text{s.t.}\quad\frac{|\{u:g(u)\geq\theta\}|}{|\mathcal{U}|}\leq B" class="ltx_math_unparsed" display="block" id="S4.E2.m1" intent=":literal"><semantics><mrow><munder><mi>max</mi><mi>θ</mi></munder><munder><mo movablelimits="false">∑</mo><mrow><mi>u</mi><mo>∈</mo><mi class="ltx_font_mathcaligraphic">𝒰</mi></mrow></munder><mpadded style="width:0.708em;" width="0.708em"><mi>m</mi></mpadded><mrow><mo>(</mo><msub><mi class="ltx_font_mathcaligraphic">ℛ</mi><mi>θ</mi></msub><mrow><mo stretchy="false">(</mo><mi>u</mi><mo stretchy="false">)</mo></mrow><mo>)</mo></mrow><mtext>s.t.</mtext><mfrac><mrow><mo stretchy="false">|</mo><mrow><mo stretchy="false">{</mo><mi>u</mi><mo lspace="0.278em" rspace="0.278em">:</mo><mrow><mrow><mi>g</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mi>u</mi><mo stretchy="false">)</mo></mrow></mrow><mo>≥</mo><mi>θ</mi></mrow><mo stretchy="false">}</mo></mrow><mo stretchy="false">|</mo></mrow><mrow><mo stretchy="false">|</mo><mi class="ltx_font_mathcaligraphic">𝒰</mi><mo stretchy="false">|</mo></mrow></mfrac><mo>≤</mo><mi>B</mi></mrow><annotation encoding="application/x-tex">\max_{\theta}\sum_{u\in\mathcal{U}}m\!\left(\mathcal{R}_{\theta}(u)\right)\quad\text{s.t.}\quad\frac{|\{u:g(u)\geq\theta\}|}{|\mathcal{U}|}\leq B</annotation></semantics></math> (2)</p>
+<p id="S4.SS2.SSS0.Px1.p1.3">where <math alttext="\mathcal{R}_{\theta}(u)=\mathcal{R}_{\text{smart}}(u)" class="ltx_Math" display="inline" id="S4.SS2.SSS0.Px1.p1.m6" intent=":literal"><semantics><mrow><mrow><msub><mi class="ltx_font_mathcaligraphic">ℛ</mi><mi>θ</mi></msub><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><mi>u</mi><mo stretchy="false">)</mo></mrow></mrow><mo>=</mo><mrow><msub><mi class="ltx_font_mathcaligraphic">ℛ</mi><mtext>smart</mtext></msub><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><mi>u</mi><mo stretchy="false">)</mo></mrow></mrow></mrow><annotation encoding="application/x-tex">\mathcal{R}_{\theta}(u)=\mathcal{R}_{\text{smart}}(u)</annotation></semantics></math> if the gate score <math alttext="g(u)\geq\theta" class="ltx_Math" display="inline" id="S4.SS2.SSS0.Px1.p1.m7" intent=":literal"><semantics><mrow><mrow><mi>g</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mi>u</mi><mo stretchy="false">)</mo></mrow></mrow><mo>≥</mo><mi>θ</mi></mrow><annotation encoding="application/x-tex">g(u)\geq\theta</annotation></semantics></math>, and <math alttext="\mathcal{R}_{\text{kw}}(u)" class="ltx_Math" display="inline" id="S4.SS2.SSS0.Px1.p1.m8" intent=":literal"><semantics><mrow><msub><mi class="ltx_font_mathcaligraphic">ℛ</mi><mtext>kw</mtext></msub><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><mi>u</mi><mo stretchy="false">)</mo></mrow></mrow><annotation encoding="application/x-tex">\mathcal{R}_{\text{kw}}(u)</annotation></semantics></math> otherwise.</p>
+</div>
+</section>
+<section id="S4.SS2.SSS0.Px2">
+<h4>Gate Architecture and Feature Engineering.</h4>
+<div id="S4.SS2.SSS0.Px2.p1">
+<p id="S4.SS2.SSS0.Px2.p1.1">The gate functions as a lightweight binary GBDT classifier (<a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#reference-19">Ke et al., 2017</a>) evaluating 54 real-time features across 11 structural groups (summarized in Table <a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#S4.T4"><span>4</span></a>). Crucially, rather than relying solely on static user histories, the gate conditions its routing choice directly on the <em id="S4.SS2.SSS0.Px2.p1.1.1">output insufficiency</em> of the cheap keyword pass by measuring the structural coverage gap:</p>
+<p><math alttext="\text{gap}(u)=1-\frac{|\text{cat}(\mathcal{R}_{\text{kw}}(u))\cap\text{cat}(H_{u})|}{|\text{cat}(H_{u})|}" class="ltx_Math" display="block" id="S4.E3.m1" intent=":literal"><semantics><mrow><mrow><mtext>gap</mtext><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><mi>u</mi><mo stretchy="false">)</mo></mrow></mrow><mo>=</mo><mrow><mn>1</mn><mo>−</mo><mfrac><mrow><mo stretchy="false">|</mo><mrow><mrow><mtext>cat</mtext><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><mrow><msub><mi class="ltx_font_mathcaligraphic">ℛ</mi><mtext>kw</mtext></msub><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><mi>u</mi><mo stretchy="false">)</mo></mrow></mrow><mo stretchy="false">)</mo></mrow></mrow><mo>∩</mo><mrow><mtext>cat</mtext><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><msub><mi>H</mi><mi>u</mi></msub><mo stretchy="false">)</mo></mrow></mrow></mrow><mo stretchy="false">|</mo></mrow><mrow><mo stretchy="false">|</mo><mrow><mtext>cat</mtext><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><msub><mi>H</mi><mi>u</mi></msub><mo stretchy="false">)</mo></mrow></mrow><mo stretchy="false">|</mo></mrow></mfrac></mrow></mrow><annotation encoding="application/x-tex">\text{gap}(u)=1-\frac{|\text{cat}(\mathcal{R}_{\text{kw}}(u))\cap\text{cat}(H_{u})|}{|\text{cat}(H_{u})|}</annotation></semantics></math> (3)</p>
+<p id="S4.SS2.SSS0.Px2.p1.2">where <math alttext="\text{cat}(\cdot)" class="ltx_Math" display="inline" id="S4.SS2.SSS0.Px2.p1.m1" intent=":literal"><semantics><mrow><mtext>cat</mtext><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><mo lspace="0em" rspace="0em">⋅</mo><mo stretchy="false">)</mo></mrow></mrow><annotation encoding="application/x-tex">\text{cat}(\cdot)</annotation></semantics></math> maps retrieved items to their unique category taxonomies. A high gap indicates that a user’s diverse historical affinities have been displaced or unfulfilled within the top lexical matches, marking a requirement for generative prospecting. This output-auditing design distinguishes the gate from input-based cost-aware routers (<a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#reference-8">Chen et al., 2023</a>; <a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#reference-21">Ong et al., 2024</a>), which decide from the input alone before any retrieval is attempted: here the router observes what the cheap pass actually retrieved before spending on the expensive path. Training labels are mapped as positive via an OR-of-ORs construction if SMART beats keywords on CatRecall@200 across either of two independent cycles, capturing stable lift potential while minimizing LLM stochasticity.</p>
+</div>
+<figure id="S4.T4"><img alt="Table 4. Quality gate feature groups. Bold groups are derived directly from the real-time keyword search results and serve as the most discriminative signals. Semantic L1/L2 cluster IDs are produced by hierarchically clustering SigLIP2 visi" height="1064" src="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/table-4.jpg" width="1017"/><figcaption><span>Table 4. </span>Quality gate feature groups. Bold groups are derived directly from the real-time keyword search results and serve as the most discriminative signals. Semantic L1/L2 cluster IDs are produced by hierarchically clustering SigLIP2 vision–language embeddings of catalog products.</figcaption></figure>
+</section>
+</section>
+<section id="S4.SS3">
+<h3><span>4.3. </span>Core Implementation Specifications</h3>
+<div id="S4.SS3.p1">
+<p id="S4.SS3.p1.1">The candidate generation infrastructure runs against a Tantivy BM25 index built from the active catalog. The generative path utilizes Gemini 2.5 Flash Lite via a single structured API call to output exactly three prospecting queries; retargeting is handled entirely by the rule-generated keyword path. The lightweight Flash Lite model is chosen for the cost-sensitive production generation path, whereas the heavier Gemini 3 Flash (thinking mode) serves only as the offline evaluation judge (Section <a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#S3.SS1"><span>3.1</span></a>). Conceptual representations are encoded using the 768-dimension <span id="S4.SS3.p1.1.1">gemini-embedding-001</span> model over a concatenated text string of product title, brand, description, and category attributes. Dense retrieval is executed over vector fields mapped via FAISS GPU IVFFlat.</p>
+</div>
+<div id="S4.SS3.p2">
+<p id="S4.SS3.p2.1">The LambdaMART reranker orders candidates utilizing 55 unique user, product, and cross-backend matching features. It targets a graded supervision label ranging from 0 to 15 (distinct from the LLM-judge Relevance Score), calculated by combining: (i) semantic prefix-match length across 5 tiers of the same hierarchical SigLIP2 embedding used to derive the gate’s Semantic L1/L2 features (Table <a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#S4.T4"><span>4</span></a>), and (ii) down-funnel engagement interaction weights (<math alttext="\text{purchase}=3" class="ltx_Math" display="inline" id="S4.SS3.p2.m1" intent=":literal"><semantics><mrow><mtext>purchase</mtext><mo>=</mo><mn>3</mn></mrow><annotation encoding="application/x-tex">\text{purchase}=3</annotation></semantics></math>, <math alttext="\text{add-to-cart}=2" class="ltx_Math" display="inline" id="S4.SS3.p2.m2" intent=":literal"><semantics><mrow><mtext>add-to-cart</mtext><mo>=</mo><mn>2</mn></mrow><annotation encoding="application/x-tex">\text{add-to-cart}=2</annotation></semantics></math>, <math alttext="\text{view}=1" class="ltx_Math" display="inline" id="S4.SS3.p2.m3" intent=":literal"><semantics><mrow><mtext>view</mtext><mo>=</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">\text{view}=1</annotation></semantics></math>). This dense supervision methodology yields <math alttext="50\times" class="ltx_math_unparsed" display="inline" id="S4.SS3.p2.m4" intent=":literal"><semantics><mrow><mn>50</mn><mo lspace="0.222em">×</mo></mrow><annotation encoding="application/x-tex">50\times</annotation></semantics></math> more positive training signals than strict item-ID matching while natively isolating high-intent items.</p>
+</div>
+</section>
+</section>
+<section id="S5">
+<h2><span>5. </span>Experimental Evaluation and Ablations</h2>
+<div id="S5.p1">
+<p id="S5.p1.1">We evaluate SMART end-to-end, validating the routing gate accuracy, system stability, qualitative behaviors, and production live-traffic performance.</p>
+</div>
+<section id="S5.SS1">
+<h3><span>5.1. </span>Routing Gate Ablation Studies</h3>
+<section id="S5.SS1.SSS0.Px1">
+<h4>Feature Importance Calculations.</h4>
+<div id="S5.SS1.SSS0.Px1.p1">
+<p id="S5.SS1.SSS0.Px1.p1.1">We train a gradient-boosted gate model to analyze feature contributions. Table <a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#S5.T5"><span>5</span></a> tracks relative information gain across top-performing features.</p>
+</div>
+<figure id="S5.T5"><img alt="Table 5. Top gate features by gain. The classifier accurately learns to identify users whose keyword results yield poor coverage of historical interests." height="389" src="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/table-5.jpg" width="864"/><figcaption><span>Table 5. </span>Top gate features by gain. The classifier accurately learns to identify users whose keyword results yield poor coverage of historical interests.</figcaption></figure>
+<div id="S5.SS1.SSS0.Px1.p2">
+<p id="S5.SS1.SSS0.Px1.p2.1">The empirical distribution confirms that search-result features (Product set density, gain = 1.00) and explicit coverage gap metrics (Semantic L1 coverage, gain = 0.27) represent the primary predictive signals, justifying our output-auditing routing design over static entry-history routing.</p>
+</div>
+</section>
+<section id="S5.SS1.SSS0.Px2">
+<h4>Operational Quality-Cost Threshold Sweeps.</h4>
+<div id="S5.SS1.SSS0.Px2.p1">
+<p id="S5.SS1.SSS0.Px2.p1.1">We sweep the gate threshold <math alttext="\theta" class="ltx_Math" display="inline" id="S5.SS1.SSS0.Px2.p1.m1" intent=":literal"><semantics><mi>θ</mi><annotation encoding="application/x-tex">\theta</annotation></semantics></math> from 0 (always-SMART) to <math alttext="\infty" class="ltx_Math" display="inline" id="S5.SS1.SSS0.Px2.p1.m2" intent=":literal"><semantics><mi mathvariant="normal">∞</mi><annotation encoding="application/x-tex">\infty</annotation></semantics></math> (keyword-only), mapping performance trajectories across varying LLM routing fractions in Figure <a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#S5.F2"><span>2</span></a>.</p>
+</div>
+<figure id="S5.F2"><img alt="Figure 2. Quality–cost trade-off across LLM routing fraction. CatRecall@200 (blue) peaks within the 5–15% band, while Relevance Score (orange dashed) demonstrates steep, immediate gains within that identical operating range." height="499" src="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/figure-2.jpg" width="914"/><figcaption><span>Figure 2. </span>Quality–cost trade-off across LLM routing fraction. CatRecall@200 (blue) peaks within the 5–15% band, while Relevance Score (orange dashed) demonstrates steep, immediate gains within that identical operating range.</figcaption></figure>
+<div id="S5.SS1.SSS0.Px2.p2">
+<p id="S5.SS1.SSS0.Px2.p2.1">CatRecall@200 demonstrates an inverse-U curve, peaking at <math alttext="56.6\%" class="ltx_Math" display="inline" id="S5.SS1.SSS0.Px2.p2.m1" intent=":literal"><semantics><mrow><mn>56.6</mn><mo>%</mo></mrow><annotation encoding="application/x-tex">56.6\%</annotation></semantics></math> within the <math alttext="10\%" class="ltx_Math" display="inline" id="S5.SS1.SSS0.Px2.p2.m2" intent=":literal"><semantics><mrow><mn>10</mn><mo>%</mo></mrow><annotation encoding="application/x-tex">10\%</annotation></semantics></math> routing band before decaying as further uncalibrated LLM candidates introduce pool dilution and noise. Concurrently, Relevance Score exhibits its steepest trajectory gains within the same 5–15% band, encountering clear diminishing returns thereafter. Setting the gate operating threshold to route exactly <math alttext="10\%" class="ltx_Math" display="inline" id="S5.SS1.SSS0.Px2.p2.m3" intent=":literal"><semantics><mrow><mn>10</mn><mo>%</mo></mrow><annotation encoding="application/x-tex">10\%</annotation></semantics></math> of incoming traffic captures the peak CatRecall@200 and the bulk of semantic prospecting gains, lifting Relevance Score from <math alttext="1.95" class="ltx_Math" display="inline" id="S5.SS1.SSS0.Px2.p2.m4" intent=":literal"><semantics><mn>1.95</mn><annotation encoding="application/x-tex">1.95</annotation></semantics></math> (keyword-only) to <math alttext="2.36" class="ltx_Math" display="inline" id="S5.SS1.SSS0.Px2.p2.m5" intent=":literal"><semantics><mn>2.36</mn><annotation encoding="application/x-tex">2.36</annotation></semantics></math>—approaching the <math alttext="2.39" class="ltx_Math" display="inline" id="S5.SS1.SSS0.Px2.p2.m6" intent=":literal"><semantics><mn>2.39</mn><annotation encoding="application/x-tex">2.39</annotation></semantics></math> of the standalone LLM <math alttext="+" class="ltx_Math" display="inline" id="S5.SS1.SSS0.Px2.p2.m7" intent=":literal"><semantics><mo>+</mo><annotation encoding="application/x-tex">+</annotation></semantics></math> ANN configuration (Table <a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#S3.T2"><span>2</span></a>); the recall–cost operating points are summarized in Table <a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#S5.T6"><span>6</span></a>.</p>
+</div>
+<figure id="S5.T6"><img alt="Table 6. Operating points at production scale. Gated 10% achieves optimal category recall at a strict 90% LLM infrastructure cost reduction versus always-on routing. Deltas are reported relative to the keyword baseline." height="1184" src="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/table-6.jpg" width="1002"/><figcaption><span>Table 6. </span>Operating points at production scale. Gated 10% achieves optimal category recall at a strict 90% LLM infrastructure cost reduction versus always-on routing. Deltas are reported relative to the keyword baseline.</figcaption></figure>
+</section>
+</section>
+<section id="S5.SS2">
+<h3><span>5.2. </span>Qualitative Case Studies</h3>
+<div id="S5.SS2.p1">
+<p id="S5.SS2.p1.1">Table <a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#S5.T7"><span>7</span></a> details end-to-end walkthroughs across three distinct consumer profiles, demonstrating how the dual-backend layout resolves systemic failure modes of single-backend configurations.</p>
+</div>
+<figure id="S5.T7"><img alt="Table 7. Three end-to-end pipeline walkthroughs (advertiser brands anonymized by category role). Each row illustrates a distinct failure mode of single-backend search; SMART resolves all three structurally." height="391" src="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/table-7.jpg" width="1199"/><figcaption><span>Table 7. </span>Three end-to-end pipeline walkthroughs (advertiser brands anonymized by category role). Each row illustrates a distinct failure mode of single-backend search; SMART resolves all three structurally.</figcaption></figure>
+<div id="S5.SS2.p2">
+<p id="S5.SS2.p2.1">The pattern is highly consistent: LLM queries append clear semantic precision (User C’s K-beauty surfacing), yet their focus on matching a coherent persona causes them to drop loose, unaligned affinities like User B’s marketplace book purchases. Conversely, keywords + BM25 emits search queries for all historical interactions at zero cost, preserving coverage for tail or high-volume affinities even when displaced from the top slots. SMART’s structural pairing—utilizing the keyword rules as the history-faithful candidate backbone (170 of 200 slots) and the LLM dense path to populate the top ranking layer (30 slots)—mitigates this trade-off in the illustrated cases.</p>
+</div>
+</section>
+<section id="S5.SS3">
+<h3><span>5.3. </span>System Generalization and Stability</h3>
+<section id="S5.SS3.SSS0.Px1">
+<h4>Run-to-Run Stability Verification.</h4>
+<div id="S5.SS3.SSS0.Px1.p1">
+<p id="S5.SS3.SSS0.Px1.p1.1">To ensure the gate captures stable intent rather than artifacts of LLM stochasticity, we execute parallel generation cycles on identical user logs. Table <a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#S5.T8"><span>8</span></a> tracks cross-run alignment.</p>
+</div>
+<figure id="S5.T8"><img alt="Table 8. Run-to-run stability of LLM impact. 80.1% of users showing positive metric gains in the initial run maintain positive trajectories in the validation run, confirming the signal is robust." height="651" src="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/table-8.jpg" width="1199"/><figcaption><span>Table 8. </span>Run-to-run stability of LLM impact. 80.1% of users showing positive metric gains in the initial run maintain positive trajectories in the validation run, confirming the signal is robust.</figcaption></figure>
+<div id="S5.SS3.SSS0.Px1.p2">
+<p id="S5.SS3.SSS0.Px1.p2.1">The consistency is strong: <math alttext="80.1\%" class="ltx_Math" display="inline" id="S5.SS3.SSS0.Px1.p2.m1" intent=":literal"><semantics><mrow><mn>80.1</mn><mo>%</mo></mrow><annotation encoding="application/x-tex">80.1\%</annotation></semantics></math> of users improved in Run 1 are stably improved in Run 2, confirming that user-level benefit from generative expansion is an invariant, learnable property of the request state.</p>
+</div>
+</section>
+<section id="S5.SS3.SSS0.Px2">
+<h4>Temporal Evaluation Cross-Validation.</h4>
+<div id="S5.SS3.SSS0.Px2.p1">
+<p id="S5.SS3.SSS0.Px2.p1.1">We evaluate gate generalization capacity under a strict temporal protocol: models are trained on day <math alttext="T" class="ltx_Math" display="inline" id="S5.SS3.SSS0.Px2.p1.m1" intent=":literal"><semantics><mi>T</mi><annotation encoding="application/x-tex">T</annotation></semantics></math> and tested on completely non-overlapping, held-out day <math alttext="T+1" class="ltx_Math" display="inline" id="S5.SS3.SSS0.Px2.p1.m2" intent=":literal"><semantics><mrow><mi>T</mi><mo>+</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">T+1</annotation></semantics></math> user sets across distinct catalog states.</p>
+</div>
+<figure id="S5.T9"><img alt="Table 9. Temporal generalization: gate models trained on day T T , evaluated on held-out day T + 1 T+1 user sets." height="608" src="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/table-9.jpg" width="850"/><figcaption><span>Table 9. </span>Temporal generalization: gate models trained on day <math alttext="T" class="ltx_Math" display="inline" id="S5.T9.m3" intent=":literal"><semantics><mi>T</mi><annotation encoding="application/x-tex">T</annotation></semantics></math>, evaluated on held-out day <math alttext="T+1" class="ltx_Math" display="inline" id="S5.T9.m4" intent=":literal"><semantics><mrow><mi>T</mi><mo>+</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">T+1</annotation></semantics></math> user sets.</figcaption></figure>
+<div id="S5.SS3.SSS0.Px2.p2">
+<p id="S5.SS3.SSS0.Px2.p2.1">Table <a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#S5.T9"><span>9</span></a> shows that the gate generalizes across time. GBDT achieves an AUC of <math alttext="0.753" class="ltx_Math" display="inline" id="S5.SS3.SSS0.Px2.p2.m1" intent=":literal"><semantics><mn>0.753</mn><annotation encoding="application/x-tex">0.753</annotation></semantics></math> on unseen-day users, driving a <math alttext="+0.99\text{pp}" class="ltx_Math" display="inline" id="S5.SS3.SSS0.Px2.p2.m2" intent=":literal"><semantics><mrow><mo>+</mo><mrow><mn>0.99</mn><mo lspace="0em" rspace="0em">​</mo><mtext>pp</mtext></mrow></mrow><annotation encoding="application/x-tex">+0.99\text{pp}</annotation></semantics></math> CatRecall@5 lift over baseline. A deep neural network (DNN) variant yields comparable metrics (<math alttext="\text{AUC}=0.748" class="ltx_Math" display="inline" id="S5.SS3.SSS0.Px2.p2.m3" intent=":literal"><semantics><mrow><mtext>AUC</mtext><mo>=</mo><mn>0.748</mn></mrow><annotation encoding="application/x-tex">\text{AUC}=0.748</annotation></semantics></math>, <math alttext="+1.13\text{pp}" class="ltx_Math" display="inline" id="S5.SS3.SSS0.Px2.p2.m4" intent=":literal"><semantics><mrow><mo>+</mo><mrow><mn>1.13</mn><mo lspace="0em" rspace="0em">​</mo><mtext>pp</mtext></mrow></mrow><annotation encoding="application/x-tex">+1.13\text{pp}</annotation></semantics></math> lift), demonstrating that the coverage-gap predictive signal is robust and model-agnostic.</p>
+</div>
+</section>
+<section id="S5.SS3.SSS0.Px3">
+<h4>Robustness to Delayed Purchase Labels.</h4>
+<div id="S5.SS3.SSS0.Px3.p1">
+<p id="S5.SS3.SSS0.Px3.p1.1">A relevant category may convert only after a delay—over half of the categories a user buys in the week after day <math alttext="T" class="ltx_Math" display="inline" id="S5.SS3.SSS0.Px3.p1.m1" intent=":literal"><semantics><mi>T</mi><annotation encoding="application/x-tex">T</annotation></semantics></math> are absent from the day-<math alttext="T" class="ltx_Math" display="inline" id="S5.SS3.SSS0.Px3.p1.m2" intent=":literal"><semantics><mi>T</mi><annotation encoding="application/x-tex">T</annotation></semantics></math> label set—so we check whether our single-day CatRecall labels bias the comparison. Holding each user’s history, catalog snapshot, and retrieved top-200 candidates fixed, we expand only the evaluated labels from day <math alttext="T" class="ltx_Math" display="inline" id="S5.SS3.SSS0.Px3.p1.m3" intent=":literal"><semantics><mi>T</mi><annotation encoding="application/x-tex">T</annotation></semantics></math> to day <math alttext="T" class="ltx_Math" display="inline" id="S5.SS3.SSS0.Px3.p1.m4" intent=":literal"><semantics><mi>T</mi><annotation encoding="application/x-tex">T</annotation></semantics></math> plus the following seven days, and re-score each configuration—all retrieving 200 candidates—relative to keyword-only (Figure <a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#S5.F3"><span>3</span></a>). The day-<math alttext="T" class="ltx_Math" display="inline" id="S5.SS3.SSS0.Px3.p1.m5" intent=":literal"><semantics><mi>T</mi><annotation encoding="application/x-tex">T</annotation></semantics></math> ordering is unchanged across horizons: the fixed keyword <math alttext="+" class="ltx_Math" display="inline" id="S5.SS3.SSS0.Px3.p1.m6" intent=":literal"><semantics><mo>+</mo><annotation encoding="application/x-tex">+</annotation></semantics></math> LLM hybrid (170 <math alttext="+" class="ltx_Math" display="inline" id="S5.SS3.SSS0.Px3.p1.m7" intent=":literal"><semantics><mo>+</mo><annotation encoding="application/x-tex">+</annotation></semantics></math> 30 candidates) holds a stable <math alttext="+" class="ltx_Math" display="inline" id="S5.SS3.SSS0.Px3.p1.m8" intent=":literal"><semantics><mo>+</mo><annotation encoding="application/x-tex">+</annotation></semantics></math>9–12% edge over keyword-only (pointwise 95% bootstrap intervals exclude zero at every horizon), while LLM<math alttext="+" class="ltx_Math" display="inline" id="S5.SS3.SSS0.Px3.p1.m9" intent=":literal"><semantics><mo>+</mo><annotation encoding="application/x-tex">+</annotation></semantics></math>ANN alone stays well below it (consistent with Section <a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#S3.SS3"><span>3.3</span></a>). This converter-conditioned cohort uses the production catalog and candidate budget, so its recall is not directly comparable to Tables <a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#S3.T2"><span>2</span></a> and <a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#S5.T6"><span>6</span></a>; we read it as a sensitivity check for delayed labels rather than a prospecting measure—longer windows reduce label censoring but admit post-<math alttext="T" class="ltx_Math" display="inline" id="S5.SS3.SSS0.Px3.p1.m10" intent=":literal"><semantics><mi>T</mi><annotation encoding="application/x-tex">T</annotation></semantics></math> intent drift, and never-purchased relevant items stay unlabeled, leaving Relevance Score the complementary prospecting metric.</p>
+</div>
+<figure id="S5.F3"><img alt="Figure 3. Sensitivity of CatRecall@200 to the purchase-label horizon. Per user, history, catalog snapshot, and retrieved top-200 candidates are fixed at day T T ; only the cumulative purchase-category label window expands from T T to T T .." height="472" src="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/figure-3.jpg" width="962"/><figcaption><span>Figure 3. </span>Sensitivity of CatRecall@200 to the purchase-label horizon. Per user, history, catalog snapshot, and retrieved top-200 candidates are fixed at day <math alttext="T" class="ltx_Math" display="inline" id="S5.F3.m6" intent=":literal"><semantics><mi>T</mi><annotation encoding="application/x-tex">T</annotation></semantics></math>; only the cumulative purchase-category label window expands from <math alttext="T" class="ltx_Math" display="inline" id="S5.F3.m7" intent=":literal"><semantics><mi>T</mi><annotation encoding="application/x-tex">T</annotation></semantics></math> to <math alttext="T" class="ltx_Math" display="inline" id="S5.F3.m8" intent=":literal"><semantics><mi>T</mi><annotation encoding="application/x-tex">T</annotation></semantics></math>..<math alttext="T{+}k" class="ltx_Math" display="inline" id="S5.F3.m9" intent=":literal"><semantics><mrow><mi>T</mi><mo>+</mo><mi>k</mi></mrow><annotation encoding="application/x-tex">T{+}k</annotation></semantics></math>. Curves show lift over keyword-only (<math alttext="=0" class="ltx_Math" display="inline" id="S5.F3.m10" intent=":literal"><semantics><mrow><mphantom></mphantom><mo>=</mo><mn>0</mn></mrow><annotation encoding="application/x-tex">=0</annotation></semantics></math>) with pointwise 95% user-bootstrap intervals, on a converter-conditioned cohort. The ordering is stable across all horizons.</figcaption></figure>
+</section>
+</section>
+<section id="S5.SS4">
+<h3><span>5.4. </span>Online Production Deployment</h3>
+<div id="S5.SS4.p1">
+<p id="S5.SS4.p1.1">We validate the framework through a 2-week online A/B test on live Snap traffic against an optimized production baseline consisting of a two-tower user-to-product (U2I) ANN retrieval model evaluating hundreds of features. Production traffic was split uniformly at random between arms. This test also supplies the comparison against a state-of-the-art retriever that our offline studies intentionally omit: Sections <a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#S3"><span>3</span></a> and <a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#S5.SS1"><span>5.1</span></a>–<a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#S5.SS3"><span>5.3</span></a> hold indices and rerankers fixed to isolate query-generation effects, whereas here SMART is measured head-to-head against the production embedding-based model under live traffic.</p>
+</div>
+<figure id="S5.T10"><img alt="Table 10. Online A/B production test results (2 weeks). SMART is evaluated directly against Snap’s production embedding-based U2I framework." height="190" src="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/table-10.jpg" width="712"/><figcaption><span>Table 10. </span>Online A/B production test results (2 weeks). SMART is evaluated directly against Snap’s production embedding-based U2I framework.</figcaption></figure>
+<div id="S5.SS4.p2">
+<p id="S5.SS4.p2.1">Table <a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#S5.T10"><span>10</span></a> logs the live results. SMART delivers a substantial <math alttext="+27.6\%" class="ltx_Math" display="inline" id="S5.SS4.p2.m1" intent=":literal"><semantics><mrow><mo>+</mo><mrow><mn>27.6</mn><mo>%</mo></mrow></mrow><annotation encoding="application/x-tex">+27.6\%</annotation></semantics></math> relative improvement in core Conversion Rate (CR), defined as attributed click-and-purchase actions, while Click-Through Rate (CTR) remains flat at <math alttext="-0.9\%" class="ltx_Math" display="inline" id="S5.SS4.p2.m2" intent=":literal"><semantics><mrow><mo>−</mo><mrow><mn>0.9</mn><mo>%</mo></mrow></mrow><annotation encoding="application/x-tex">-0.9\%</annotation></semantics></math>. This performance divergence confirms that SMART is not generating low-intent clicks indiscriminately, but rather surfaces highly relevant discovery items that convert while actively filtering out low-intent tail noise.</p>
+</div>
+</section>
+</section>
+<section id="S6">
+<h2><span>6. </span>Discussion, Limitations, and Conclusion</h2>
+<section id="S6.SS1">
+<h3><span>6.1. </span>Discussion</h3>
+<section id="S6.SS1.SSS0.Px1">
+<h4>Domain Structural Mismatches.</h4>
+<div id="S6.SS1.SSS0.Px1.p1">
+<p id="S6.SS1.SSS0.Px1.p1.1">Prior literature on LLM query expansion (<a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#reference-27">Wang et al., 2023</a>; <a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#reference-15">Gao et al., 2023</a>; <a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#reference-18">Jagerman et al., 2023</a>) focuses almost exclusively on long-form, unstructured documents within academic benchmarks like MS-MARCO. Our findings prove that within commercial catalogs characterized by concise, highly structured titles (5–15 tokens), the lexical mismatch introduced by fluid natural-language LLM paraphrasing is significantly more severe. Generative queries do not function as drop-in replacements for traditional search heuristics; instead, they shift candidate retrieval parameters away from strict historical retargeting toward intent-driven semantic discovery. SMART explicitly accounts for this by matching each query style to its winning index engine.</p>
+</div>
+</section>
+<section id="S6.SS1.SSS0.Px2">
+<h4>Capability Selection via Output Gating.</h4>
+<div id="S6.SS1.SSS0.Px2.p1">
+<p id="S6.SS1.SSS0.Px2.p1.1">Prevailing cost-aware routing networks (e.g., FrugalGPT (<a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#reference-8">Chen et al., 2023</a>), RouteLLM (<a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#reference-21">Ong et al., 2024</a>)) concentrate on <em id="S6.SS1.SSS0.Px2.p1.1.1">model selection</em>, analyzing raw input text difficulty to split queries between cheaper and larger LLM variants. SMART instead operates on <em id="S6.SS1.SSS0.Px2.p1.1.2">capability selection</em>. By executing a zero-cost heuristic pass first and auditing its structural output for active coverage gaps, the gate conditionally decides whether to invoke generative machinery at all. This execution pattern generalizes to any high-throughput retrieval workflow combining fast heuristics with expensive neural augmentations.</p>
+</div>
+</section>
+<section id="S6.SS1.SSS0.Px3">
+<h4>Generalizability.</h4>
+<div id="S6.SS1.SSS0.Px3.p1">
+<p id="S6.SS1.SSS0.Px3.p1.1">The transferable core of SMART is the process: decomposing retrieval into retargeting- and prospecting-style objectives, a diagnostic that quantifies who benefits from expensive augmentation, and a gate that audits cheap results before invoking it. The concrete instantiation, however, is catalog-bound: rule-generated queries assume structured brand and category fields, and many gate features derive from category taxonomies or from the semantic-ID hierarchy—though the latter is learned from item embeddings and could be rebuilt in any domain with embeddable items. Practitioners in domains without such structure would need to substitute their own coverage measures over whatever cheap first-pass retrieval exists, while the audit-then-invoke principle of the preceding paragraph carries over unchanged.</p>
+</div>
+</section>
+</section>
+<section id="S6.SS2">
+<h3><span>6.2. </span>Limitations and Future Horizons</h3>
+<div id="S6.SS2.p1">
+<p id="S6.SS2.p1.1">Several research vectors remain open. First, our temporal validation is currently bounded by next-day holdout testing; extending this tracking across multi-week production horizons will verify systemic robustness against long-term catalog churn and seasonal shopping shifts. Relatedly, the delayed-label robustness check of Section <a href="https://theopinard.github.io/vrac/articles/smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads/#S5.SS3"><span>5.3</span></a> extends labels by only one week; longer horizons and attribution of online conversions seeded by each retrieval path remain future work. Second, our offline Relevance Score evaluations utilize a single judge family (Gemini 3 Flash). While we anchor its outputs against real-world conversion metrics to mitigate bias, future configurations will introduce multi-model consensus parsing and human validation panels to eliminate potential model sycophancy. Third, the routing threshold is not load-aware: traffic surges raise LLM call volume proportionally, though service degrades gracefully since every request already completes the keyword pass. Finally, transitioning our binary routing classifier into a continuous regression formulation that directly targets the expected metric delta <math alttext="\Delta(u)" class="ltx_Math" display="inline" id="S6.SS2.p1.m1" intent=":literal"><semantics><mrow><mi mathvariant="normal">Δ</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mi>u</mi><mo stretchy="false">)</mo></mrow></mrow><annotation encoding="application/x-tex">\Delta(u)</annotation></semantics></math> will allow for granular, real-time threshold calibration to balance infrastructure cost against fluctuating ad request volume.</p>
+</div>
+</section>
+<section id="S6.SS3">
+<h3><span>6.3. </span>Conclusion</h3>
+<div id="S6.SS3.p1">
+<p id="S6.SS3.p1.1">The development and deployment of SMART demonstrates that rule-generated keywords and generative language queries operate as structural complements rather than substitutes in production recommender systems. Deterministic keyword rules exploit inverted index token matching to serve as an optimal candidate foundation for retargeting on BM25. Concurrently, generative language models interpret multi-event intent sequences to perform semantic prospecting over dense ANN vector spaces. By bifurcating retrieval paths through an output-aware quality gate, SMART captures the broad discovery capabilities of LLMs, improving online ad conversions by <math alttext="+27.6\%" class="ltx_Math" display="inline" id="S6.SS3.p1.m1" intent=":literal"><semantics><mrow><mo>+</mo><mrow><mn>27.6</mn><mo>%</mo></mrow></mrow><annotation encoding="application/x-tex">+27.6\%</annotation></semantics></math> at a strict <math alttext="90\%" class="ltx_Math" display="inline" id="S6.SS3.p1.m2" intent=":literal"><semantics><mrow><mn>90</mn><mo>%</mo></mrow><annotation encoding="application/x-tex">90\%</annotation></semantics></math> reduction in total generative infrastructure cost.</p>
+</div>
+</section>
+</section>
+<div><h2 id="works-cited">References</h2><p id="reference-1">[1]
+<span><span>K. Abe, K. Takeoka, M. P. Kato, and M. Oyamada</span>
+</span>
+<span><span>LLM-based query expansion fails for unfamiliar and ambiguous queries</span>.
+</span>
+<span>In <span>Proceedings of the 48th International ACM SIGIR Conference on Research and Development in Information Retrieval</span>,
+</span>
+<span><span>pp. 3035–3039</span>.
+</span>
+</p><p id="reference-2">[2]
+<span><span>E. Abutbul, Y. Kaplan, N. Krasne, O. Somekh, O. David, O. Duvdevany, and E. Segal</span>
+</span>
+<span><span>Audience prospecting for dynamic-product-ads in native advertising</span>.
+</span>
+<span>In <span>2023 IEEE International Conference on Big Data (BigData)</span>,
+</span>
+<span><span>pp. 1571–1580</span>.
+</span>
+</p><p id="reference-3">[3]
+<span><span>P. Aggarwal, A. Madaan, A. Anand, S. P. Potharaju, S. Mishra, P. Zhou, A. Gupta, D. Rajagopal, K. Kappaganthu, Y. Yang, <span>et al.</span></span>
+</span>
+<span><span>AutoMix: automatically mixing language models</span>.
+</span>
+<span><span>Advances in Neural Information Processing Systems</span> <span>37</span>, <span>pp. 131000–131034</span>.
+</span>
+</p><p id="reference-4">[4]
+<span><span>A. Asai, Z. Wu, Y. Wang, A. Sil, and H. Hajishirzi</span>
+</span>
+<span><span>Self-RAG: learning to retrieve, generate, and critique through self-reflection</span>.
+</span>
+<span>In <span>International conference on learning representations</span>,
+</span>
+<span>Vol. <span>2024</span>, <span>pp. 9112–9141</span>.
+</span>
+</p><p id="reference-5">[5]
+<span><span>L. Bonifácio, H. Abonizio, M. Fadaee, and R. Nogueira</span>
+</span>
+<span><span>InPars: data augmentation for information retrieval using large language models</span>.
+</span>
+<span><span>arXiv preprint arXiv:2202.05144</span>.
+</span>
+</p><p id="reference-6">[6]
+<span><span>C. J. Burges</span>
+</span>
+<span><span>From RankNet to LambdaRank to LambdaMART: an overview</span>.
+</span>
+<span><span>Learning</span> <span>11</span> (<span>23-581</span>), <span>pp. 81</span>.
+</span>
+</p><p id="reference-7">[7]
+<span><span>J. Carbonell and J. Goldstein</span>
+</span>
+<span><span>The use of MMR, diversity-based reranking for reordering documents and producing summaries</span>.
+</span>
+<span>In <span>Proceedings of the 21st Annual International ACM SIGIR Conference</span>,
+</span>
+<span><span>pp. 335–336</span>.
+</span>
+</p><p id="reference-8">[8]
+<span><span>L. Chen, M. Zaharia, and J. Zou</span>
+</span>
+<span><span>FrugalGPT: how to use large language models while reducing cost and improving performance</span>.
+</span>
+<span><span>arXiv preprint arXiv:2305.05176</span>.
+</span>
+</p><p id="reference-9">[9]
+<span><span>M. Chen, Z. Zhai, and J. Li</span>
+</span>
+<span><span>Probe-then-plan: environment-aware planning for industrial e-commerce search</span>.
+</span>
+<span><span>arXiv preprint arXiv:2603.15262</span>.
+</span>
+</p><p id="reference-10">[10]
+<span><span>G. V. Cormack, C. L. A. Clarke, and S. Buettcher</span>
+</span>
+<span><span>Reciprocal rank fusion outperforms condorcet and individual rank learning methods</span>.
+</span>
+<span>In <span>Proceedings of the 32nd International ACM SIGIR Conference on Research and Development in Information Retrieval</span>,
+</span>
+<span><span>pp. 758–759</span>.
+</span>
+</p><p id="reference-11">[11]
+<span><span>P. Covington, J. Adams, and E. Sargin</span>
+</span>
+<span><span>Deep neural networks for YouTube recommendations</span>.
+</span>
+<span>In <span>Proceedings of the 10th ACM conference on recommender systems</span>,
+</span>
+<span><span>pp. 191–198</span>.
+</span>
+</p><p id="reference-12">[12]
+<span><span>D. Ding, A. Mallick, C. Wang, R. Sim, S. Mukherjee, V. Rühle, L. Lakshmanan, and A. H. Awadallah</span>
+</span>
+<span><span>Hybrid LLM: cost-efficient and quality-aware query routing</span>.
+</span>
+<span>In <span>International Conference on Learning Representations</span>,
+</span>
+<span>Vol. <span>2024</span>, <span>pp. 41348–41366</span>.
+</span>
+</p><p id="reference-13">[13]
+<span><span>X. Dong, S. Jia, M. R. Wang, Y. Li, Z. Yang, B. Deng, and H. Xiong</span>
+</span>
+<span><span>COEF-VQ: cost-efficient video quality understanding through a cascaded multimodal LLM framework</span>.
+</span>
+<span>In <span>Proceedings of the 31st ACM SIGKDD Conference on Knowledge Discovery and Data Mining V. 2</span>,
+</span>
+<span><span>pp. 4387–4395</span>.
+</span>
+</p><p id="reference-14">[14]
+<span><span>M. Douze, A. Guzhva, C. Deng, J. Johnson, G. Szilvasy, P. Mazaré, M. Lomeli, L. Hosseini, and H. Jégou</span>
+</span>
+<span><span>The Faiss library</span>.
+</span>
+<span><span>IEEE Transactions on Big Data</span>.
+</span>
+</p><p id="reference-15">[15]
+<span><span>L. Gao, X. Ma, J. Lin, and J. Callan</span>
+</span>
+<span><span>Precise zero-shot dense retrieval without relevance labels</span>.
+</span>
+<span>In <span>Proceedings of the 61st Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers)</span>,
+</span>
+<span><span>pp. 1762–1777</span>.
+</span>
+</p><p id="reference-16">[16]
+<span><span>Gemini Team, Google</span>
+</span>
+<span><span>Gemini: a family of highly capable multimodal models</span>.
+</span>
+<span><span>arXiv preprint arXiv:2312.11805</span>.
+</span>
+</p><p id="reference-17">[17]
+<span><span>N. Hu, H. Li, J. Sun, L. Wang, F. Yang, B. Qiao, P. Zhao, D. Dai, M. Liu, Y. Zhan, <span>et al.</span></span>
+</span>
+<span><span>AdNanny: one reasoning llm for all offline ads recommendation tasks</span>.
+</span>
+<span><span>arXiv preprint arXiv:2602.01563</span>.
+</span>
+</p><p id="reference-18">[18]
+<span><span>R. Jagerman, H. Zhuang, Z. Qin, X. Wang, and M. Bendersky</span>
+</span>
+<span><span>Query expansion by prompting large language models</span>.
+</span>
+<span><span>arXiv preprint arXiv:2305.03653</span>.
+</span>
+</p><p id="reference-19">[19]
+<span><span>G. Ke, Q. Meng, T. Finley, T. Wang, W. Chen, W. Ma, Q. Ye, and T. Liu</span>
+</span>
+<span><span>LightGBM: a highly efficient gradient boosting decision tree</span>.
+</span>
+<span><span>Advances in neural information processing systems</span> <span>30</span>.
+</span>
+</p><p id="reference-20">[20]
+<span><span>Y. Luan, J. Eisenstein, K. Toutanova, and M. Collins</span>
+</span>
+<span><span>Sparse, dense, and attentional representations for text retrieval</span>.
+</span>
+<span><span>Transactions of the Association for Computational Linguistics</span> <span>9</span>, <span>pp. 329–345</span>.
+</span>
+</p><p id="reference-21">[21]
+<span><span>I. Ong, A. Almahairi, V. Wu, W. Chiang, T. Wu, J. E. Gonzalez, M. W. Kadous, and I. Stoica</span>
+</span>
+<span><span>RouteLLM: learning to route LLMs with preference data</span>.
+</span>
+<span><span>arXiv preprint arXiv:2406.18665</span>.
+</span>
+</p><p id="reference-22">[22]
+<span><span>S. Rajput, N. Mehta, A. Singh, R. H. Keshavan, T. Vu, L. Heldt, L. Hong, Y. Tay, V. Q. Tran, J. Samost, M. Kula, E. H. Chi, and M. Sathiamoorthy</span>
+</span>
+<span><span>Recommender systems with generative retrieval</span>.
+</span>
+<span>In <span>Advances in Neural Information Processing Systems (NeurIPS)</span>,
+</span>
+</p><p id="reference-23">[23]
+<span><span>S. Robertson and H. Zaragoza</span>
+</span>
+<span><span>The probabilistic relevance framework: BM25 and beyond</span>.
+</span>
+<span>Vol. <span>4</span>,  <span>Now Publishers Inc</span>.
+</span>
+</p><p id="reference-24">[24]
+<span><span>Tantivy Contributors</span>
+</span>
+<span><span>Tantivy: a full-text search engine library written in Rust</span>.
+</span>
+<span>Note: <span><a href="https://github.com/quickwit-oss/tantivy">https://github.com/quickwit-oss/tantivy</a></span>
+</span>
+</p><p id="reference-25">[25]
+<span><span>M. Tschannen, A. Gritsenko, X. Wang, M. F. Naeem, I. Alabdulmohsin, N. Parthasarathy, T. Evans, L. Beyer, Y. Xia, B. Mustafa, <span>et al.</span></span>
+</span>
+<span><span>SigLIP 2: multilingual vision-language encoders with improved semantic understanding, localization, and dense features</span>.
+</span>
+<span><span>arXiv preprint arXiv:2502.14786</span>.
+</span>
+</p><p id="reference-26">[26]
+<span><span>H. Wang, M. N. Sundararaman, O. Gungor, Y. Xu, K. Kamath, R. Chalasani, K. S. Hazra, and J. Rao</span>
+</span>
+<span><span>Improving Pinterest search relevance using large language models</span>.
+</span>
+<span><span>arXiv preprint arXiv:2410.17152</span>.
+</span>
+</p><p id="reference-27">[27]
+<span><span>L. Wang, N. Yang, and F. Wei</span>
+</span>
+<span><span>Query2doc: query expansion with large language models</span>.
+</span>
+<span>In <span>Proceedings of the 2023 Conference on Empirical Methods in Natural Language Processing</span>,
+</span>
+<span><span>pp. 9414–9423</span>.
+</span>
+</p><p id="reference-28">[28]
+<span><span>L. Zheng, W. Chiang, Y. Sheng, S. Zhuang, Z. Wu, Y. Zhuang, Z. Lin, Z. Li, D. Li, E. Xing, <span>et al.</span></span>
+</span>
+<span><span>Judging LLM-as-a-judge with MT-Bench and Chatbot Arena</span>.
+</span>
+<span><span>Advances in neural information processing systems</span> <span>36</span>, <span>pp. 46595–46623</span>.
+</span>
+</p><p id="reference-29">[29]
+<span><span>Y. Zhu, H. Yuan, S. Wang, J. Liu, W. Liu, C. Deng, H. Chen, Z. Liu, Z. Dou, and J. Wen</span>
+</span>
+<span><span>Large language models for information retrieval: a survey</span>.
+</span>
+<span><span>ACM Transactions on Information Systems</span> <span>44</span> (<span>1</span>), <span>pp. 1–54</span>.
+</span>
+</p></div>
+</article></body></html>

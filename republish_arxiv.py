@@ -36,6 +36,7 @@ ARXIV_DATE_PATTERN = re.compile(
 )
 FIGURE_NUMBER_PATTERN = re.compile(r"Figure\s+(?P<number>\d+)", re.IGNORECASE)
 TABLE_NUMBER_PATTERN = re.compile(r"Table\s+(?P<number>\d+)", re.IGNORECASE)
+CAPTION_LABEL_PATTERN = re.compile(r"\s*(?:Table|Figure)\s+\d+[:.]", re.IGNORECASE)
 
 # Author and date bylines are chrome, not readable body. LaTeXML renders
 # decorative ORCID badges as inline SVGs inside the author byline, so these
@@ -460,50 +461,147 @@ def figure_clip(
     return page, clip
 
 
+def adjacent_group(
+    rectangles: list[pymupdf.Rect], before_caption: bool, gap: float = 42.0
+) -> list[pymupdf.Rect]:
+    """Return the contiguous vertical cluster of artwork nearest the caption.
+
+    Figure artwork forms a block of drawings with small vertical gaps, separated
+    from body text (or an adjacent figure) by a larger gap. Grouping by vertical
+    gaps and keeping the cluster touching the caption isolates a single figure.
+    """
+    ordered = sorted(rectangles, key=lambda rectangle: rectangle.y0)
+    groups: list[list[pymupdf.Rect]] = [[ordered[0]]]
+    bounds = pymupdf.Rect(ordered[0])
+    for rectangle in ordered[1:]:
+        if rectangle.y0 - bounds.y1 <= gap:
+            groups[-1].append(rectangle)
+            bounds.include_rect(rectangle)
+        else:
+            groups.append([rectangle])
+            bounds = pymupdf.Rect(rectangle)
+    if before_caption:
+        return max(groups, key=lambda group: union_rect(group).y1)
+    return min(groups, key=lambda group: union_rect(group).y0)
+
+
 def object_figure_clip(
     document: pymupdf.Document,
     figure_number: str,
 ) -> tuple[pymupdf.Page, pymupdf.Rect]:
-    """Locate a PDF figure represented by an external SVG object in arXiv HTML."""
-    page, _caption_match, lane = find_caption_page(document, figure_number)
-    content_bounds = pymupdf.Rect(
-        max(page.rect.x0 + 18, lane.x0 - 4),
-        lane.y1 + 1,
-        min(page.rect.x1 - 18, lane.x1 + 4),
-        page.rect.y1 - 36,
-    )
-    drawings = [
-        pymupdf.Rect(drawing["rect"])
-        for drawing in page.get_drawings()
-        if pymupdf.Rect(drawing["rect"]).intersects(content_bounds)
-    ]
-    if not drawings:
+    """Locate a PDF figure (possibly a multi-panel composite) by its caption.
+
+    The figure's own SVG carries no PDF coordinates, so the artwork is found
+    geometrically: pick the column the caption sits in (or the full width for a
+    spanning caption), gather the vector drawings and raster panels on the
+    artwork side of the caption, and keep the cluster adjacent to it.
+    """
+    page, caption, lane = find_caption_page(document, figure_number)
+    page_width = page.rect.width
+    center = page_width / 2
+    top = page.rect.y0 + 36
+    bottom = page.rect.y1 - 36
+    if lane.width > 0.6 * page_width:
+        column = (page.rect.x0 + 18, page.rect.x1 - 18)
+    elif (lane.x0 + lane.x1) / 2 < center:
+        column = (page.rect.x0 + 18, center - 4)
+    else:
+        column = (center + 4, page.rect.x1 - 18)
+
+    def in_column(rectangle: pymupdf.Rect) -> bool:
+        midpoint = (rectangle.x0 + rectangle.x1) / 2
+        return column[0] - 4 <= midpoint <= column[1] + 4
+
+    primitives: list[pymupdf.Rect] = []
+    for drawing in page.get_drawings():
+        rectangle = pymupdf.Rect(drawing["rect"])
+        if top <= rectangle.y0 and rectangle.y1 <= bottom and in_column(rectangle):
+            primitives.append(rectangle)
+    for image in page.get_images(full=True):
+        for rectangle in page.get_image_rects(image[0]):
+            rectangle = pymupdf.Rect(rectangle)
+            if top <= rectangle.y0 and rectangle.y1 <= bottom and in_column(rectangle):
+                primitives.append(rectangle)
+
+    above = [rectangle for rectangle in primitives if rectangle.y1 <= caption.y0]
+    below = [rectangle for rectangle in primitives if rectangle.y0 >= lane.y1]
+
+    def area(rectangles: list[pymupdf.Rect]) -> float:
+        return sum(max(0.0, r.width) * max(0.0, r.height) for r in rectangles)
+
+    artwork = above if area(above) >= area(below) else below
+    if not artwork:
         raise ValueError(
             f"Could not locate the PDF artwork for Figure {figure_number}"
         )
+    before_caption = artwork is above
+    artwork = adjacent_group(artwork, before_caption)
+    artwork_bounds = union_rect(artwork)
 
-    drawing_bounds = union_rect(drawings)
-    labeled_plot_bounds = pymupdf.Rect(
-        content_bounds.x0,
-        max(content_bounds.y0, drawing_bounds.y0 - 20),
-        content_bounds.x1,
-        min(content_bounds.y1, drawing_bounds.y1 + 25),
+    # Span the full column horizontally so axis titles and legends beside the
+    # artwork are kept; constrain vertically to the artwork so body text above
+    # or below the figure is excluded.
+    band = pymupdf.Rect(
+        column[0],
+        artwork_bounds.y0 - 6,
+        column[1],
+        artwork_bounds.y1 + 22,
     )
     text_blocks = [
         pymupdf.Rect(block[:4])
         for block in page.get_text("blocks")
-        if pymupdf.Rect(block[:4]).intersects(labeled_plot_bounds)
+        if pymupdf.Rect(block[:4]).intersects(band)
+        and in_column(pymupdf.Rect(block[:4]))
+        and pymupdf.Rect(block[:4]).y0 >= artwork_bounds.y0 - 4
+        and (
+            pymupdf.Rect(block[:4]).y1 <= caption.y0
+            if before_caption
+            else pymupdf.Rect(block[:4]).y0 >= lane.y1
+        )
     ]
-    content = union_rect(drawings + text_blocks)
+    content = union_rect(artwork + text_blocks)
     clip = pymupdf.Rect(
-        max(content_bounds.x0, content.x0 - 6),
-        max(content_bounds.y0, content.y0 - 6),
-        min(content_bounds.x1, content.x1 + 6),
-        min(content_bounds.y1, content.y1 + 6),
+        max(column[0] - 4, content.x0 - 6),
+        max(top, content.y0 - 6)
+        if before_caption
+        else max(top, lane.y1 + 1, content.y0 - 6),
+        min(column[1] + 4, content.x1 + 6),
+        min(caption.y0 - 3, content.y1 + 6)
+        if before_caption
+        else min(bottom, content.y1 + 6),
     )
     if clip.is_empty or clip.width < 50 or clip.height < 30:
         raise ValueError(f"Computed an invalid PDF crop for Figure {figure_number}")
     return page, clip
+
+
+def inline_picture_clip(
+    document: pymupdf.Document,
+    svg: Tag,
+) -> tuple[pymupdf.Page, pymupdf.Rect]:
+    """Locate an inline LaTeX picture (e.g. a boxed example) by its text labels."""
+    labels = svg_labels(svg)
+    if len(labels) < 2:
+        raise ValueError("Could not locate an inline SVG picture in the PDF")
+    for label in labels:
+        for page in document:
+            anchors = page.search_for(label)
+            if len(anchors) != 1:
+                continue
+            anchor = pymupdf.Rect(anchors[0])
+            boxes = [
+                pymupdf.Rect(drawing["rect"])
+                for drawing in page.get_drawings()
+                if pymupdf.Rect(drawing["rect"]).contains(anchor)
+            ]
+            if not boxes:
+                continue
+            box = min(boxes, key=lambda rectangle: rectangle.width * rectangle.height)
+            clip = pymupdf.Rect(box.x0 - 3, box.y0 - 3, box.x1 + 3, box.y1 + 3)
+            if clip.is_empty or clip.width < 50 or clip.height < 30:
+                continue
+            return page, clip
+    raise ValueError("Could not locate an inline SVG picture in the PDF")
 
 
 def render_svg_figures(
@@ -515,14 +613,17 @@ def render_svg_figures(
     for ordinal, svg in enumerate(svgs, start=1):
         figure = svg.find_parent("figure")
         if figure is None:
-            raise ValueError("Found an article SVG outside a figure")
-        caption = figure.find("figcaption")
-        caption_text = caption.get_text(" ", strip=True) if caption else ""
-        number_match = FIGURE_NUMBER_PATTERN.search(caption_text)
-        if not number_match:
-            raise ValueError("Could not identify the caption for an SVG figure")
-        figure_number = number_match.group("number")
-        page, clip = figure_clip(document, svg, figure_number)
+            # An inline LaTeX picture (a boxed example or diagram in the text
+            # flow) has no caption to anchor on; locate it by its own labels.
+            page, clip = inline_picture_clip(document, svg)
+            caption_text = ""
+        else:
+            caption = figure.find("figcaption")
+            caption_text = caption.get_text(" ", strip=True) if caption else ""
+            number_match = FIGURE_NUMBER_PATTERN.search(caption_text)
+            if not number_match:
+                raise ValueError("Could not identify the caption for an SVG figure")
+            page, clip = figure_clip(document, svg, number_match.group("number"))
 
         filename = f"figure-{ordinal}.jpg"
         zoom = min(4.0, 1198.0 / clip.width)
@@ -543,11 +644,41 @@ def render_svg_figures(
 
         image = BeautifulSoup("", "html.parser").new_tag("img")
         image["src"] = filename
-        image["alt"] = caption_text or f"Figure {figure_number}"
+        image["alt"] = caption_text or "Illustration"
         image["width"] = str(pixmap.width)
         image["height"] = str(pixmap.height)
         svg.replace_with(image)
     return len(svgs)
+
+
+def numbered_figure(element: Tag) -> tuple[Tag | None, str | None]:
+    """Return the nearest ancestor figure with a numbered caption and its number.
+
+    A subfigure panel carries only a letter caption like "(a) Yahoo"; the figure
+    number lives on the enclosing composite figure's own caption.
+    """
+    figure = element.find_parent("figure")
+    while figure is not None:
+        caption = figure.find("figcaption", recursive=False)
+        if caption is not None:
+            match = FIGURE_NUMBER_PATTERN.search(caption.get_text(" ", strip=True))
+            if match:
+                return figure, match.group("number")
+        figure = figure.find_parent("figure")
+    return None, None
+
+
+def collapse_figure_to_image(figure: Tag, image: Tag) -> None:
+    """Replace a figure's artwork (all panels) with one image, keeping its caption."""
+    caption = figure.find("figcaption", recursive=False)
+    for child in list(figure.children):
+        if child is caption:
+            continue
+        child.extract()
+    if caption is not None:
+        caption.insert_before(image)
+    else:
+        figure.append(image)
 
 
 def render_object_figures(
@@ -561,16 +692,19 @@ def render_object_figures(
         for element in article.find_all("object")
         if str(element.get("type", "")).lower() == "image/svg+xml"
     ]
-    for offset, element in enumerate(objects):
-        figure = element.find_parent("figure")
-        if figure is None:
-            raise ValueError("Found an article SVG object outside a figure")
-        caption = figure.find("figcaption")
-        caption_text = caption.get_text(" ", strip=True) if caption else ""
-        number_match = FIGURE_NUMBER_PATTERN.search(caption_text)
-        if not number_match:
+    # Several panels can belong to one composite figure; render each numbered
+    # figure once, in first-appearance order.
+    figures: list[tuple[Tag, str]] = []
+    seen: set[int] = set()
+    for element in objects:
+        figure, figure_number = numbered_figure(element)
+        if figure is None or figure_number is None:
             raise ValueError("Could not identify the caption for an SVG object figure")
-        figure_number = number_match.group("number")
+        if id(figure) not in seen:
+            seen.add(id(figure))
+            figures.append((figure, figure_number))
+
+    for offset, (figure, figure_number) in enumerate(figures):
         page, clip = object_figure_clip(document, figure_number)
 
         filename = f"figure-{starting_ordinal + offset}.jpg"
@@ -590,13 +724,15 @@ def render_object_figures(
             subsampling=2,
         )
 
+        caption = figure.find("figcaption", recursive=False)
+        caption_text = caption.get_text(" ", strip=True) if caption else ""
         image = BeautifulSoup("", "html.parser").new_tag("img")
         image["src"] = filename
         image["alt"] = caption_text or f"Figure {figure_number}"
         image["width"] = str(pixmap.width)
         image["height"] = str(pixmap.height)
-        element.replace_with(image)
-    return len(objects)
+        collapse_figure_to_image(figure, image)
+    return len(figures)
 
 
 def visible_cell_text(cell: Tag) -> str:
@@ -604,6 +740,108 @@ def visible_cell_text(cell: Tag) -> str:
     for annotation in fragment.find_all("annotation"):
         annotation.decompose()
     return re.sub(r"\s+", " ", fragment.get_text(" ", strip=True)).strip()
+
+
+def stroke_bounds(rectangles: list[pymupdf.Rect]) -> pymupdf.Rect:
+    """Bounding box of rectangles, including zero-area strokes (ruling lines).
+
+    pymupdf treats a zero-height rectangle as empty and ignores it in
+    include_rect, so ruling lines must be combined by explicit coordinates.
+    """
+    return pymupdf.Rect(
+        min(rectangle.x0 for rectangle in rectangles),
+        min(rectangle.y0 for rectangle in rectangles),
+        max(rectangle.x1 for rectangle in rectangles),
+        max(rectangle.y1 for rectangle in rectangles),
+    )
+
+
+def table_rule_clip(
+    page: pymupdf.Page,
+    caption_rect: pymupdf.Rect,
+    lane: pymupdf.Rect,
+) -> tuple[pymupdf.Page, pymupdf.Rect]:
+    """Bound a text-heavy table by its horizontal ruling lines.
+
+    Prose cells (long sentences with LaTeXML artifacts) do not match the PDF
+    text, so the precise cell mapping fails. Booktabs tables are still framed by
+    full-width rules, which delimit the table between this caption and the next.
+    """
+    page_width = page.rect.width
+    center = page_width / 2
+    top = page.rect.y0 + 36
+    bottom = page.rect.y1 - 36
+    if lane.width > 0.6 * page_width:
+        column = (page.rect.x0 + 18, page.rect.x1 - 18)
+    elif (lane.x0 + lane.x1) / 2 < center:
+        column = (page.rect.x0 + 18, center - 4)
+    else:
+        column = (center + 4, page.rect.x1 - 18)
+
+    def in_column(rectangle: pymupdf.Rect) -> bool:
+        midpoint = (rectangle.x0 + rectangle.x1) / 2
+        return column[0] - 4 <= midpoint <= column[1] + 4
+
+    rules = [
+        pymupdf.Rect(drawing["rect"])
+        for drawing in page.get_drawings()
+        if pymupdf.Rect(drawing["rect"]).height <= 3
+        and pymupdf.Rect(drawing["rect"]).width >= 40
+        and in_column(pymupdf.Rect(drawing["rect"]))
+    ]
+    above = [rectangle for rectangle in rules if rectangle.y1 <= caption_rect.y0]
+    below = [rectangle for rectangle in rules if rectangle.y0 >= lane.y1]
+
+    def span(rectangles: list[pymupdf.Rect]) -> float:
+        return sum(rectangle.width for rectangle in rectangles)
+
+    ruling = above if span(above) > span(below) else below
+    if len(ruling) < 2:
+        raise ValueError("Could not bound the table by its ruling lines")
+    before_caption = ruling is above
+    ruling.sort(key=lambda rectangle: rectangle.y0)
+
+    caption_edges = [
+        pymupdf.Rect(block[:4]).y0
+        for block in page.get_text("blocks")
+        if CAPTION_LABEL_PATTERN.match(str(block[4]))
+        and in_column(pymupdf.Rect(block[:4]))
+        and not pymupdf.Rect(block[:4]).intersects(lane)
+    ]
+    if before_caption:
+        boundary = max((y for y in caption_edges if y <= ruling[-1].y0), default=top)
+        ruling = [r for r in ruling if r.y0 >= boundary - 1 and r.y1 <= caption_rect.y0]
+    else:
+        boundary = min((y for y in caption_edges if y >= ruling[0].y1), default=bottom)
+        ruling = [r for r in ruling if r.y0 >= lane.y1 - 1 and r.y0 < boundary]
+
+    ruling_bounds = stroke_bounds(ruling)
+    band = pymupdf.Rect(
+        ruling_bounds.x0 - 6,
+        ruling_bounds.y0 - 2,
+        ruling_bounds.x1 + 6,
+        ruling_bounds.y1 + 2,
+    )
+    text_blocks = [
+        pymupdf.Rect(block[:4])
+        for block in page.get_text("blocks")
+        if pymupdf.Rect(block[:4]).intersects(band)
+        and in_column(pymupdf.Rect(block[:4]))
+        and pymupdf.Rect(block[:4]).y0 >= ruling_bounds.y0 - 2
+        and pymupdf.Rect(block[:4]).y1 <= ruling_bounds.y1 + 2
+    ]
+    content = stroke_bounds(ruling + text_blocks)
+    clip = pymupdf.Rect(
+        content.x0 - 6,
+        max(top, content.y0 - 4),
+        content.x1 + 6,
+        min(caption_rect.y0 - 3, content.y1 + 4)
+        if before_caption
+        else min(bottom, content.y1 + 4),
+    )
+    if clip.is_empty or clip.width < 50 or clip.height < 20:
+        raise ValueError("Computed an invalid PDF crop for a ruled table")
+    return page, clip
 
 
 def table_clip(
@@ -627,6 +865,16 @@ def table_clip(
     page, caption_rect, lane = find_numbered_caption_page(
         document, kind, number
     )
+    # Two independent bounds, then their union: ruling lines frame the whole
+    # table but miss unruled trailing rows, while cell text catches those rows
+    # but truncates prose cells that cannot be matched. Together they cover both.
+    rule_clip: pymupdf.Rect | None = None
+    if kind == "Table":
+        try:
+            _, rule_clip = table_rule_clip(page, caption_rect, lane)
+        except ValueError:
+            rule_clip = None
+
     labels: list[str] = []
     for cell in table.find_all(["th", "td"]):
         label = visible_cell_text(cell)
@@ -675,29 +923,37 @@ def table_clip(
         before_caption = len(above) > len(below)
         matches = above if before_caption else below
 
-    if len(matches) < 3:
+    cell_clip: pymupdf.Rect | None = None
+    if len(matches) >= 3:
+        label_bounds = union_rect(matches)
+        nearby_drawings: list[pymupdf.Rect] = []
+        drawing_region = pymupdf.Rect(
+            lane.x0 - 4,
+            label_bounds.y0 - 10,
+            lane.x1 + 4,
+            label_bounds.y1 + 10,
+        )
+        for drawing in page.get_drawings():
+            rectangle = pymupdf.Rect(drawing["rect"])
+            if rectangle.intersects(drawing_region):
+                nearby_drawings.append(rectangle)
+        content = union_rect(matches + nearby_drawings)
+        cell_clip = pymupdf.Rect(
+            max(lane.x0 - 4, content.x0 - 6),
+            max(page.rect.y0 + 36, content.y0 - 6),
+            min(lane.x1 + 4, content.x1 + 6),
+            min(caption_rect.y0 - 3, content.y1 + 6)
+            if before_caption
+            else min(page.rect.y1 - 36, content.y1 + 6),
+        )
+
+    clip: pymupdf.Rect | None = None
+    for candidate in (rule_clip, cell_clip):
+        if candidate is None:
+            continue
+        clip = candidate if clip is None else clip | candidate
+    if clip is None:
         raise ValueError(f"Could not map the data for {kind} {number} into the PDF")
-    label_bounds = union_rect(matches)
-    nearby_drawings: list[pymupdf.Rect] = []
-    drawing_region = pymupdf.Rect(
-        lane.x0 - 4,
-        label_bounds.y0 - 10,
-        lane.x1 + 4,
-        label_bounds.y1 + 10,
-    )
-    for drawing in page.get_drawings():
-        rectangle = pymupdf.Rect(drawing["rect"])
-        if rectangle.intersects(drawing_region):
-            nearby_drawings.append(rectangle)
-    content = union_rect(matches + nearby_drawings)
-    clip = pymupdf.Rect(
-        max(lane.x0 - 4, content.x0 - 6),
-        max(page.rect.y0 + 36, content.y0 - 6),
-        min(lane.x1 + 4, content.x1 + 6),
-        min(caption_rect.y0 - 3, content.y1 + 6)
-        if before_caption
-        else min(page.rect.y1 - 36, content.y1 + 6),
-    )
     if clip.is_empty or clip.width < 50 or clip.height < 20:
         raise ValueError(f"Computed an invalid PDF crop for {kind} {number}")
     return page, clip

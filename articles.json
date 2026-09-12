@@ -29,6 +29,46 @@
       "source_type": "arxiv",
       "source_url": "https://arxiv.org/abs/2305.18431",
       "slug": "optimizing-airbnb-search-journey-with-multi-task-learning"
+    },
+    {
+      "source_type": "arxiv",
+      "source_url": "https://arxiv.org/abs/2607.12392",
+      "slug": "mesh-scaling-up-retrieval-with-heterogeneous-content-unification"
+    },
+    {
+      "source_type": "arxiv",
+      "source_url": "https://arxiv.org/abs/2603.01590",
+      "slug": "idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms"
+    },
+    {
+      "source_type": "arxiv",
+      "source_url": "https://arxiv.org/abs/2210.09512",
+      "slug": "off-policy-evaluation-for-learning-to-rank-via-interpolating-the-item-position-model-and-the-position-based-model"
+    },
+    {
+      "source_type": "arxiv",
+      "source_url": "https://arxiv.org/abs/2606.00422",
+      "slug": "unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale"
+    },
+    {
+      "source_type": "arxiv",
+      "source_url": "https://arxiv.org/abs/2506.06989",
+      "slug": "a-control-function-framework-for-mitigating-position-bias-in-learning-to-rank-systems"
+    },
+    {
+      "source_type": "arxiv",
+      "source_url": "https://arxiv.org/abs/2609.05721",
+      "slug": "recovering-temporal-and-geographic-signals-from-language-model-embeddings"
+    },
+    {
+      "source_type": "arxiv",
+      "source_url": "https://arxiv.org/abs/2607.23121",
+      "slug": "smart-llm-augmented-hybrid-retrieval-for-dynamic-product-ads"
+    },
+    {
+      "source_type": "arxiv",
+      "source_url": "https://arxiv.org/abs/2607.26073",
+      "slug": "guess-where-you-go-generative-next-point-of-interest-recommendation-in-amap"
     }
   ]
 }

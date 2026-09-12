@@ -1,0 +1,672 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1" name="viewport"/><title>Recovering Temporal and Geographic Signals from Language Model Embeddings</title><style>body {
+  max-width: 760px;
+  margin: 2rem auto;
+  padding: 0 1rem;
+  color: #202020;
+  background: #fff;
+  font-family: Georgia, serif;
+  line-height: 1.55;
+}
+a { color: #315f8c; }
+.library-link { margin-bottom: 2rem; }
+img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 1.5rem auto;
+}
+figure { margin: 2rem 0; }
+figcaption, .article-meta { font-size: 0.9em; }
+pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+blockquote {
+  margin-left: 0;
+  padding-left: 1rem;
+  border-left: 3px solid #999;
+}
+math[display="block"] { margin: 1rem auto; overflow-x: auto; }</style><meta content="recovering-temporal-and-geographic-signals-from-language-model-embeddings" name="vrac-slug"/><meta content="arxiv" name="vrac-source-type"/><meta content="https://arxiv.org/abs/2609.05721" name="vrac-source-url"/><meta content="Recovering Temporal and Geographic Signals from Language Model Embeddings" name="vrac-title"/><meta content="Esteban Feuerstein
+ and Victoria Klimkowski
+ and Juan Manuel Ortiz de Zarate
+ and Federico Hernán Suaiter" name="vrac-author"/><meta content="arXiv:2609.05721v1" name="vrac-publication"/><meta content="04 Sep 2026" name="vrac-published"/><meta content="2f620cddffa49c957f3046f97b875129e70fffc4e7cd6bf02dd670de262c8716" name="vrac-content-sha256"/></head><body><p class="library-link"><a href="https://theopinard.github.io/vrac/">All articles</a></p><article><h1>Recovering Temporal and Geographic Signals from Language Model Embeddings</h1><p class="article-meta">Esteban Feuerstein
+ and Victoria Klimkowski
+ and Juan Manuel Ortiz de Zarate
+ and Federico Hernán Suaiter · arXiv:2609.05721v1 · 04 Sep 2026</p><p class="article-meta">Original: <a href="https://arxiv.org/html/2609.05721v1">arXiv HTML</a> · <a href="https://arxiv.org/pdf/2609.05721v1">PDF</a></p>
+<span><span><span><span>Conference: </span>; ; </span><span><span>CCS: </span>Information systems Retrieval models and ranking</span><span><span>CCS: </span>Computing methodologies Natural language processing</span></span></span>
+<div id="abstract1"><h2>Abstract</h2>
+<p id="abstract1.1">Understanding whether language-model embeddings encode structured real-world information is important for both representation analysis and information retrieval. We study this question for temporal and geographic signals using a simple projection-based method that operates directly on output embeddings. Given a small set of seed examples, the method defines an axis in embedding space and ranks texts or entities by their projection onto that axis.</p>
+<p id="abstract1.2">Our approach is fully black-box and model-agnostic: it requires only embeddings, without access to model weights, internal activations, auxiliary probes, or additional training. This makes it applicable to modern embedding models available only through APIs and provides a lightweight way to analyze whether temporal and spatial dimensions are present in their representation spaces.</p>
+<p id="abstract1.3">We apply the method to temporal and geographic datasets and find that embedding projections recover meaningful chronological and spatial structure. These results provide evidence that output embeddings encode signals relevant to time and space, while also offering a practical tool for interpretability and for downstream temporal and geographic information retrieval tasks, such as temporal ordering, geographic ranking, and tagging.</p>
+</div>
+<div>
+<h6>Keywords: </h6>Large Language Models, World Models, Text Embeddings, Interpretability
+</div>
+<section id="S1">
+<h2><span>1. </span>Introduction</h2>
+<div id="S1.p1">
+<p id="S1.p1.1">Large Language Models (LLMs) have introduced a new perspective from which to analyze the topics of intelligence, knowledge, and the handling of language by computers. In recent years, many variants and improvements have been developed, from early models (<a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-36">36</a>, <a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-11">11</a>) to current models with hundreds of billions of parameters trained over petabytes of data. For an extensive review of the current landscape of LLMs, the reader can refer to (<a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-12">12</a>, <a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-35">35</a>, <a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-17">17</a>, <a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-47">47</a>, <a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-30">30</a>).</p>
+</div>
+<div id="S1.p2">
+<p id="S1.p2.1">Recently, there has been much interest in a series of works focused on what are referred to as <span id="S1.p2.1.1">emergent abilities</span>, which are defined –paraphrasing (<a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-46">46</a>)– as “<span id="S1.p2.1.2">abilities that are not present in smaller models but are present in larger models</span>”. In turn, following (<a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-2">2</a>),“emergence” is “<span id="S1.p2.1.3">when quantitative changes in a system result in qualitative changes in behavior</span>”. Among these abilities, what stands out is the capacity of LLMs, not only of <span id="S1.p2.1.4">learning</span> a large number of patterns or statistical properties from the texts, but to <span id="S1.p2.1.5">generate</span> grounded representations that reflect the real world. In (<a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-16">16</a>), the authors find evidence that this is the case by analyzing the learned representations of spatial and temporal datasets in the Llama-2 family of models, discovering that LLMs learn linear representations of space and time across multiple scales and that these representations are robust to prompt variations and unified across different entity types. Notably, they identify individual <span id="S1.p2.1.6">space neurons</span> and <span id="S1.p2.1.7">time neurons</span> that reliably encode spatial and temporal coordinates.
+More recently, (<a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-13">13</a>) extended the vision to find that some of these learned representations are inherently multidimensional, and provide an updated multi-dimensional superposition hypothesis to account for these kind of features. It also develops “a theoretically grounded
+and empirically practical test that uses sparse autoencoders to find irreducible features."</p>
+</div>
+<div id="S1.p3">
+<p id="S1.p3.1">This work takes a further step in the verification of linear feature representations (namely, time and space coordinates), based on
+a simple methodology
+that takes as input the embeddings generated by the language representation model, and hence does not require access to internal layers of the neural network.
+We first verify the basic hypothesis that language models create temporal models. Specifically, we establish a <span id="S1.p3.1.1">temporal dimension</span> for a corpus, and then map the texts of the corpus onto that dimension, finding that the projection yields a rather accurate ordering.
+We then deepen the investigation by addressing granularity and testing different ways in which the temporal signal may be established.
+The spatial hypothesis is verified in a similar way, although with further challenges due to the intrinsic three-dimensionality of the ground world they represent. In summary, we provide further evidence that current language representation models generate embeddings that contain sound temporal and geographic information.</p>
+</div>
+<div id="S1.p4">
+<p id="S1.p4.1">Prior work has shown that language models encode temporal and spatial information, either by analyzing internal activations and training probes (<a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-16">16</a>), or by using task-specific temporal supervision, as in TempoBERT (<a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-41">41</a>). Our specific contribution is a lightweight, black-box method that requires only the embeddings produced by the language representation model. Thus, we do not require access to model weights, internal activations, auxiliary probes, or additional training. This enables a fast, simple, and transparent evaluation of temporal and spatial signals in modern embedding models, including those available only through APIs. Furthermore, by casting temporal text classification as a ranking/ordering problem (<a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-31">31</a>), our approach naturally connects to information retrieval settings and avoids committing to a fixed set of temporal classes.</p>
+</div>
+<div id="S1.p5">
+<p id="S1.p5.1">In addition to serving as another indication of the emergent capability of word embeddings to establish what has been referred to as <span id="S1.p5.1.1">“a set of more coherent and grounded representations that reflect the real world”</span> (<a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-16">16</a>),
+this work contributes to LLM interpretability research by enabling the analysis of whether LLMs correctly model abstract concepts, such as time and space. It also provides another insight into how LLMs learn those concepts, but in an easier, more natural, and more explicit way than probing-based analyses, which require access to internal activations or weights (<a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-16">16</a>). Our contribution is not the invention of projection-based or <span id="S1.p5.1.2">d</span>-ness scoring itself (<a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-4">4</a>, <a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-45">45</a>), nor the first claim that temporal and spatial signals can emerge in language models. Rather, our contribution is to apply this idea to text embeddings produced by language representation models: while prior uses of <span id="S1.p5.1.3">d</span>-ness scoring focused on different embedding objects, such as community embeddings derived from user co-occurrence graphs (<a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-45">45</a>), we show that the same projection-based principle can recover temporal and geographic signals directly from language-model output embeddings.
+Using a simple procedure that operates exclusively on model outputs, we recover meaningful temporal orderings and geospatial regularities without training auxiliary probes, without relying on task-specific temporal supervision such as TempoBERT (<a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-41">41</a>), and without inspecting network internals. This makes the approach broadly applicable in black-box settings—e.g., when models are only accessible through an API—and complements prior white-box and probe-based analyses by showing that time and space signals can be detected directly from output embeddings.</p>
+</div>
+<div id="S1.p6">
+<p id="S1.p6.1">Last, but not least, our findings can potentially be used to improve some of the downstream tasks that are part of
+Temporal and Geographic Information Retrieval (T-IR and G-IR),
+as temporal and spatial information can be inferred from the data. For more on T-IR and G-IR, see (<a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-5">5</a>) and the book (<a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-34">34</a>), respectively. An extensive review of the intersection between LLMs and IR systems—covering key aspects such as query rewriting, retrieval, reranking, and reading—is provided in (<a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-48">48</a>).</p>
+</div>
+<div id="S1.p7">
+<p id="S1.p7.1">The rest of this paper is organized as follows: in <a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#S2"><span>Section 2</span></a> we summarize related research. In Sections <a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#S3"><span>3</span></a> and <a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#S4"><span>4</span></a> we present our method and experimental results, while <a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#S5"><span>Section 5</span></a> is devoted to discussion, conclusions and further research directions.
+The code of this method has been published along with the customized datasets used in this work<span id="footnote1"><sup>1</sup><span><span><sup>1</sup>
+<span>1</span>
+
+
+
+          https://github.com/FedericoSu/BIICC-2024</span></span></span>.</p>
+</div>
+</section>
+<section id="S2">
+<h2><span>2. </span>Related Work</h2>
+<div id="S2.p1">
+<p id="S2.p1.1"><span id="S2.p1.1.1">Word representation</span> is a fundamental area of research in natural language processing. The progress of machine learning techniques in recent years enabled the development of newer and more complex models that are capable of learning higher-quality vector representations from massive datasets containing billions of words (<a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-28">28</a>, <a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-32">32</a>, <a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-3">3</a>, <a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-36">36</a>, <a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-11">11</a>, <a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-39">39</a>). In (<a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-39">39</a>), SBERT is presented, a modification of BERT (<a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-11">11</a>) that obtains high-quality sentence embeddings that can be compared using cosine similarity at a low computational cost without losing BERT’s precision. SBERT adds a pooling operation to BERT’s output to obtain a vector representation of the entire sentence, and fine-tuning is performed
+so that the produced embeddings are semantically meaningful and can be compared using cosine similarity.
+Another extension of BERT is TempoBERT (<a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-41">41</a>), a temporally adapted language model trained with a time-masking objective to improve temporal awareness in contextual representations. Unlike our setting, it relies on task-specific temporal supervision and model training to encode temporal information. Our approach instead asks whether temporal signals can be recovered directly from off-the-shelf output embeddings, without additional training or access to model internals.</p>
+</div>
+<div id="S2.p2">
+<p id="S2.p2.1">Word vector representations capture syntactic and semantic regularities in a very simple way (<a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-28">28</a>, <a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-3">3</a>). By using basic arithmetic operations and cosine distance measures over word vector representations, it is possible to capture various syntactic and semantic relationships, despite the lack of explicit supervision. These regularities not only solve analogy tasks (<a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-29">29</a>, <a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-24">24</a>, <a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-44">44</a>, <a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-15">15</a>) or position adjectives on a dimensional scale (<a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-20">20</a>), but also enable studies on biases and analyses of cultural and social dimensions in the field of sociology (<a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-4">4</a>, <a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-14">14</a>, <a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-22">22</a>, <a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-45">45</a>). These works are based on the hypothesis that difference vectors have an intrinsic meaning, as their direction and magnitude encode semantic and syntactic relationships. By carefully selecting the initial vectors, it is possible to generate vector representations that capture various cultural and social dimensions, such as gender, wealth, age, and partisanship. This positions words and documents along the chosen dimension <math alttext="d" class="ltx_Math" display="inline" id="S2.p2.m1" intent=":literal"><semantics><mi>d</mi><annotation encoding="application/x-tex">d</annotation></semantics></math>, obtaining a <span id="S2.p2.1.1">d-ness</span> score for each document based on the projection of each vector with respect to that dimension vector, resulting in an inherent ranking.</p>
+</div>
+<div id="S2.p3">
+<p id="S2.p3.1">Previous research (<a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-27">27</a>, <a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-26">26</a>) has shown that language encodes geographic information. In (<a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-6">6</a>) it was found that, while none of the tested models were able to reliably reason about cardinal directions, all models exhibited some spatial reasoning abilities. Additionally, (<a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-25">25</a>) shows that language models encode only limited geographic information, with larger models generally performing better. As noted there, modern language models encode some syntactic (<a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-43">43</a>) and semantic knowledge (<a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-38">38</a>), as well as real-world knowledge. For example, models have been shown to capture commonsense knowledge (<a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-8">8</a>), function as knowledge bases (<a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-33">33</a>), and store a range of factual information (<a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-18">18</a>, <a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-40">40</a>).
+In the setting of
+Linguistic Spatial Models, prior work such as, (<a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-21">21</a>)
+has shown that natural language encodes geographic information, and that relative coordinates can
+be approximately recovered with techniques like multidimensional scaling, co-occurrence statistics, or probing. The aim there is to evaluate the quality of particular word embeddings.</p>
+</div>
+<div id="S2.p4">
+<p id="S2.p4.1">A pioneer work on modeling temporal information
+for the automatic dating of documents is (<a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-9">9</a>), where unigram language models were used to
+classify Dutch texts through normalised log-likelihood
+ratio (NLLR). Other works also proposed using lexical features for automatic dating
+(<a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-7">7</a>, <a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-1">1</a>, <a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-23">23</a>)</p>
+</div>
+<div id="S2.p5">
+<p id="S2.p5.1">As discussed in the introduction, (<a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-16">16</a>) shows that LLMs form world (spatial and temporal) models. The primary distinction from that work lies in our use of <math alttext="d" class="ltx_Math" display="inline" id="S2.p5.m1" intent=":literal"><semantics><mi>d</mi><annotation encoding="application/x-tex">d</annotation></semantics></math><span id="S2.p5.1.1">-ness scoring</span> –which allows us to analyze the embeddings outputted by the models instead of their internal weights– and <span id="S2.p5.1.2">augmentation</span> methods, originally proposed in (<a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-4">4</a>). These methods have been revisited in (<a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-45">45</a>), reinterpreting these scores as actual dimensions rather than biases, as suggested in (<a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-22">22</a>). To the best of our knowledge, this is the first time <span id="S2.p5.1.3">d-ness</span> score has been applied to the temporal and geographic dimensions. Its application to text embeddings is also original to our work, as (<a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-45">45</a>) used it for a completely different kind of embeddings: community embeddings in a user co-occurrence graph. <span id="S2.p5.1.4">d-ness</span>, text, and communities where considered in (<a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-10">10</a>), which introduced a text-based technique to quantify the alignment of online communities along social dimensions by generating text embeddings that are used to score communities on different axes of the political-ideological spectrum.</p>
+</div>
+</section>
+<section id="S3">
+<h2><span>3. </span>Method</h2>
+<div id="S3.p1">
+<p id="S3.p1.1">Our methodological contribution lies in introducing an approach to measuring the ability of language models to capture temporal and geospatial information from textual data. We hypothesize that events, time expressions, topics, locations, monuments, and cities provide sufficient information for the language model to position the resulting embeddings in a vector space that exhibits regularities in both temporal and geospatial dimensions, resembling the semantic, syntactic, and social regularities observed in previous works (<a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-29">29</a>, <a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-20">20</a>, <a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-24">24</a>, <a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-44">44</a>, <a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-15">15</a>, <a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-22">22</a>). We begin by outlining the general scoring algorithm designed to generate the temporal and geographical dimensions, presented first in (<a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-45">45</a>) based on the work in (<a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-4">4</a>, <a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-22">22</a>). After that, we detail the specific sampling and partitioning strategies used to validate the different signals. Next, we describe the evaluation metrics used to assess the capacity of various language models to represent temporal and geographic dimensions. Finally, we summarize the language models considered during this research.</p>
+</div>
+<section id="S3.SS1">
+<h3><span>3.1. </span>d-ness Scoring</h3>
+<div id="S3.SS1.p1">
+<p id="S3.SS1.p1.1">To identify a dimension <math alttext="d_{0}" class="ltx_Math" display="inline" id="S3.SS1.p1.m1" intent=":literal"><semantics><msub><mi>d</mi><mn>0</mn></msub><annotation encoding="application/x-tex">d_{0}</annotation></semantics></math> using embedding models, the basic method consists of selecting a seed pair of vectors <math alttext="(p,q)" class="ltx_Math" display="inline" id="S3.SS1.p1.m2" intent=":literal"><semantics><mrow><mo stretchy="false">(</mo><mi>p</mi><mo>,</mo><mi>q</mi><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">(p,q)</annotation></semantics></math> that (ideally) differ only in the dimension under study. Then we calculate the projection of the vector representation of a document <math alttext="c" class="ltx_Math" display="inline" id="S3.SS1.p1.m3" intent=":literal"><semantics><mi>c</mi><annotation encoding="application/x-tex">c</annotation></semantics></math> on dimension <math alttext="d_{0}" class="ltx_Math" display="inline" id="S3.SS1.p1.m4" intent=":literal"><semantics><msub><mi>d</mi><mn>0</mn></msub><annotation encoding="application/x-tex">d_{0}</annotation></semantics></math> using cosine similarity (<math alttext="S_{C}" class="ltx_Math" display="inline" id="S3.SS1.p1.m5" intent=":literal"><semantics><msub><mi>S</mi><mi>C</mi></msub><annotation encoding="application/x-tex">S_{C}</annotation></semantics></math>). In other words, we define:</p>
+<p><math alttext="d_{0}=p-q\qquad\qquad d_{0}\text{-ness}(c)=S_{C}(c,d_{0})" class="ltx_Math" display="block" id="S3.E1.m1" intent=":literal"><semantics><mrow><mrow><msub><mi>d</mi><mn>0</mn></msub><mo>=</mo><mrow><mi>p</mi><mo>−</mo><mi>q</mi></mrow></mrow><mspace style="width:4em;" width="4em"></mspace><mrow><mrow><msub><mi>d</mi><mn>0</mn></msub><mo lspace="0em" rspace="0em">​</mo><mtext>-ness</mtext><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><mi>c</mi><mo stretchy="false">)</mo></mrow></mrow><mo>=</mo><mrow><msub><mi>S</mi><mi>C</mi></msub><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><mi>c</mi><mo>,</mo><msub><mi>d</mi><mn>0</mn></msub><mo stretchy="false">)</mo></mrow></mrow></mrow></mrow><annotation encoding="application/x-tex">d_{0}=p-q\qquad\qquad d_{0}\text{-ness}(c)=S_{C}(c,d_{0})</annotation></semantics></math> (1)</p>
+</div>
+<div id="S3.SS1.p2">
+<p id="S3.SS1.p2.1">This method can be extended for a more robust definition of the dimension –and we do so in this work– by choosing multiple seed pairs in a set <math alttext="P=\{(p_{1},p_{2})\}" class="ltx_Math" display="inline" id="S3.SS1.p2.m1" intent=":literal"><semantics><mrow><mi>P</mi><mo>=</mo><mrow><mo stretchy="false">{</mo><mrow><mo stretchy="false">(</mo><msub><mi>p</mi><mn>1</mn></msub><mo>,</mo><msub><mi>p</mi><mn>2</mn></msub><mo stretchy="false">)</mo></mrow><mo stretchy="false">}</mo></mrow></mrow><annotation encoding="application/x-tex">P=\{(p_{1},p_{2})\}</annotation></semantics></math> with <math alttext="K=|P|" class="ltx_Math" display="inline" id="S3.SS1.p2.m2" intent=":literal"><semantics><mrow><mi>K</mi><mo>=</mo><mrow><mo stretchy="false">|</mo><mi>P</mi><mo stretchy="false">|</mo></mrow></mrow><annotation encoding="application/x-tex">K=|P|</annotation></semantics></math> and defining:</p>
+</div>
+<div id="S3.SS1.p3">
+<p><math alttext="d=\sum_{(p_{1},p_{2})\in P}{p_{1}-p_{2}}" class="ltx_Math" display="block" id="S3.E2.m1" intent=":literal"><semantics><mrow><mi>d</mi><mo rspace="0.111em">=</mo><mrow><mrow><munder><mo movablelimits="false">∑</mo><mrow><mrow><mo stretchy="false">(</mo><msub><mi>p</mi><mn>1</mn></msub><mo>,</mo><msub><mi>p</mi><mn>2</mn></msub><mo stretchy="false">)</mo></mrow><mo>∈</mo><mi>P</mi></mrow></munder><msub><mi>p</mi><mn>1</mn></msub></mrow><mo>−</mo><msub><mi>p</mi><mn>2</mn></msub></mrow></mrow><annotation encoding="application/x-tex">d=\sum_{(p_{1},p_{2})\in P}{p_{1}-p_{2}}</annotation></semantics></math> (2)</p>
+</div>
+<div id="S3.SS1.p4">
+<p id="S3.SS1.p4.1">To interpret this method, we can rewrite the formula using the distributive property of the inner product with respect to addition, and considering normalized vectors <math alttext="c" class="ltx_Math" display="inline" id="S3.SS1.p4.m1" intent=":literal"><semantics><mi>c</mi><annotation encoding="application/x-tex">c</annotation></semantics></math> (<math alttext="||c||=1" class="ltx_Math" display="inline" id="S3.SS1.p4.m2" intent=":literal"><semantics><mrow><mrow><mo stretchy="false">‖</mo><mi>c</mi><mo stretchy="false">‖</mo></mrow><mo>=</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">||c||=1</annotation></semantics></math>) we get:</p>
+<p><math alttext="d\text{-ness}(c)=\frac{(\sum_{(p_{1},p_{2})\in P}{c\cdot p_{1}})-(\sum_{(p_{1},p_{2})\in P}{c\cdot p_{2}})}{||d||}" class="ltx_Math" display="block" id="S3.E3.m1" intent=":literal"><semantics><mrow><mrow><mi>d</mi><mo lspace="0em" rspace="0em">​</mo><mtext>-ness</mtext><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><mi>c</mi><mo stretchy="false">)</mo></mrow></mrow><mo>=</mo><mfrac><mrow><mrow><mo stretchy="false">(</mo><mrow><mrow><msub><mo lspace="0em">∑</mo><mrow><mrow><mo stretchy="false">(</mo><msub><mi>p</mi><mn>1</mn></msub><mo>,</mo><msub><mi>p</mi><mn>2</mn></msub><mo stretchy="false">)</mo></mrow><mo>∈</mo><mi>P</mi></mrow></msub><mi>c</mi></mrow><mo lspace="0.222em" rspace="0.222em">⋅</mo><msub><mi>p</mi><mn>1</mn></msub></mrow><mo stretchy="false">)</mo></mrow><mo>−</mo><mrow><mo stretchy="false">(</mo><mrow><mrow><msub><mo lspace="0em">∑</mo><mrow><mrow><mo stretchy="false">(</mo><msub><mi>p</mi><mn>1</mn></msub><mo>,</mo><msub><mi>p</mi><mn>2</mn></msub><mo stretchy="false">)</mo></mrow><mo>∈</mo><mi>P</mi></mrow></msub><mi>c</mi></mrow><mo lspace="0.222em" rspace="0.222em">⋅</mo><msub><mi>p</mi><mn>2</mn></msub></mrow><mo stretchy="false">)</mo></mrow></mrow><mrow><mo stretchy="false">‖</mo><mi>d</mi><mo stretchy="false">‖</mo></mrow></mfrac></mrow><annotation encoding="application/x-tex">d\text{-ness}(c)=\frac{(\sum_{(p_{1},p_{2})\in P}{c\cdot p_{1}})-(\sum_{(p_{1},p_{2})\in P}{c\cdot p_{2}})}{||d||}</annotation></semantics></math> (3)</p>
+</div>
+<div id="S3.SS1.p5">
+<p id="S3.SS1.p5.1">Note that this is equivalent to averaging over the first and second components of the <math alttext="K" class="ltx_Math" display="inline" id="S3.SS1.p5.m1" intent=":literal"><semantics><mi>K</mi><annotation encoding="application/x-tex">K</annotation></semantics></math> pairs and then computing the difference between those two values.
+We observe that, ultimately, a high value of <math alttext="d" class="ltx_Math" display="inline" id="S3.SS1.p5.m2" intent=":literal"><semantics><mi>d</mi><annotation encoding="application/x-tex">d</annotation></semantics></math>-ness for a vector <math alttext="c" class="ltx_Math" display="inline" id="S3.SS1.p5.m3" intent=":literal"><semantics><mi>c</mi><annotation encoding="application/x-tex">c</annotation></semantics></math> indicates that <math alttext="c" class="ltx_Math" display="inline" id="S3.SS1.p5.m4" intent=":literal"><semantics><mi>c</mi><annotation encoding="application/x-tex">c</annotation></semantics></math> is similar to the first components of the pairs in <math alttext="P" class="ltx_Math" display="inline" id="S3.SS1.p5.m5" intent=":literal"><semantics><mi>P</mi><annotation encoding="application/x-tex">P</annotation></semantics></math>, but different from the second components of those pairs. However, recall that we aim to choose the pairs in <math alttext="P" class="ltx_Math" display="inline" id="S3.SS1.p5.m6" intent=":literal"><semantics><mi>P</mi><annotation encoding="application/x-tex">P</annotation></semantics></math> in such a way that the components of each pair are similar in all dimensions but <math alttext="d" class="ltx_Math" display="inline" id="S3.SS1.p5.m7" intent=":literal"><semantics><mi>d</mi><annotation encoding="application/x-tex">d</annotation></semantics></math>; therefore, the only way for <math alttext="c" class="ltx_Math" display="inline" id="S3.SS1.p5.m8" intent=":literal"><semantics><mi>c</mi><annotation encoding="application/x-tex">c</annotation></semantics></math> to be more similar to <math alttext="p_{1}" class="ltx_Math" display="inline" id="S3.SS1.p5.m9" intent=":literal"><semantics><msub><mi>p</mi><mn>1</mn></msub><annotation encoding="application/x-tex">p_{1}</annotation></semantics></math> than to <math alttext="p_{2}" class="ltx_Math" display="inline" id="S3.SS1.p5.m10" intent=":literal"><semantics><msub><mi>p</mi><mn>2</mn></msub><annotation encoding="application/x-tex">p_{2}</annotation></semantics></math> is precisely due to its value in the underlying dimension that differentiates <math alttext="p_{1}" class="ltx_Math" display="inline" id="S3.SS1.p5.m11" intent=":literal"><semantics><msub><mi>p</mi><mn>1</mn></msub><annotation encoding="application/x-tex">p_{1}</annotation></semantics></math> from <math alttext="p_{2}" class="ltx_Math" display="inline" id="S3.SS1.p5.m12" intent=":literal"><semantics><msub><mi>p</mi><mn>2</mn></msub><annotation encoding="application/x-tex">p_{2}</annotation></semantics></math>. For this reason, we would typically choose the <math alttext="K" class="ltx_Math" display="inline" id="S3.SS1.p5.m13" intent=":literal"><semantics><mi>K</mi><annotation encoding="application/x-tex">K</annotation></semantics></math> seed pairs that comprise P as extreme opposites on the <math alttext="d" class="ltx_Math" display="inline" id="S3.SS1.p5.m14" intent=":literal"><semantics><mi>d</mi><annotation encoding="application/x-tex">d</annotation></semantics></math> dimension. As we will see in the following, this basic method can be further extended to capture in different ways the signal we are trying to capture.</p>
+</div>
+</section>
+<section id="S3.SS2">
+<h3><span>3.2. </span>Seed Selection Strategies</h3>
+<div id="S3.SS2.p1">
+<p id="S3.SS2.p1.1">To distinguish whether the temporal signal emerges from a genuine representation of time or merely from random high-dimensional noise, we introduce three distinct strategies for selecting the seed sets <math alttext="P" class="ltx_Math" display="inline" id="S3.SS2.p1.m1" intent=":literal"><semantics><mi>P</mi><annotation encoding="application/x-tex">P</annotation></semantics></math>. These strategies are applied specifically to validate the robustness of the signal in high-density datasets.</p>
+</div>
+<div id="S3.SS2.p2">
+<p id="S3.SS2.p2.1"><span id="S3.SS2.p2.1.1">Extremes</span> method: We select the first <math alttext="K" class="ltx_Math" display="inline" id="S3.SS2.p2.m1" intent=":literal"><semantics><mi>K</mi><annotation encoding="application/x-tex">K</annotation></semantics></math> elements of the time period as the <span id="S3.SS2.p2.1.2">early</span> set (<math alttext="P_{1}" class="ltx_Math" display="inline" id="S3.SS2.p2.m2" intent=":literal"><semantics><msub><mi>P</mi><mn>1</mn></msub><annotation encoding="application/x-tex">P_{1}</annotation></semantics></math>) and the last <math alttext="K" class="ltx_Math" display="inline" id="S3.SS2.p2.m3" intent=":literal"><semantics><mi>K</mi><annotation encoding="application/x-tex">K</annotation></semantics></math> elements as the <span id="S3.SS2.p2.1.3">late</span> set (<math alttext="P_{2}" class="ltx_Math" display="inline" id="S3.SS2.p2.m4" intent=":literal"><semantics><msub><mi>P</mi><mn>2</mn></msub><annotation encoding="application/x-tex">P_{2}</annotation></semantics></math>). This method aims to capture the global direction of semantic change.</p>
+</div>
+<div id="S3.SS2.p3">
+<p id="S3.SS2.p3.1"><span id="S3.SS2.p3.1.1">Random Control (Total Random)</span>: We select <math alttext="2K" class="ltx_Math" display="inline" id="S3.SS2.p3.m1" intent=":literal"><semantics><mrow><mn>2</mn><mo lspace="0em" rspace="0em">​</mo><mi>K</mi></mrow><annotation encoding="application/x-tex">2K</annotation></semantics></math> elements completely at random from the dataset. These are arbitrarily assigned to the <span id="S3.SS2.p3.1.2">early</span> or <span id="S3.SS2.p3.1.3">late</span> sets without regard for their actual chronological timestamp. This serves as a baseline; if the temporal signal is real, this method should yield near-zero correlations.</p>
+</div>
+<div id="S3.SS2.p4">
+<p id="S3.SS2.p4.1"><span id="S3.SS2.p4.1.1">Random Sorted (Ordered Random)</span>: We select <math alttext="2K" class="ltx_Math" display="inline" id="S3.SS2.p4.m1" intent=":literal"><semantics><mrow><mn>2</mn><mo lspace="0em" rspace="0em">​</mo><mi>K</mi></mrow><annotation encoding="application/x-tex">2K</annotation></semantics></math> random elements from the timeline, but we respect their relative chronological order. The randomly selected elements are sorted by date; the first <math alttext="K" class="ltx_Math" display="inline" id="S3.SS2.p4.m2" intent=":literal"><semantics><mi>K</mi><annotation encoding="application/x-tex">K</annotation></semantics></math> are assigned to the <span id="S3.SS2.p4.1.2">early</span> set and the remaining <math alttext="K" class="ltx_Math" display="inline" id="S3.SS2.p4.m3" intent=":literal"><semantics><mi>K</mi><annotation encoding="application/x-tex">K</annotation></semantics></math> to the <span id="S3.SS2.p4.1.3">late</span> set. This validates whether the arrow of time is distributed throughout the entire dataset or if it is an artifact exclusive to the absolute extremes of the corpus.</p>
+</div>
+</section>
+<section id="S3.SS3">
+<h3><span>3.3. </span>Partitioning (Chunking):</h3>
+<div id="S3.SS3.p1">
+<p id="S3.SS3.p1.1">To analyze how the length of the temporal interval affects the temporal signal, we employ a <span id="S3.SS3.p1.1.1">chunking</span> strategy. We partition the total time period of our dataset into <math alttext="m" class="ltx_Math" display="inline" id="S3.SS3.p1.m1" intent=":literal"><semantics><mi>m</mi><annotation encoding="application/x-tex">m</annotation></semantics></math> disjoint, contiguous segments (chunks).
+By varying <math alttext="m" class="ltx_Math" display="inline" id="S3.SS3.p1.m2" intent=":literal"><semantics><mi>m</mi><annotation encoding="application/x-tex">m</annotation></semantics></math>, we manipulate the length of the time window. For <math alttext="m=1" class="ltx_Math" display="inline" id="S3.SS3.p1.m3" intent=":literal"><semantics><mrow><mi>m</mi><mo>=</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">m=1</annotation></semantics></math>, the axis is constructed using the entire dataset. As <math alttext="m" class="ltx_Math" display="inline" id="S3.SS3.p1.m4" intent=":literal"><semantics><mi>m</mi><annotation encoding="application/x-tex">m</annotation></semantics></math> increases, the time window decreases. Within each chunk, we apply the sampling strategies described above, using <math alttext="K" class="ltx_Math" display="inline" id="S3.SS3.p1.m5" intent=":literal"><semantics><mi>K</mi><annotation encoding="application/x-tex">K</annotation></semantics></math> seeds. This allows us to measure whether the temporal signal stabilizes as the days-per-chunk increase.</p>
+</div>
+</section>
+<section id="S3.SS4">
+<h3><span>3.4. </span>Evaluation Metrics</h3>
+<div id="S3.SS4.p1">
+<p id="S3.SS4.p1.1">The scores produced by the <math alttext="d" class="ltx_Math" display="inline" id="S3.SS4.p1.m1" intent=":literal"><semantics><mi>d</mi><annotation encoding="application/x-tex">d</annotation></semantics></math>-ness scoring method naturally result in a ranking, allowing us to use for comparison ranking similarity measures such as Kendall’s <math alttext="\tau" class="ltx_Math" display="inline" id="S3.SS4.p1.m2" intent=":literal"><semantics><mi>τ</mi><annotation encoding="application/x-tex">\tau</annotation></semantics></math> (<a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-19">19</a>) and Pearson’s correlation coefficient (<math alttext="r" class="ltx_Math" display="inline" id="S3.SS4.p1.m3" intent=":literal"><semantics><mi>r</mi><annotation encoding="application/x-tex">r</annotation></semantics></math>). This approach is particularly well-suited here because it emphasizes the relative order of items, making it independent of the absolute values of the scores. By comparing rankings instead of raw scores, we can reliably evaluate results across different models and datasets without concerns about scale differences.</p>
+</div>
+<div id="S3.SS4.p2">
+<p id="S3.SS4.p2.1">Kendall’s <math alttext="\tau" class="ltx_Math" display="inline" id="S3.SS4.p2.m1" intent=":literal"><semantics><mi>τ</mi><annotation encoding="application/x-tex">\tau</annotation></semantics></math> correlation quantifies the compatibility between two rankings. Its values range from -1 (strong disagreement) to 1 (strong agreement). A value of 0 indicates an uncorrelated or <span id="S3.SS4.p2.1.1">random</span> relationship. Let <math alttext="C" class="ltx_Math" display="inline" id="S3.SS4.p2.m2" intent=":literal"><semantics><mi>C</mi><annotation encoding="application/x-tex">C</annotation></semantics></math> be the number of concordant pairs (i.e., pairs for which both rankings share the same relative order), and let <math alttext="D" class="ltx_Math" display="inline" id="S3.SS4.p2.m3" intent=":literal"><semantics><mi>D</mi><annotation encoding="application/x-tex">D</annotation></semantics></math> represent the number of discordant pairs. With that, we define
+<math alttext="\tau=2\frac{C-D}{n(n-1)}." class="ltx_Math" display="inline" id="S3.SS4.p2.m4" intent=":literal"><semantics><mrow><mrow><mi>τ</mi><mo>=</mo><mrow><mn>2</mn><mo lspace="0em" rspace="0em">​</mo><mfrac><mrow><mi>C</mi><mo>−</mo><mi>D</mi></mrow><mrow><mi>n</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mrow><mi>n</mi><mo>−</mo><mn>1</mn></mrow><mo stretchy="false">)</mo></mrow></mrow></mfrac></mrow></mrow><mo lspace="0em">.</mo></mrow><annotation encoding="application/x-tex">\tau=2\frac{C-D}{n(n-1)}.</annotation></semantics></math></p>
+</div>
+</section>
+<section id="S3.SS5">
+<h3><span>3.5. </span>Tested Models</h3>
+<div id="S3.SS5.p1">
+<p id="S3.SS5.p1.1">Voyage AI, OpenAI, and Google Gemini<span id="footnote2"><sup>2</sup><span><span><sup>2</sup>
+<span>2</span>
+<a href="https://docs.voyageai.com/docs/introduction">https://docs.voyageai.com/docs/introduction</a>,  <a href="https://platform.openai.com/docs/overview">https://platform.openai.com/docs/overview</a>, <a href="https://ai.google.dev/gemini-api/docs">https://ai.google.dev/gemini-api/docs</a> respectively</span></span></span>
+provide representation models that generate text embeddings, in the spirit of SBERT (<a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-39">39</a>), which can be accessed in a black-box manner through an API.</p>
+</div>
+<div id="S3.SS5.p2">
+<p id="S3.SS5.p2.1">Across our experiments, we consider a range of models and only report full results in the figures and tables where relevant. As representative endpoints of this range, we use (i) OpenAI <span id="S3.SS5.p2.1.1">ada-002</span> (8191-token context window, 1536-dimensional embeddings) and (ii) Google Gemini <span id="S3.SS5.p2.1.2">text-embedding-004</span> (2048-token context window, 768-dimensional embeddings).</p>
+</div>
+<div id="S3.SS5.p3">
+<p id="S3.SS5.p3.1">For high-density analysis, we also incorporate additional models, including voyage-large-2, voyage-3-large, multilingual-2, embed-english-v3.0, embed-english-v2.0, embed-multilingual-v3.0 and embed-multilingual-v2.0.</p>
+</div>
+</section>
+</section>
+<section id="S4">
+<h2><span>4. </span>Experimental Results</h2>
+<div id="S4.p1">
+<p id="S4.p1.1">In this section, we detail the experimental setup and the results obtained through the method described in <a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#S3"><span>Section 3</span></a> across various language representation models and datasets. The findings demonstrate the models’ effectiveness in capturing both the temporal and the geographic dimensions encoded in the datasets.</p>
+</div>
+<section id="S4.SS1">
+<h3><span>4.1. </span>Time Dimension</h3>
+<div id="S4.SS1.p1">
+<p id="S4.SS1.p1.1">For our analysis, we prepared a dataset to quantify the ability of language models to capture the temporal dimension, focusing on both the document’s creation time and focus time (the period or moment the document refers to). Another focal point was to take into account high-frequency data, such as news articles, to analyze the impact in the results when there is semantic noise involved. In the following paragraphs, we provide a more detailed presentation of these datasets and the preprocessing steps we carried out to ensure the reliability and consistency of our analyses, as well as other data sources used. We remark that additional datasets were thoroughly tested with similar results, but are not included in this article for space reasons.</p>
+</div>
+<section id="S4.SS1.SSS1">
+<h4><span>4.1.1. </span>Datasets</h4>
+<section id="S4.SS1.SSS1.Px1">
+<h5>Presidential Speeches.</h5>
+<div id="S4.SS1.SSS1.Px1.p1">
+<p id="S4.SS1.SSS1.Px1.p1.1">This dataset is a subset of the presidential speeches delivered in the U.S. Specifically, it includes the <span id="S4.SS1.SSS1.Px1.p1.1.1">State of the Union Address</span>
+speeches from the period 1988-2019. The dataset is freely accessible and available through the <span id="S4.SS1.SSS1.Px1.p1.1.2">The American Presidency Project</span> website<span id="footnote3"><sup>3</sup><span><span><sup>3</sup>
+<span>3</span>
+<a href="https://www.presidency.ucsb.edu/about">https://www.presidency.ucsb.edu/about</a></span></span></span>.
+The speeches in this dataset have a clearly defined creation time and focus, both aligned with the year of delivery. Their length is sufficient to generate embeddings that capture temporal information, which is essential as attention-based models perform best with at least 800 tokens for time prediction tasks (<a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-37">37</a>).</p>
+</div>
+</section>
+<section id="S4.SS1.SSS1.Px2">
+<h5>Party Affiliations.</h5>
+<div id="S4.SS1.SSS1.Px2.p1">
+<p id="S4.SS1.SSS1.Px2.p1.1">To ensure that the seed pair only differs in the temporal dimension, we also experiment with grouping speeches by party. To do so, we used an additional dataset that contains each president’s party affiliation, along with the start and end dates of their terms<span id="footnote4"><sup>4</sup><span><span><sup>4</sup>
+<span>4</span>
+
+
+
+                Also publicly available at <a href="https://www.presidency.ucsb.edu/about">https://www.presidency.ucsb.edu/about</a></span></span></span>. Using the party affiliation of the president for the period corresponding to the speech delivery date, we generated two subsets of data: <span id="S4.SS1.SSS1.Px2.p1.1.1">Conservative Speeches</span>, corresponding to speeches delivered by presidents affiliated with the Republican Party, and <span id="S4.SS1.SSS1.Px2.p1.1.2">Democratic Speeches</span>, corresponding to speeches delivered by presidents affiliated with the Democratic Party. We will refer to the dataset that includes all presidential speeches under analysis as <span id="S4.SS1.SSS1.Px2.p1.1.3">Presidential</span> <span id="S4.SS1.SSS1.Px2.p1.1.4">Speeches</span>.</p>
+</div>
+</section>
+<section id="S4.SS1.SSS1.Px3">
+<h5>High-density News.</h5>
+<div id="S4.SS1.SSS1.Px3.p1">
+<p id="S4.SS1.SSS1.Px3.p1.1">We constructed a dataset using news articles from the <span id="S4.SS1.SSS1.Px3.p1.1.1">World</span> section of a major newspaper, spanning from May 2020 to October 2025. This data has daily granularity, with multiple articles per day. We generated a <span id="S4.SS1.SSS1.Px3.p1.1.2">daily embedding</span> by averaging the vectors of all articles (concatenating title and subtitle) from each date.</p>
+</div>
+</section>
+</section>
+<section id="S4.SS1.SSS2">
+<h4><span>4.1.2. </span>Methodology Analysis</h4>
+<div id="S4.SS1.SSS2.p1">
+<p id="S4.SS1.SSS2.p1.1">For the first time-related experiments, with the Presidential Speeches datasets, we used the basic seed selection strategies, only varying the <math alttext="K" class="ltx_Math" display="inline" id="S4.SS1.SSS2.p1.m1" intent=":literal"><semantics><mi>K</mi><annotation encoding="application/x-tex">K</annotation></semantics></math> parameter, that is, the number of seed pairs that are averaged to get the <math alttext="d" class="ltx_Math" display="inline" id="S4.SS1.SSS2.p1.m2" intent=":literal"><semantics><mi>d</mi><annotation encoding="application/x-tex">d</annotation></semantics></math> dimension.
+In the case of high density news, to distinguish genuine temporal signals from random noise, we contrasted the three seed selection methods described in <a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#S3.SS2"><span>subsection 3.2</span></a>.</p>
+</div>
+</section>
+<section id="S4.SS1.SSS3">
+<h4><span>4.1.3. </span>Results</h4>
+<div id="S4.SS1.SSS3.p1">
+<p id="S4.SS1.SSS3.p1.1">We initially applied our method to compute the d-ness score corresponding to the time dimension (<span id="S4.SS1.SSS3.p1.1.1">timeness</span>) to the Presidential Speeches dataset. We selected <math alttext="K" class="ltx_Math" display="inline" id="S4.SS1.SSS3.p1.m1" intent=":literal"><semantics><mi>K</mi><annotation encoding="application/x-tex">K</annotation></semantics></math> seed pairs by identifying the <math alttext="K" class="ltx_Math" display="inline" id="S4.SS1.SSS3.p1.m2" intent=":literal"><semantics><mi>K</mi><annotation encoding="application/x-tex">K</annotation></semantics></math> most widely time-separated speech pairs, ensuring no speech is used more than once. To embed the speeches into a vector, we simply truncate them up to the maximum token window allowed by the representation model. In <a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#S4.F2"><span>Figure 2</span></a>, we observe that both <span id="S4.SS1.SSS3.p1.1.2">voyage-lite-01</span> and <span id="S4.SS1.SSS3.p1.1.3">ada-002</span> capture temporal information, and the scores obtained highly correlate with the actual time of delivery of the speeches. Besides, we compare the performance of both models (using <math alttext="K=3" class="ltx_Math" display="inline" id="S4.SS1.SSS3.p1.m3" intent=":literal"><semantics><mrow><mi>K</mi><mo>=</mo><mn>3</mn></mrow><annotation encoding="application/x-tex">K=3</annotation></semantics></math>).
+In <a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#S4.F2"><span>Figure 2</span></a>, we can observe how varying the hyperparameter <math alttext="K" class="ltx_Math" display="inline" id="S4.SS1.SSS3.p1.m4" intent=":literal"><semantics><mi>K</mi><annotation encoding="application/x-tex">K</annotation></semantics></math> impacts the scores obtained with the <span id="S4.SS1.SSS3.p1.1.4">voyage-lite-01</span> model. Specifically, we see that for <math alttext="K=1" class="ltx_Math" display="inline" id="S4.SS1.SSS3.p1.m5" intent=":literal"><semantics><mrow><mi>K</mi><mo>=</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">K=1</annotation></semantics></math>, the scores are highly unstable over time, while for higher values, we obtain more stable results. This suggests that we need to take <math alttext="K\geq 3" class="ltx_Math" display="inline" id="S4.SS1.SSS3.p1.m6" intent=":literal"><semantics><mrow><mi>K</mi><mo>≥</mo><mn>3</mn></mrow><annotation encoding="application/x-tex">K\geq 3</annotation></semantics></math> for our scores to be robust enough to be relied on as a time metric.</p>
+</div>
+<div id="S4.SS1.SSS3.p2">
+<p id="S4.SS1.SSS3.p2.1">In <a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#S4.F3"><span>Figure 3</span></a>, we present the similarity measure between the generated rankings and the speeches’ dates of delivery. We vary the hyperparameters, the model under analysis, and the dataset used. This enables a comparison of which configurations produce the most accurate temporal modeling. On the left, we can see that both models achieve significantly high results, with <math alttext="\tau" class="ltx_Math" display="inline" id="S4.SS1.SSS3.p2.m1" intent=":literal"><semantics><mi>τ</mi><annotation encoding="application/x-tex">\tau</annotation></semantics></math> values above 0.8 for <span id="S4.SS1.SSS3.p2.1.1">voyage-lite-01</span> (note that a possible baseline could be 0, corresponding to the use of a random order). Additionally, the scores from <span id="S4.SS1.SSS3.p2.1.2">voyage-lite-01</span> achieve significantly and consistently higher correlation than those from <span id="S4.SS1.SSS3.p2.1.3">ada-002</span>, suggesting that <span id="S4.SS1.SSS3.p2.1.4">voyage-lite-01</span> models the temporal dimension more accurately. We also notice that, as we increase the <math alttext="K" class="ltx_Math" display="inline" id="S4.SS1.SSS3.p2.m2" intent=":literal"><semantics><mi>K</mi><annotation encoding="application/x-tex">K</annotation></semantics></math> value, the correlation between the scores and the date of the speeches increases consistently across both models. This indicates that the value of the <math alttext="K" class="ltx_Math" display="inline" id="S4.SS1.SSS3.p2.m3" intent=":literal"><semantics><mi>K</mi><annotation encoding="application/x-tex">K</annotation></semantics></math> hyperparameter affects the quality of the generated ranking, and that the comparison between models may be extrapolated for similar K values.</p>
+</div>
+<div id="S4.SS1.SSS3.p3">
+<p id="S4.SS1.SSS3.p3.1">On the right chart we observe that, when using only the speeches corresponding to a single party, the results change notably. Specifically, we see that <span id="S4.SS1.SSS3.p3.1.1">voyage-lite-01</span> performs better for the <span id="S4.SS1.SSS3.p3.1.2">Conservative Speeches</span> (0.87), followed by the <span id="S4.SS1.SSS3.p3.1.3">Presidential Speeches</span> (0.79), and finally the <span id="S4.SS1.SSS3.p3.1.4">Democratic Speeches</span> (0.71). This would indicate that the <span id="S4.SS1.SSS3.p3.1.5">voyage-lite-01</span> model achieves similar results in terms of its ability to model the temporal dimension whether using all speeches or just those from a single party. Now, let’s analyze the results obtained when using the <span id="S4.SS1.SSS3.p3.1.6">ada-002</span> model. We can see that it achieves a higher correlation for the <span id="S4.SS1.SSS3.p3.1.7">Democratic Speeches</span> (0.80), followed by the <span id="S4.SS1.SSS3.p3.1.8">Conservative Speeches</span> (0.72), and finally the <span id="S4.SS1.SSS3.p3.1.9">Presidential Speeches</span> (0.59). This would suggest that, in the case of <span id="S4.SS1.SSS3.p3.1.10">ada-002</span>, better results are obtained when using speeches from a single party.
+Considering all of the above, we can conclude that <span id="S4.SS1.SSS3.p3.1.11">voyage-lite-01</span> has a greater ability to model the temporal dimension than <span id="S4.SS1.SSS3.p3.1.12">ada-002</span> for the case of Presidential and Conservative Speeches, but a lower capacity for Democratic Speeches. Overall, both models capture enough temporal information to achieve a significant correlation with the speech delivery date, confirming our hypothesis.</p>
+</div>
+<figure id="S4.F2"><img alt="Refer to caption" height="172" src="https://arxiv.org/html/2609.05721v1/timeness-3-all.png" width="229"/><img alt="Refer to caption" height="172" src="https://arxiv.org/html/2609.05721v1/timeness-vlite-all.png" width="229"/><figcaption><span>Figure 1. </span><span id="S4.F2.fig1.3">Varying models</span>. <span id="S4.F2.fig1.4">Timeness scores vs. actual time of delivery of the speeches for two models, K = 3.</span></figcaption></figure>
+<figure id="S4.F3"><img alt="Refer to caption" height="111" src="https://arxiv.org/html/2609.05721v1/correlation.png" width="250"/><figcaption><span>Figure 3. </span>Temporal modeling evaluation. Left: correlation vs. <math alttext="K" class="ltx_Math" display="inline" id="S4.F3.m4" intent=":literal"><semantics><mi>K</mi><annotation encoding="application/x-tex">K</annotation></semantics></math>. Right: Kendall’s <math alttext="\tau" class="ltx_Math" display="inline" id="S4.F3.m5" intent=":literal"><semantics><mi>τ</mi><annotation encoding="application/x-tex">\tau</annotation></semantics></math> by party (with <math alttext="K=3" class="ltx_Math" display="inline" id="S4.F3.m6" intent=":literal"><semantics><mrow><mi>K</mi><mo>=</mo><mn>3</mn></mrow><annotation encoding="application/x-tex">K=3</annotation></semantics></math>).<span id="acmlabel2"></span></figcaption></figure>
+<div id="S4.SS1.SSS3.p4">
+<p id="S4.SS1.SSS3.p4.1">To deepen the research and test the limits of the temporal signal, we extended our analysis to a high-density dataset.
+Despite the increased granularity, we found that the temporal signal remains robust when using the Extremes Method for seed selection. All models achieved high correlations when projecting daily embeddings onto the temporal axis as seen in <a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#S4.F5"><span>Figure 5</span></a> (where the projection of seed elements is not accounted for in the ranking metrics).
+The correlation was even better (for larger values of <math alttext="K" class="ltx_Math" display="inline" id="S4.SS1.SSS3.p4.m1" intent=":literal"><semantics><mi>K</mi><annotation encoding="application/x-tex">K</annotation></semantics></math>) for the Random Sorted method, as seen in <a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#S4.F5"><span>Figure 5</span></a> (we plot just two of the models for visual clarity).
+By contrasting sampling strategies, we confirmed that the arrow of time is an intrinsic property distributed across the dataset: the Random Sorted method yielded significantly higher correlations than the Random Control.
+We further discovered that interval length is critical. Through our chunking analysis, we observed that chunks containing more days systematically produce better ranking metrics than smaller chunks. As the data is better spaced in time, the temporal signal becomes clearer, enabling to smooth out daily noise (news topics) and recover the underlying linear progression of time.</p>
+</div>
+<div id="S4.SS1.SSS3.p5">
+<p id="S4.SS1.SSS3.p5.1">Another key finding is that defining the temporal axis locally (i.e. using seeds that are close to the target interval) yields better precision than using a global axis for the entire period. Performance degrades as the projection context expands too far beyond the target dates as seen in <a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#S4.F6"><span>Figure 6</span></a>.
+While the models excel at ordering dates between seeds (interpolation), they fail to reliably extrapolate: projections of future dates based on past axes do not follow a linear extension and the same applies for past days projections based on future axes. This suggests the learned time is a local relative ordering rather than an absolute magnitude, reflecting time-correlated content differences (semantic and thematic drift) rather than a universal, abstract “time” axis. The extracted temporal dimension is strictly local and tied to the progression of the events in that period.</p>
+</div>
+<figure id="S4.F5"><img alt="Refer to caption" height="169" src="https://arxiv.org/html/2609.05721v1/img/time/noticiasmetricas.png" width="191"/><img alt="Refer to caption" height="168" src="https://arxiv.org/html/2609.05721v1/img/time/randomsortedmetricas.png" width="191"/><figcaption><span>Figure 4. </span><span id="S4.F5.fig1.2">Kendall <math alttext="\tau" class="ltx_Math" display="inline" id="S4.F5.m2" intent=":literal"><semantics><mi>τ</mi><annotation encoding="application/x-tex">\tau</annotation></semantics></math> vs. Amount of days used as seeds for <span id="S4.F5.fig1.2.1">Extremes</span>.</span><span id="acmlabel3"></span></figcaption></figure>
+<figure id="S4.F6"><img alt="Refer to caption" height="132" src="https://arxiv.org/html/2609.05721v1/img/time/chunksembrado.png" width="250"/><figcaption><span>Figure 6. </span>For <span id="S4.F6.3">voyage-3-large, <math alttext="K=3" class="ltx_Math" display="inline" id="S4.F6.m3" intent=":literal"><semantics><mrow><mi>K</mi><mo>=</mo><mn>3</mn></mrow><annotation encoding="application/x-tex">K=3</annotation></semantics></math> and 100 samples. Kendall <math alttext="\tau" class="ltx_Math" display="inline" id="S4.F6.m4" intent=":literal"><semantics><mi>τ</mi><annotation encoding="application/x-tex">\tau</annotation></semantics></math> vs. Target interval size to project. How close (in days) the extremes are from the target interval.</span><span id="acmlabel5"></span></figcaption></figure>
+</section>
+</section>
+<section id="S4.SS2">
+<h3><span>4.2. </span>Space Dimension</h3>
+<div id="S4.SS2.p1">
+<p id="S4.SS2.p1.1">For the space dimension, we report results on two datasets. Although both focus on the goal of verifying how representation models reflect spatial coordinates, with the second one we focus on determining whether the model recognizes the circular nature of longitude: while latitude is reasonably modeled as a linear magnitude, longitude forms a continuous loop around the Earth, and we try to evaluate whether the model inherently captures this cyclical property or not.</p>
+</div>
+<section id="S4.SS2.SSS1">
+<h4><span>4.2.1. </span>Datasets</h4>
+<section id="S4.SS2.SSS1.Px1">
+<h5>WorldPlaces.</h5>
+<div id="S4.SS2.SSS1.Px1.p1">
+<p id="S4.SS2.SSS1.Px1.p1.1">This dataset was curated to encompass a diverse selection of geographically and culturally significant locations, ensuring broad global representation. The names of the places were extracted from their respective Wikipedia pages, and they were primarily selected based on two criteria: their average Wikipedia page views over the past 9 years<span id="footnote5"><sup>5</sup><span><span><sup>5</sup>
+<span>5</span>
+<a href="https://pageviews.wmcloud.org/">https://pageviews.wmcloud.org/</a></span></span></span>
+and their status as UNESCO World Heritage sites<span id="footnote6"><sup>6</sup><span><span><sup>6</sup>
+<span>6</span>
+<a href="https://whc.unesco.org/en/list/">https://whc.unesco.org/en/list/</a></span></span></span>.
+Additionally, some locations were added to act as “extreme points” for our method (Svalbard Global Seed Vault and Golden Gate Bridge).</p>
+</div>
+</section>
+<section id="S4.SS2.SSS1.Px2">
+<h5>PopulatedPlaces.</h5>
+<div id="S4.SS2.SSS1.Px2.p1">
+<p id="S4.SS2.SSS1.Px2.p1.1">This dataset builds upon the <span id="S4.SS2.SSS1.Px2.p1.1.1">world_place</span> dataset introduced by (<a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-16">16</a>)<span id="footnote7"><sup>7</sup><span><span><sup>7</sup>
+<span>7</span>
+
+
+
+                The original dataset can be accessed at <a href="https://github.com/wesg52/world-models/tree/main/data/entity_datasets">https://github.com/wesg52/world-models/tree/main/data/entity_datasets</a></span></span></span>. While the original dataset includes a wide range of locations such as monuments, buildings, and restaurants, we apply a filtering criterion to include only populated places with more than 2.5 million <span id="S4.SS2.SSS1.Px2.p1.1.2">page_views</span>.</p>
+</div>
+<div id="S4.SS2.SSS1.Px2.p2">
+<p id="S4.SS2.SSS1.Px2.p2.1">It is important to highlight that latitude values exhibit greater clustering compared to longitude values. This difference arises from the fact that latitude is constrained within a range of -90° to 90°  whereas longitude spans a broader range, from -180° to 180°.</p>
+</div>
+</section>
+</section>
+<section id="S4.SS2.SSS2">
+<h4><span>4.2.2. </span>Results</h4>
+<div id="S4.SS2.SSS2.p1">
+<p id="S4.SS2.SSS2.p1.1">To generate the embeddings for the dataset <span id="S4.SS2.SSS2.p1.1.1">WorldPlaces</span>, we simply use the names of the locations. In <a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#S4.F7"><span>Figure 7</span></a> we present an analysis of the score achieved by the algorithm versus the real value of the actual place. In the upper chart, we can see that there is a positive correlation between the real latitude and the projected value. The correlation values obtained were <math alttext="\tau=0.615" class="ltx_Math" display="inline" id="S4.SS2.SSS2.p1.m1" intent=":literal"><semantics><mrow><mi>τ</mi><mo>=</mo><mn>0.615</mn></mrow><annotation encoding="application/x-tex">\tau=0.615</annotation></semantics></math> and <math alttext="r=0.796" class="ltx_Math" display="inline" id="S4.SS2.SSS2.p1.m2" intent=":literal"><semantics><mrow><mi>r</mi><mo>=</mo><mn>0.796</mn></mrow><annotation encoding="application/x-tex">r=0.796</annotation></semantics></math>. In the lower chart, we can also see a positive correlation, in this case between the real longitude and the projected value. The correlation values obtained were <math alttext="\tau=0.795" class="ltx_Math" display="inline" id="S4.SS2.SSS2.p1.m3" intent=":literal"><semantics><mrow><mi>τ</mi><mo>=</mo><mn>0.795</mn></mrow><annotation encoding="application/x-tex">\tau=0.795</annotation></semantics></math> and <math alttext="r=0.941" class="ltx_Math" display="inline" id="S4.SS2.SSS2.p1.m4" intent=":literal"><semantics><mrow><mi>r</mi><mo>=</mo><mn>0.941</mn></mrow><annotation encoding="application/x-tex">r=0.941</annotation></semantics></math>.</p>
+</div>
+<figure id="S4.F7"><img alt="Figure 7. Obtained values vs their real values. The upper graph shows the latitude while the lower graph shows the longitude. In both cases the model used was text-embedding-004 and two pairs of seeds were used ( K = 2 K=2 )." height="1559" src="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/figure-1.jpg" width="1033"/><figcaption><span>Figure 7. </span>Obtained values vs their real values. The upper graph shows the latitude while the lower graph shows the longitude. In both cases the model used was <span id="S4.F7.5">text-embedding-004</span> and two pairs of seeds were used (<math alttext="K=2" class="ltx_Math" display="inline" id="S4.F7.m2" intent=":literal"><semantics><mrow><mi>K</mi><mo>=</mo><mn>2</mn></mrow><annotation encoding="application/x-tex">K=2</annotation></semantics></math>).<span id="acmlabel6"></span></figcaption></figure>
+<div id="S4.SS2.SSS2.p2">
+<p id="S4.SS2.SSS2.p2.1">Although our method does not yield precise values, we sought to examine whether augmenting the obtained latitude and longitude values and plotting them on a world map could provide an approximation to the actual geographic locations. For this, we employed scikit-learn’s
+<a href="https://scikit-learn.org/1.5/modules/generated/sklearn.preprocessing.MinMaxScaler.html">MinMaxScaler</a>,
+to scale each feature within the bounds of the minimum and maximum latitude/longitude values. This exploratory approach aimed to assess the potential for our method to approximate real-world coordinates, despite the inherent limitations in accuracy.</p>
+</div>
+<figure id="S4.F8"><img alt="Refer to caption" height="207" src="https://arxiv.org/html/2609.05721v1/img/space/mapMonumentsGemini004-Lineas.png" width="476"/><figcaption><span>Figure 8. </span>Map constructed by scaling the values obtained on <a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#S4.F7"><span>Figure 7</span></a>.<span id="acmlabel7"></span></figcaption></figure>
+<div id="S4.SS2.SSS2.p3">
+<p id="S4.SS2.SSS2.p3.1">As observed in <a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#S4.F8"><span>Figure 8</span></a>, while extreme values are determined by the scaling process, it is noteworthy that locations such as <span id="S4.SS2.SSS2.p3.1.1">Cape Horn</span> or <span id="S4.SS2.SSS2.p3.1.2">Svalbard Global Seed Bank</span>-despite being latitude extremes-are positioned nearly accurately on their corresponding longitudinal coordinates.
+Similarly, sites like <span id="S4.SS2.SSS2.p3.1.3">Stonehenge</span> and <span id="S4.SS2.SSS2.p3.1.4">Machu Picchu</span> are closely positioned to their actual locations.
+However, landmarks such as the <span id="S4.SS2.SSS2.p3.1.5">Statue of Liberty</span> are significantly displaced.
+Two hypotheses for this discrepancy are the existence of numerous replicas of the Statue of Liberty worldwide<span id="footnote8"><sup>8</sup><span><span><sup>8</sup>
+<span>8</span>
+<a href="https://en.wikipedia.org/wiki/Replicas_of_the_Statue_of_Liberty">https://en.wikipedia.org/wiki/Replicas_of_the_Statue_of_Liberty</a></span></span></span>, and
+the presence of common words such as <span id="S4.SS2.SSS2.p3.1.6">statue</span> and <span id="S4.SS2.SSS2.p3.1.7">liberty</span>, potentially influencing the model toward a more general location.</p>
+</div>
+<div id="S4.SS2.SSS2.p4">
+<p id="S4.SS2.SSS2.p4.1">As we observe, the embeddings contain an underlying awareness of the geospatial locations. However, unlike latitude, longitude forms a continuous loop around the Earth. This brings us to a key question: Do models recognize this phenomenon? For the <span id="S4.SS2.SSS2.p4.1.1">PopulatedPlaces</span> dataset, we focused exclusively on the longitude. In this instance, the lowest longitude was not used as the starting point. Instead, we chose to divide the dataset into three sections: from Manhattan to Budapest, from Budapest to Tokyo, and from Tokyo to Manhattan. The most notable aspect arises in the third section, which contains values spanning from positive to negative.</p>
+</div>
+<figure id="S4.F9"><img alt="Refer to caption" height="161" src="https://arxiv.org/html/2609.05721v1/n1-citiesGemini004Long-Manhattan-Budapest2seeds.png" width="215"/><img alt="Refer to caption" height="161" src="https://arxiv.org/html/2609.05721v1/n2-citiesGemini004Long-Budapest-Tokyo2seeds.png" width="215"/><img alt="Refer to caption" height="161" src="https://arxiv.org/html/2609.05721v1/n3-citiesGemini004Long-Tokyo-Manhattan2seeds.png" width="215"/><figcaption><span>Figure 9. </span>Obtained values over their longitudinal order, for model <span id="S4.F9.6">text-embedding-004</span>.<span id="acmlabel8"></span></figcaption></figure>
+<div id="S4.SS2.SSS2.p5">
+<p id="S4.SS2.SSS2.p5.1">As shown in <a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#S4.F9"><span>Figure 9</span></a>, the two upper charts, while not perfect, exhibit the previously mentioned spatial order. The first chart demonstrates a reasonable representation (<math alttext="\tau=0.788" class="ltx_Math" display="inline" id="S4.SS2.SSS2.p5.m1" intent=":literal"><semantics><mrow><mi>τ</mi><mo>=</mo><mn>0.788</mn></mrow><annotation encoding="application/x-tex">\tau=0.788</annotation></semantics></math> and <math alttext="r=0.79" class="ltx_Math" display="inline" id="S4.SS2.SSS2.p5.m2" intent=":literal"><semantics><mrow><mi>r</mi><mo>=</mo><mn>0.79</mn></mrow><annotation encoding="application/x-tex">r=0.79</annotation></semantics></math>), whereas the second one shows a weaker correlation (<math alttext="\tau=0.451" class="ltx_Math" display="inline" id="S4.SS2.SSS2.p5.m3" intent=":literal"><semantics><mrow><mi>τ</mi><mo>=</mo><mn>0.451</mn></mrow><annotation encoding="application/x-tex">\tau=0.451</annotation></semantics></math> and <math alttext="r=0.7" class="ltx_Math" display="inline" id="S4.SS2.SSS2.p5.m4" intent=":literal"><semantics><mrow><mi>r</mi><mo>=</mo><mn>0.7</mn></mrow><annotation encoding="application/x-tex">r=0.7</annotation></semantics></math>). We believe that this discrepancy may result from the proximity of the cities.
+In contrast, the lowermost chart presents a stronger correlation (<math alttext="\tau=0.848" class="ltx_Math" display="inline" id="S4.SS2.SSS2.p5.m5" intent=":literal"><semantics><mrow><mi>τ</mi><mo>=</mo><mn>0.848</mn></mrow><annotation encoding="application/x-tex">\tau=0.848</annotation></semantics></math> and <math alttext="r=0.931" class="ltx_Math" display="inline" id="S4.SS2.SSS2.p5.m6" intent=":literal"><semantics><mrow><mi>r</mi><mo>=</mo><mn>0.931</mn></mrow><annotation encoding="application/x-tex">r=0.931</annotation></semantics></math>), suggesting that the model may be capturing a circular representation of longitude. We are currently investigating an approach to improve longitude determination, as detailed in the following section.</p>
+</div>
+<div id="S4.SS2.SSS2.p6">
+<p id="S4.SS2.SSS2.p6.1">It is important to highlight that the embeddings were constructed
+using the name of the city and country
+(for example: “Manhattan, United States").
+Some cities were very close to one another, and for this reason, a simple number order on the x-axis was preferred to enhance readability, prevent excessive clustering of data points, and avoid confusion having positive values to the left of negative ones.
+We used a simple numerical order to calculate the values for Pearson’s correlation. However, it is important to note that using the actual distances between the locations for the calculation results in nearly identical values.</p>
+</div>
+</section>
+</section>
+</section>
+<section id="S5">
+<h2><span>5. </span>Discussion and Further Work</h2>
+<div id="S5.p1">
+<p id="S5.p1.1">We introduce a simple yet effective technique that operates solely on the embeddings produced by a chosen LLM. Our results provide further evidence that these embedding spaces encode grounded information about the real world, including temporal and geospatial structure.
+More generally, the same projection-based procedure can be used to probe how embeddings capture other semantic concepts by selecting appropriate seed sets, offering a lightweight tool for interpretability. Finally, this capability may benefit information retrieval settings, for example by enabling unsupervised temporal or geographic tagging and by supporting dimension-aware ranking.</p>
+</div>
+<div id="S5.p2">
+<p id="S5.p2.1">We focused in particular on the temporal and geographic dimensions. We found that attention-based language models, such as <span id="S5.p2.1.1">voyage-lite-01</span> and <span id="S5.p2.1.2">ada-002</span>, are capable of capturing information about the temporality of the textual units they process, encoded directly in the generated embeddings. This allows for the design of unsupervised methods that use only the embeddings to analyze the ability of the language model under study to capture the temporal dimension of the textual units. For example, the voyage-lite-01 model achieved Kendall’s <math alttext="\tau" class="ltx_Math" display="inline" id="S5.p2.m1" intent=":literal"><semantics><mi>τ</mi><annotation encoding="application/x-tex">\tau</annotation></semantics></math> score of 0.87 on the Conservative Speeches dataset, indicating a high capacity to internally model the temporality of the textual units.
+This temporal dimension that can be extracted from the embeddings has a highly significant correlation with the release date of the speeches, reinforcing the validity of our approach. It is worth noting that while the creation time and focus coincide in our time datasets, further investigation is needed to explore the implications when they do not coincide.</p>
+</div>
+<div id="S5.p3">
+<p id="S5.p3.1">The temporal granularity of these speeches and some other datasets we explored is yearly. We also considered datasets with daily granularity.
+Crucially, our analysis allowed us to test the robustness and limits of the time signal. We confirmed that the arrow of time is an intrinsic property distributed across the dataset, not merely an artifact of the extremes. By employing a <span id="S5.p3.1.1">Random Sorted</span> method (where seeds are selected randomly but assigned as early or late) we showed that the signal persists even without using the absolute extremes. Furthermore, regarding granularity, we observed a strong relationship between context size and signal clarity. Our partitioning analysis demonstrated that larger temporal windows allow the model to smooth out short-term semantic noise, resulting in significantly better linear ordering compared to smaller, fragmented windows.</p>
+</div>
+<div id="S5.p4">
+<p id="S5.p4.1">We also identified that the representation is local rather than universal: while the method operates effectively as an interpolator, it struggles to extrapolate.</p>
+</div>
+<div id="S5.p5">
+<p id="S5.p5.1">Our results regarding the spatial dimension suggest that
+the embeddings encode information correlated with geospatial locations, and it appears that longitude is being represented in a non-linear manner. We are currently conducting further experiments to validate whether a circular embedding may emerge more clearly in that case through a circular, rather than linear, projection.</p>
+</div>
+<div id="S5.p6">
+<p id="S5.p6.1">As for the explainability of our results, i.e., the questions “how” or “why” the temporal signal emerges, it is important to note that we are not claiming a unique reason for it. The recoverable temporal signal may depend on the semantic domain and the amount of supervision available, as well as on other factors. Topical drift, jargon, and grammatical variation are possible alternative explanations for the temporal signal. A similar issue appears in geography: cases such as “Statue of Liberty” suggest that embeddings may encode geographic coordinates from implicit or explicit sources. To further investigate this issue, we performed two kinds of experiments. First, we compared results with and without broader context: for example, dating book titles with and without the author’s name, and locating places using embeddings of full Wikipedia articles instead of place names alone. These experiments suggest that broader context improves accuracy. Second, we ran additional controls masking explicit temporal references, such as years, events, and person names. The temporal signal still emerges under these controls, although these results remain preliminary.</p>
+</div>
+<div id="S5.p7">
+<p id="S5.p7.1">Although we acknowledge that the proposed method requires further validation through additional experiments, the results obtained so far and reported here strongly suggest its effectiveness in addressing the target problem.
+Moreover, our approach was evaluated on additional datasets not included in this article for space reasons. The results obtained are conclusive: in all cases, high correlations are observed between the measured dimension and the true underlying baseline values.
+At this point, it is important to emphasize again that our goal was to test whether signals reported in prior probe or white-box-based work (<a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-13">13</a>, <a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-16">16</a>) can also be detected directly in final-layer embeddings. For that reason, we did compared our results directly against "ground truth" and not against methods such as TempoBERT which, as we said rely on explicit temporal supervision and are thus not directly comparable to our black-box setting.</p>
+</div>
+<div id="S5.p8">
+<p id="S5.p8.1">Additional experiments are been conducted on other domains and datasets.
+In particular, the projection method has been applied to a state-of-the-art symbolic music LLM, finding that it reveals signals relevant to music. We omit the reference for anonymity reasons. In that semantic domain we are currently testing certain circular attributes for the ideas proposed above for longitude. Preliminary results in this area are promising.</p>
+</div>
+<div id="S5.p9">
+<p id="S5.p9.1">Finally, we aim to explore fine-tuning mechanisms to better adjust temporal results, particularly addressing the different time dimensions (document creation time and focus time).
+Another research direction is related to some prompt engineering aspects (<a href="https://theopinard.github.io/vrac/articles/recovering-temporal-and-geographic-signals-from-language-model-embeddings/#reference-42">42</a>), namely the impact of different prompt formulations on the emergence of the signals.</p>
+</div>
+<div id="S5.p10">
+<p id="S5.p10.1">Overall, our findings suggest that temporal and geographic signals in language-model embeddings can be exploited not only for interpretability, but also as lightweight components for ranking, tagging, and metadata enrichment in retrieval-oriented systems.</p>
+</div>
+<div></div>
+</section>
+<div><h2 id="works-cited">References</h2><p id="reference-1">[1]
+<span>
+Abe, H., Tsumoto, S.: Text categorization with considering temporal patterns of
+term usages. In: 2010 IEEE International Conference on Data Mining Workshops.
+pp. 800–807 (2010). https://doi.org/10.1109/ICDMW.2010.186
+
+</span></p><p id="reference-2">[2]
+<span>
+Anderson, P.W.: More is different: Broken symmetry and the nature of the
+hierarchical structure of science. Science <span id="bib.bib2.1">177</span>(4047), 393–396
+(1972)
+
+</span></p><p id="reference-3">[3]
+<span>
+Bojanowski, P., Grave, E., Joulin, A., Mikolov, T.: Enriching word vectors with
+subword information. Transactions of the association for computational
+linguistics <span id="bib.bib3.1">5</span>, 135–146 (2017)
+
+</span></p><p id="reference-4">[4]
+<span>
+Bolukbasi, T., Chang, K.W., Zou, J.Y., Saligrama, V., Kalai, A.T.: Man is to
+computer programmer as woman is to homemaker? debiasing word embeddings.
+Advances in neural information processing systems <span id="bib.bib4.1">29</span> (2016)
+
+</span></p><p id="reference-5">[5]
+<span>
+Campos, R., Dias, G., Jorge, A.M., Jatowt, A.: Survey of temporal information
+retrieval and related applications. ACM Comput. Surv. <span id="bib.bib5.1">47</span>(2) (2014).
+https://doi.org/10.1145/2619088, <a href="https://doi.org/10.1145/2619088">https://doi.org/10.1145/2619088</a>
+</span></p><p id="reference-6">[6]
+<span>
+Cohn, A.G., Blackwell, R.E.: Evaluating the ability of large language models to
+reason about cardinal directions. arXiv preprint arXiv:2406.16528 (2024)
+
+</span></p><p id="reference-7">[7]
+<span>
+Dalli, A., Wilks, Y.: Automatic dating of documents and temporal text
+classification. In: Boguraev, B., Muñoz, R., Pustejovsky, J. (eds.)
+Proceedings of the Workshop on Annotating and Reasoning about Time and
+Events. pp. 17–22. Association for Computational Linguistics, Sydney,
+Australia (Jul 2006), <a href="https://aclanthology.org/W06-0903/">https://aclanthology.org/W06-0903/</a>
+</span></p><p id="reference-8">[8]
+<span>
+Davison, J., Feldman, J., Rush, A.M.: Commonsense knowledge mining from
+pretrained models. In: Proceedings of the 2019 conference on empirical
+methods in natural language processing and the 9th international joint
+conference on natural language processing (EMNLP-IJCNLP). pp. 1173–1178
+(2019)
+
+</span></p><p id="reference-9">[9]
+<span>
+{de Jong}, F., Rode, H., Hiemstra, D.: Temporal language models for the
+disclosure of historical text. In: Humanities, computers and cultural
+heritage: Proceedings of the XVIth International Conference of the
+Association for History and Computing (AHC 2005). pp. 161–168. Koninklijke
+Nederlandse Academie van Wetenschappen (Sep 2005), imported from EWI/DB PMS
+[db-utwente:inpr:0000003683]; Humanities, computers and cultural heritage:
+XVIth International Conference of the Association for History and Computing
+(AHC 2005) ; Conference date: 14-09-2005 Through 17-09-2005
+
+</span></p><p id="reference-10">[10]
+<span>
+Demarco, F., de Zarate, J.M.O., Feuerstein, E.: Measuring ideological spectrum
+through nlp. In: NL4AI@ AI* IA (2023)
+
+</span></p><p id="reference-11">[11]
+<span>
+Devlin, J., Chang, M.W., Lee, K., Toutanova, K.: Bert: Pre-training of deep
+bidirectional transformers for language understanding. arXiv preprint
+arXiv:1810.04805 (2018)
+
+</span></p><p id="reference-12">[12]
+<span>
+Eisenstein, J.: Introduction to natural language processing. MIT press (2019)
+
+</span></p><p id="reference-13">[13]
+<span>
+Engels, J., Michaud, E.J., Liao, I., Gurnee, W., Tegmark, M.: Not all language
+model features are one-dimensionally linear. In: The Thirteenth International
+Conference on Learning Representations, ICLR 2025, Singapore, April 24-28,
+2025. OpenReview.net (2025), <a href="https://openreview.net/forum?id=d63a4AM4hb">https://openreview.net/forum?id=d63a4AM4hb</a>
+</span></p><p id="reference-14">[14]
+<span>
+Garg, N., Schiebinger, L., Jurafsky, D., Zou, J.: Word embeddings quantify 100
+years of gender and ethnic stereotypes. Proceedings of the National Academy
+of Sciences <span id="bib.bib14.1">115</span>(16), E3635–E3644 (2018)
+
+</span></p><p id="reference-15">[15]
+<span>
+Gladkova, A., Drozd, A., Matsuoka, S.: Analogy-based detection of morphological
+and semantic relations with word embeddings: what works and what doesn’t.
+In: Proceedings of the NAACL Student Research Workshop. pp. 8–15 (2016)
+
+</span></p><p id="reference-16">[16]
+<span>
+Gurnee, W., Tegmark, M.: Language models represent space and time. arXiv
+preprint arXiv:2310.02207 (2023)
+
+</span></p><p id="reference-17">[17]
+<span>
+Han, X., Zhang, Z., Ding, N., Gu, Y., Liu, X., Huo, Y., Qiu, J., Yao, Y.,
+Zhang, A., Zhang, L., et al.: Pre-trained models: Past, present and future.
+AI Open <span id="bib.bib17.1">2</span>, 225–250 (2021)
+
+</span></p><p id="reference-18">[18]
+<span>
+Jiang, Z., Xu, F.F., Araki, J., Neubig, G.: How can we know what language
+models know? Transactions of the Association for Computational Linguistics
+<span id="bib.bib18.1">8</span>, 423–438 (2020)
+
+</span></p><p id="reference-19">[19]
+<span>
+Kendall, M.G.: A new measure of rank correlation. Biometrika <span id="bib.bib19.1">30</span>(1/2),
+81–93 (1938)
+
+</span></p><p id="reference-20">[20]
+<span>
+Kim, J.K., de Marneffe, M.C.: Deriving adjectival scales from continuous space
+word representations. In: Proceedings of the 2013 Conference on Empirical
+Methods in Natural Language Processing. pp. 1625–1630 (2013)
+
+</span></p><p id="reference-21">[21]
+<span>
+Konkol, M., Brychcín, T., Nykl, M., Hercig, T.: Geographical evaluation
+of word embeddings. In: Kondrak, G., Watanabe, T. (eds.) Proceedings of the
+Eighth International Joint Conference on Natural Language Processing,
+IJCNLP 2017, Taipei, Taiwan, November 27 - December 1, 2017 - Volume 1:
+Long Papers. pp. 224–232. Asian Federation of Natural Language Processing
+(2017), <a href="https://aclanthology.org/I17-1023/">https://aclanthology.org/I17-1023/</a>
+</span></p><p id="reference-22">[22]
+<span>
+Kozlowski, A.C., Taddy, M., Evans, J.A.: The geometry of culture: Analyzing the
+meanings of class through word embeddings. American Sociological Review
+<span id="bib.bib22.1">84</span>(5), 905–949 (2019)
+
+</span></p><p id="reference-23">[23]
+<span>
+Kumar, A., Lease, M., Baldridge, J.: Supervised language modeling for temporal
+resolution of texts. In: Proceedings of the 20th ACM International Conference
+on Information and Knowledge Management. p. 2069–2072. CIKM ’11,
+Association for Computing Machinery, New York, NY, USA (2011).
+https://doi.org/10.1145/2063576.2063892, <a href="https://doi.org/10.1145/2063576.2063892">https://doi.org/10.1145/2063576.2063892</a>
+</span></p><p id="reference-24">[24]
+<span>
+Levy, O., Goldberg, Y.: Linguistic regularities in sparse and explicit word
+representations. In: Proceedings of the eighteenth conference on
+computational natural language learning. pp. 171–180 (2014)
+
+</span></p><p id="reference-25">[25]
+<span>
+Liétard, B., Abdou, M., Søgaard, A.: Do language models know the way to
+rome? arXiv preprint arXiv:2109.07971 (2021)
+
+</span></p><p id="reference-26">[26]
+<span>
+Louwerse, M.M., Benesh, N.: Representing spatial structure through maps and
+language: Lord of the rings encodes the spatial structure of middle earth.
+Cognitive science <span id="bib.bib26.1">36</span>(8), 1556–1569 (2012)
+
+</span></p><p id="reference-27">[27]
+<span>
+Louwerse, M.M., Zwaan, R.A.: Language encodes geographical information.
+Cognitive Science <span id="bib.bib27.1">33</span>(1), 51–73 (2009)
+
+</span></p><p id="reference-28">[28]
+<span>
+Mikolov, T., Chen, K., Corrado, G., Dean, J.: Efficient estimation of word
+representations in vector space. arXiv preprint arXiv:1301.3781 (2013)
+
+</span></p><p id="reference-29">[29]
+<span>
+Mikolov, T., Yih, W.t., Zweig, G.: Linguistic regularities in continuous space
+word representations. In: Proceedings of the 2013 conference of the north
+american chapter of the association for computational linguistics: Human
+language technologies. pp. 746–751 (2013)
+
+</span></p><p id="reference-30">[30]
+<span>
+Minaee, S., Mikolov, T., Nikzad, N., Chenaghlu, M., Socher, R., Amatriain, X.,
+Gao, J.: Large language models: A survey. arXiv preprint arXiv:2402.06196
+(2024)
+
+</span></p><p id="reference-31">[31]
+<span>
+Niculae, V., Zampieri, M., Dinu, L.P., Ciobanu, A.M.: Temporal text ranking and
+automatic dating of texts. In: Proceedings of the 14th Conference of the
+European Chapter of the Association for Computational Linguistics, volume 2:
+Short Papers. pp. 17–21 (2014)
+
+</span></p><p id="reference-32">[32]
+<span>
+Pennington, J., Socher, R., Manning, C.D.: Glove: Global vectors for word
+representation. In: Proceedings of the 2014 conference on empirical methods
+in natural language processing (EMNLP). pp. 1532–1543 (2014)
+
+</span></p><p id="reference-33">[33]
+<span>
+Petroni, F., Rocktäschel, T., Lewis, P., Bakhtin, A., Wu, Y., Miller, A.H.,
+Riedel, S.: Language models as knowledge bases? arXiv preprint
+arXiv:1909.01066 (2019)
+
+</span></p><p id="reference-34">[34]
+<span>
+Purves, R.S., Clough, P., Jones, C.B., Hall, M.H., Murdock, V., et al.:
+Geographic information retrieval: Progress and challenges in spatial search
+of text. Foundations and Trends® in Information Retrieval
+<span id="bib.bib34.1">12</span>(2-3), 164–318 (2018)
+
+</span></p><p id="reference-35">[35]
+<span>
+Qiu, X., Sun, T., Xu, Y., Shao, Y., Dai, N., Huang, X.: Pre-trained models for
+natural language processing: A survey. Science China technological sciences
+<span id="bib.bib35.1">63</span>(10), 1872–1897 (2020)
+
+</span></p><p id="reference-36">[36]
+<span>
+Radford, A., Narasimhan, K., Salimans, T., Sutskever, I., et al.: Improving
+language understanding by generative pre-training (2018)
+
+</span></p><p id="reference-37">[37]
+<span>
+Ray, S.N., Dasgupta, S.S., Talukdar, P.: Ad3: Attentive deep document dater.
+arXiv preprint arXiv:1902.02161 (2019)
+
+</span></p><p id="reference-38">[38]
+<span>
+Reif, J.A., Kunz, F.A., Kugler, K.G., Brodbeck, F.C.: Negotiation contexts: how
+and why they shape women’s and men’s decision to negotiate. Negotiation and
+Conflict Management Research <span id="bib.bib38.1">12</span>(4), 322–342 (2019)
+
+</span></p><p id="reference-39">[39]
+<span>
+Reimers, N., Gurevych, I.: Sentence-bert: Sentence embeddings using siamese
+bert-networks. arXiv preprint arXiv:1908.10084 (2019)
+
+</span></p><p id="reference-40">[40]
+<span>
+Roberts, A., Raffel, C., Shazeer, N.: How much knowledge can you pack into the
+parameters of a language model? arXiv preprint arXiv:2002.08910 (2020)
+
+</span></p><p id="reference-41">[41]
+<span>
+Rosin, G.D., Guy, I., Radinsky, K.: Time masking for temporal language models.
+In: Proceedings of the Fifteenth ACM International Conference on Web Search
+and Data Mining. p. 833–841. WSDM ’22, Association for Computing Machinery,
+New York, NY, USA (2022). https://doi.org/10.1145/3488560.3498529,
+<a href="https://doi.org/10.1145/3488560.3498529">https://doi.org/10.1145/3488560.3498529</a>
+</span></p><p id="reference-42">[42]
+<span>
+Sahoo, P., Singh, A.K., Saha, S., Jain, V., Mondal, S., Chadha, A.: A
+systematic survey of prompt engineering in large language models: Techniques
+and applications. arXiv preprint arXiv:2402.07927 (2024)
+
+</span></p><p id="reference-43">[43]
+<span>
+Tenney, I.: Bert rediscovers the classical nlp pipeline. arXiv preprint
+arXiv:1905.05950 (2019)
+
+</span></p><p id="reference-44">[44]
+<span>
+Vylomova, E., Rimell, L., Cohn, T., Baldwin, T.: Take and took, gaggle and
+goose, book and read: Evaluating the utility of vector differences for
+lexical relation learning. arXiv preprint arXiv:1509.01692 (2015)
+
+</span></p><p id="reference-45">[45]
+<span>
+Waller, I., Anderson, A.: Quantifying social organization and political
+polarization in online platforms. Nature <span id="bib.bib45.1">600</span>(7888), 264–268
+(2021)
+
+</span></p><p id="reference-46">[46]
+<span>
+Wei, J., Tay, Y., Bommasani, R., Raffel, C., Zoph, B., Borgeaud, S., Yogatama,
+D., Bosma, M., Zhou, D., Metzler, D., et al.: Emergent abilities of large
+language models. arXiv preprint arXiv:2206.07682 (2022)
+
+</span></p><p id="reference-47">[47]
+<span>
+Zhao, W.X., Zhou, K., Li, J., Tang, T., Wang, X., Hou, Y., Min, Y., Zhang, B.,
+Zhang, J., Dong, Z., et al.: A survey of large language models. arXiv
+preprint arXiv:2303.18223 (2023)
+
+</span></p><p id="reference-48">[48]
+<span>
+Zhu, Y., Yuan, H., Wang, S., Liu, J., Liu, W., Deng, C., Chen, H., Dou, Z.,
+Wen, J.R.: Large language models for information retrieval: A survey. arXiv
+preprint arXiv:2308.07107 (2023)
+
+</span></p></div><div></div>
+<div></div>
+<div></div>
+</article></body></html>

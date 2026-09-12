@@ -1,0 +1,726 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1" name="viewport"/><title>IDProxy: Cold-Start CTR Prediction for Ads and Recommendation at Xiaohongshu with Multimodal LLMs</title><style>body {
+  max-width: 760px;
+  margin: 2rem auto;
+  padding: 0 1rem;
+  color: #202020;
+  background: #fff;
+  font-family: Georgia, serif;
+  line-height: 1.55;
+}
+a { color: #315f8c; }
+.library-link { margin-bottom: 2rem; }
+img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 1.5rem auto;
+}
+figure { margin: 2rem 0; }
+figcaption, .article-meta { font-size: 0.9em; }
+pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+blockquote {
+  margin-left: 0;
+  padding-left: 1rem;
+  border-left: 3px solid #999;
+}
+math[display="block"] { margin: 1rem auto; overflow-x: auto; }</style><meta content="idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms" name="vrac-slug"/><meta content="arxiv" name="vrac-source-type"/><meta content="https://arxiv.org/abs/2603.01590" name="vrac-source-url"/><meta content="IDProxy: Cold-Start CTR Prediction for Ads and Recommendation at Xiaohongshu with Multimodal LLMs" name="vrac-title"/><meta content="Yubin Zhang, Haiming Xu, Guillaume Salha-Galvan, Ruiyan Han, Feiyang Xiao, Yanhua Huang, Li Lin, Yang Luo, Yao Hu" name="vrac-author"/><meta content="arXiv:2603.01590v1" name="vrac-publication"/><meta content="02 Mar 2026" name="vrac-published"/><meta content="35ac68a2f55b43a7b586921f5cdb4dc7aa1886609d5caa0998878df3af9e437d" name="vrac-content-sha256"/></head><body><p class="library-link"><a href="https://theopinard.github.io/vrac/">All articles</a></p><article><h1>IDProxy: Cold-Start CTR Prediction for Ads and Recommendation at Xiaohongshu with Multimodal LLMs</h1><p class="article-meta">Yubin Zhang, Haiming Xu, Guillaume Salha-Galvan, Ruiyan Han, Feiyang Xiao, Yanhua Huang, Li Lin, Yang Luo, Yao Hu · arXiv:2603.01590v1 · 02 Mar 2026</p><p class="article-meta">Original: <a href="https://arxiv.org/html/2603.01590v1">arXiv HTML</a> · <a href="https://arxiv.org/pdf/2603.01590v1">PDF</a></p>
+<span><span><span><span>Conference: </span>;  </span><span>;</span><span><span>Conference: </span>Under review for publication; 2026; 2026</span><span>This paper is under review for publication</span><span><span>CCS: </span>Information systems Recommender systems</span><span><span>CCS: </span>Information systems Personalization</span></span></span>
+<div id="abstract1"><h2>Abstract</h2>
+<p id="abstract1.1">Click-through rate (CTR) models in advertising and recommendation systems rely heavily on item ID embeddings, which struggle in item cold-start settings. We present IDProxy, a solution that leverages multimodal large language models (MLLMs) to generate proxy embeddings from rich content signals, enabling effective CTR prediction for new items without usage data. These proxies are explicitly aligned with the existing ID embedding space and are optimized end-to-end under CTR objectives together with the ranking model, allowing seamless integration into existing large-scale ranking pipelines. Offline experiments and online A/B tests demonstrate the effectiveness of IDProxy, which has been successfully deployed in both Content Feed and Display Ads features of Xiaohongshu’s Explore Feed, serving hundreds of millions of users daily.</p>
+</div>
+<div>
+<h6>Keywords: </h6>CTR Prediction, Cold Start Recommendation, Multimodal LLM.
+</div>
+<section id="S1">
+<h2><span>1. </span>Introduction</h2>
+<div id="S1.p1">
+<p id="S1.p1.1">Xiaohongshu<span id="footnote1"><sup>1</sup><span><span><sup>1</sup>
+<span>1</span>
+<a href="https://www.xiaohongshu.com/explore">https://www.xiaohongshu.com/explore</a></span></span></span>, also known as RedNote, is a leading content-driven platform with over 300 million monthly active users as of 2025. The service integrates social networking, content discovery, and e-commerce, with users primarily engaging in short videos and posts across a wide range of topics.
+To manage the massive volume of content, Xiaohongshu relies on large-scale recommendation systems, which are critical for user engagement and retention (<a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#reference-39">Zhang et al., 2019</a>; <a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#reference-4">Briand et al., 2021</a>; <a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#reference-13">Li et al., 2024a</a>), and also delivers personalized advertisements.</p>
+</div>
+<div id="S1.p2">
+<p id="S1.p2.1">Both recommendation and advertising at Xiaohongshu leverage click-through rate (CTR) prediction models to rank items (posts or ads) for each user (<a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#reference-20">McMahan et al., 2013</a>; <a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#reference-45">Zhou et al., 2018</a>; <a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#reference-41">Zhang et al., 2021</a>). These models predominantly rely on item ID embeddings capturing collaborative signals (<a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#reference-41">Zhang et al., 2021</a>; <a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#reference-23">Papadakis et al., 2022</a>), which nonetheless require sufficient interaction history and thus struggle with new items. This issue, known as the item cold-start problem (<a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#reference-40">Zhang et al., 2025a</a>; <a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#reference-42">Zhang et al., 2025d</a>; <a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#reference-32">Wang et al., 2024</a>), is particularly severe on Xiaohongshu, where large volumes of items are continuously uploaded and must be served immediately to ensure a high-quality user experience.</p>
+</div>
+<div id="S1.p3">
+<p id="S1.p3.1">Exploiting multimodal content signals such as text and images describing items has emerged as an effective way to learn embeddings without interaction data (<a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#reference-40">Zhang et al., 2025a</a>; <a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#reference-16">Lopez-Avila and Du, 2025</a>; <a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#reference-22">Pan et al., 2022</a>). However, integrating such embeddings into existing ID-centric CTR models in industrial settings remains challenging. As discussed in Section <a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#S2"><span>2</span></a>, a key difficulty lies in the mismatch between multimodal semantic representations and the collaborative embedding space of CTR systems, together with the need to reuse their mature architectures and avoid additional deployment costs. This raises a fundamental question: how can we design an alignment mechanism that bridges multimodal semantic representations and collaborative ID embeddings while maximally reusing existing ID knowledge and structural priors?</p>
+</div>
+<div id="S1.p4">
+<p id="S1.p4.1">This paper introduces IDProxy, a production-scale system to address these challenges. IDProxy leverages multimodal large language models (MLLMs) (<a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#reference-36">Ye et al., 2025</a>; <a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#reference-6">Chen et al., 2024</a>) to generate proxy item embeddings from rich content signals for cold-start CTR prediction. Through a lightweight coarse-to-fine mechanism, these proxies are explicitly aligned with the existing item ID embedding space and optimized end-to-end under CTR objectives jointly with the ranking model, enabling seamless reuse of its architecture and continual evolution in production pipelines. We demonstrate the effectiveness of IDProxy through offline experiments and online A/B tests. IDProxy now powers both Content Feed and Display Ads on Xiaohongshu’s Explore Feed, serving hundreds of millions of users daily.</p>
+</div>
+<div id="S1.p5">
+<p id="S1.p5.1">The remainder of this paper is organized as follows. Section <a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#S2"><span>2</span></a> first formally introduces our problem and reviews related work. Section <a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#S3"><span>3</span></a> then presents our IDProxy method for proxy item embedding learning with MLLMs. Section <a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#S4"><span>4</span></a> reports our experimental results on Xiaohongshu data, and Section <a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#S5"><span>5</span></a> concludes.</p>
+</div>
+</section>
+<section id="S2">
+<h2><span>2. </span>Preliminaries</h2>
+<div id="S2.p1">
+<p id="S2.p1.1">We begin this section with a formal definition of the problem addressed in this paper, followed by a discussion of related work.</p>
+</div>
+<section id="S2.SS1">
+<h3><span>2.1. </span>Problem Formulation</h3>
+<div id="S2.SS1.p1">
+<p id="S2.SS1.p1.1">We consider a set <math alttext="\mathcal{U}" class="ltx_Math" display="inline" id="S2.SS1.p1.m1" intent=":literal"><semantics><mi class="ltx_font_mathcaligraphic">𝒰</mi><annotation encoding="application/x-tex">\mathcal{U}</annotation></semantics></math> of users and a set <math alttext="\mathcal{I}" class="ltx_Math" display="inline" id="S2.SS1.p1.m2" intent=":literal"><semantics><mi class="ltx_font_mathcaligraphic">ℐ</mi><annotation encoding="application/x-tex">\mathcal{I}</annotation></semantics></math> of items on an online service. Each user-item sample is represented as a tuple <math alttext="(u,i,\mathbf{x}_{ui})" class="ltx_Math" display="inline" id="S2.SS1.p1.m3" intent=":literal"><semantics><mrow><mo stretchy="false">(</mo><mi>u</mi><mo>,</mo><mi>i</mi><mo>,</mo><msub><mi>𝐱</mi><mrow><mi>u</mi><mo lspace="0em" rspace="0em">​</mo><mi>i</mi></mrow></msub><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">(u,i,\mathbf{x}_{ui})</annotation></semantics></math>, where <math alttext="u\in\mathcal{U}" class="ltx_Math" display="inline" id="S2.SS1.p1.m4" intent=":literal"><semantics><mrow><mi>u</mi><mo>∈</mo><mi class="ltx_font_mathcaligraphic">𝒰</mi></mrow><annotation encoding="application/x-tex">u\in\mathcal{U}</annotation></semantics></math> is the user ID, <math alttext="i\in\mathcal{I}" class="ltx_Math" display="inline" id="S2.SS1.p1.m5" intent=":literal"><semantics><mrow><mi>i</mi><mo>∈</mo><mi class="ltx_font_mathcaligraphic">ℐ</mi></mrow><annotation encoding="application/x-tex">i\in\mathcal{I}</annotation></semantics></math> is the item ID, and <math alttext="\mathbf{x}_{ui}" class="ltx_Math" display="inline" id="S2.SS1.p1.m6" intent=":literal"><semantics><msub><mi>𝐱</mi><mrow><mi>u</mi><mo lspace="0em" rspace="0em">​</mo><mi>i</mi></mrow></msub><annotation encoding="application/x-tex">\mathbf{x}_{ui}</annotation></semantics></math> denotes contextual features such as user profiles, item attributes, and interaction history.
+For each such sample, a CTR model <math alttext="f_{\theta}" class="ltx_Math" display="inline" id="S2.SS1.p1.m7" intent=":literal"><semantics><msub><mi>f</mi><mi>θ</mi></msub><annotation encoding="application/x-tex">f_{\theta}</annotation></semantics></math> predicts the probability that user <math alttext="u" class="ltx_Math" display="inline" id="S2.SS1.p1.m8" intent=":literal"><semantics><mi>u</mi><annotation encoding="application/x-tex">u</annotation></semantics></math> clicks on item <math alttext="i" class="ltx_Math" display="inline" id="S2.SS1.p1.m9" intent=":literal"><semantics><mi>i</mi><annotation encoding="application/x-tex">i</annotation></semantics></math> as <math alttext="\hat{y}_{ui}=f_{\theta}(\mathbf{e}_{u},\mathbf{e}_{i},\mathbf{x}_{ui})\in[0,1]" class="ltx_Math" display="inline" id="S2.SS1.p1.m10" intent=":literal"><semantics><mrow><msub><mover accent="true"><mi>y</mi><mo>^</mo></mover><mrow><mi>u</mi><mo lspace="0em" rspace="0em">​</mo><mi>i</mi></mrow></msub><mo>=</mo><mrow><msub><mi>f</mi><mi>θ</mi></msub><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><msub><mi>𝐞</mi><mi>u</mi></msub><mo>,</mo><msub><mi>𝐞</mi><mi>i</mi></msub><mo>,</mo><msub><mi>𝐱</mi><mrow><mi>u</mi><mo lspace="0em" rspace="0em">​</mo><mi>i</mi></mrow></msub><mo stretchy="false">)</mo></mrow></mrow><mo>∈</mo><mrow><mo stretchy="false">[</mo><mrow><mn>0</mn><mo>,</mo><mn>1</mn></mrow><mo stretchy="false">]</mo></mrow></mrow><annotation encoding="application/x-tex">\hat{y}_{ui}=f_{\theta}(\mathbf{e}_{u},\mathbf{e}_{i},\mathbf{x}_{ui})\in[0,1]</annotation></semantics></math>,
+where <math alttext="\mathbf{e}_{u}\in\mathbb{R}^{d}" class="ltx_Math" display="inline" id="S2.SS1.p1.m11" intent=":literal"><semantics><mrow><msub><mi>𝐞</mi><mi>u</mi></msub><mo>∈</mo><msup><mi>ℝ</mi><mi>d</mi></msup></mrow><annotation encoding="application/x-tex">\mathbf{e}_{u}\in\mathbb{R}^{d}</annotation></semantics></math> and <math alttext="\mathbf{e}_{i}\in\mathbb{R}^{d}" class="ltx_Math" display="inline" id="S2.SS1.p1.m12" intent=":literal"><semantics><mrow><msub><mi>𝐞</mi><mi>i</mi></msub><mo>∈</mo><msup><mi>ℝ</mi><mi>d</mi></msup></mrow><annotation encoding="application/x-tex">\mathbf{e}_{i}\in\mathbb{R}^{d}</annotation></semantics></math> denote learnable <math alttext="d" class="ltx_Math" display="inline" id="S2.SS1.p1.m13" intent=":literal"><semantics><mi>d</mi><annotation encoding="application/x-tex">d</annotation></semantics></math>-dimensional user and item ID embeddings, respectively, and <math alttext="\theta" class="ltx_Math" display="inline" id="S2.SS1.p1.m14" intent=":literal"><semantics><mi>θ</mi><annotation encoding="application/x-tex">\theta</annotation></semantics></math> denotes the model’s parameters. These predictions are then used to rank items for recommendation.</p>
+</div>
+<div id="S2.SS1.p2">
+<p id="S2.SS1.p2.1">We focus on the cold-start setting, where new items lack sufficient interaction history, leading to poorly trained item ID embeddings <math alttext="\mathbf{e}_{i}" class="ltx_Math" display="inline" id="S2.SS1.p2.m1" intent=":literal"><semantics><msub><mi>𝐞</mi><mi>i</mi></msub><annotation encoding="application/x-tex">\mathbf{e}_{i}</annotation></semantics></math> (<a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#reference-40">Zhang et al., 2025a</a>; <a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#reference-46">Zhou et al., 2023</a>). However, these items are associated with rich multimodal content, such as images and textual descriptions. Our goal is to exploit this content to learn item proxy embeddings <math alttext="\mathbf{p}_{i}\in\mathbb{R}^{d}" class="ltx_Math" display="inline" id="S2.SS1.p2.m2" intent=":literal"><semantics><mrow><msub><mi>𝐩</mi><mi>i</mi></msub><mo>∈</mo><msup><mi>ℝ</mi><mi>d</mi></msup></mrow><annotation encoding="application/x-tex">\mathbf{p}_{i}\in\mathbb{R}^{d}</annotation></semantics></math> that encode informative semantics and are well aligned with the distribution of existing item ID embeddings, such that <math alttext="\mathbf{p}_{i}" class="ltx_Math" display="inline" id="S2.SS1.p2.m3" intent=":literal"><semantics><msub><mi>𝐩</mi><mi>i</mi></msub><annotation encoding="application/x-tex">\mathbf{p}_{i}</annotation></semantics></math> can be seamlessly substituted for <math alttext="\mathbf{e}_{i}" class="ltx_Math" display="inline" id="S2.SS1.p2.m4" intent=":literal"><semantics><msub><mi>𝐞</mi><mi>i</mi></msub><annotation encoding="application/x-tex">\mathbf{e}_{i}</annotation></semantics></math> in the existing CTR model.</p>
+</div>
+</section>
+<section id="S2.SS2">
+<h3><span>2.2. </span>Related Work</h3>
+<div id="S2.SS2.p1">
+<p id="S2.SS2.p1.1">Cold-start issues have been widely studied in recent years (<a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#reference-4">Briand et al., 2021</a>; <a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#reference-24">Salha-Galvan et al., 2021</a>; <a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#reference-9">Jangid and Kumar, 2025</a>; <a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#reference-29">Smith and Linden, 2017</a>; <a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#reference-31">Wang et al., 2018</a>; <a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#reference-30">Volkovs et al., 2017</a>; <a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#reference-46">Zhou et al., 2023</a>; <a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#reference-32">Wang et al., 2024</a>; <a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#reference-8">Huang et al., 2025</a>; <a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#reference-35">Xu et al., 2022</a>; <a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#reference-21">Pan et al., 2019</a>). We refer to recent surveys (<a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#reference-40">Zhang et al., 2025a</a>; <a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#reference-13">Li et al., 2024a</a>; <a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#reference-39">Zhang et al., 2019</a>; <a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#reference-9">Jangid and Kumar, 2025</a>) for comprehensive reviews and focus here on work most closely related to our problem formulation. Aligning multimodal content representations with collaborative embeddings for CTR-based ranking remains challenging. Recent methods such as QARM (<a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#reference-18">Luo et al., 2025</a>), MOON (<a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#reference-38">Zhang et al., 2025b</a>), and SimTier&amp;Maker (<a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#reference-25">Sheng et al., 2024</a>) align co-occurrence structures across modalities, followed by dense feature quantization or auxiliary CTR-related training. While effective in some settings, these approaches rely on manually designed alignment objectives and often require substantial experimentation to ensure compatibility with existing CTR models. Moreover, they do not fully exploit the architectures and distributional properties of pre-existing ranking models, resulting in limited gains and increased deployment complexity.</p>
+</div>
+<div id="S2.SS2.p2">
+<p id="S2.SS2.p2.1">Another line of work maps content directly to collaborative embeddings, typically using multi-layer perceptrons (MLPs). Representative examples include CB2CF (<a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#reference-2">Barkan et al., 2019</a>) and CLCRec (<a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#reference-33">Wei et al., 2021</a>), which employ regression or contrastive objectives, as well as generative approaches such as GoRec (<a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#reference-1">Bai et al., 2023</a>) and GAR (<a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#reference-5">Chen et al., 2022</a>). However, these methods face limitations in industrial CTR systems. As shown in Figure <a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#S2.F1"><span>1</span></a>, ID embeddings learned on public benchmarks such as MovieLens (<a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#reference-7">Harper and Konstan, 2015</a>) exhibit clear cluster-like semantic structures, making alignment with content features comparatively easier. In contrast, industrial ID embeddings often exhibit irregular, non-clustered distributions due to feature sparsity and complex interaction patterns (<a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#reference-44">Zhang et al., 2022</a>). In such settings, frozen content encoders, or shallow MLP mappings are often insufficient to bridge heterogeneous spaces. More broadly, generating item ID proxies that remain aligned with evolving real-world CTR models raises additional challenges, including learning against static targets in continuously updated systems and failing to reuse the ranking model’s evolving structure, which limits long-term optimization and stable deployment.</p>
+</div>
+<div id="S2.SS2.p3">
+<p id="S2.SS2.p3.1">Finally, recent advances in large language models (LLMs) and multimodal LLMs (MLLMs) open new opportunities for cold-start recommendation (<a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#reference-34">Wu et al., 2024</a>; <a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#reference-40">Zhang et al., 2025a</a>; <a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#reference-12">Li et al., 2024b</a>; <a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#reference-42">Zhang et al., 2025d</a>; <a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#reference-32">Wang et al., 2024</a>; <a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#reference-8">Huang et al., 2025</a>; <a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#reference-43">Zhang et al., 2025c</a>). Beyond final-layer outputs, intermediate hidden representations have been shown to capture richer and more transferable semantic information (<a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#reference-14">Liu et al., 2019</a>; <a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#reference-26">Shwartz-Ziv and Tishby, 2017</a>; <a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#reference-28">Skean et al., 2025</a>), generalize better to downstream tasks (<a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#reference-27">Skean et al., 2024</a>; <a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#reference-28">Skean et al., 2025</a>) and even sometimes benefit from discarding deeper layers (<a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#reference-3">Bordes et al., 2022</a>). These findings motivate leveraging multi-layer MLLM hidden representations to extract finer-grained content features for cold-start recommendation.</p>
+</div>
+<figure id="S2.F1"><img alt="Refer to caption" height="230" src="https://arxiv.org/html/2603.01590v1/vis_acedamic_v2.png" width="236"/><img alt="Refer to caption" height="228" src="https://arxiv.org/html/2603.01590v1/rec_dim_64_anonymous_5k_v2.png" width="236"/><figcaption><span><span id="S2.F1.5">Figure 1</span>. </span><span id="S2.F1.6">Visualizing item ID embeddings using t-SNE (<a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#reference-19">Maaten and Hinton, 2008</a>). Left: MovieLens-1M embeddings learned by SASRec (<a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#reference-10">Kang and McAuley, 2018</a>) with feature crossing. Right: production embeddings from Xiaohongshu. Colors indicate item genres (<span id="S2.F1.6.1">"adventure"</span>, <span id="S2.F1.6.2">"sci-fi"</span>,…).</span><span id="acmlabel1">cluster visualization of different item ID embedding dataset</span></figcaption></figure>
+</section>
+</section>
+<section id="S3">
+<h2><span>3. </span>IDProxy: Proxy ID Embeddings with MLLMs</h2>
+<figure id="S3.F2"><img alt="The overall framework of out method" height="150" src="https://arxiv.org/html/2603.01590v1/frame_v9.png" width="433"/><figcaption><span><span id="S3.F2.3">Figure 2</span>. </span><span id="S3.F2.4">Overview of IDProxy’s two-stage coarse-to-fine alignment framework, used on Xiaohongshu’s Explore Feed (left).</span><span id="acmlabel2">The overall framework of out method</span></figcaption></figure>
+<div id="S3.p1">
+<p id="S3.p1.1">This section introduces our IDProxy method which, as illustrated in Figure <a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#S3.F2"><span>2</span></a>, consists of (i) an MLLM-based coarse proxy generation stage and (ii) an end-to-end alignment stage that refines these proxies using MLLM hidden states jointly with the CTR ranker, all while reusing its core architecture. This coarse-to-fine paradigm aligns proxy and item ID embeddings in a unified space, mitigating distributional discrepancies and enabling reuse of the ranker’s feature and structural priors.</p>
+</div>
+<section id="S3.SS1">
+<h3><span>3.1. </span>Stage 1: MLLM-based Proxy Generation</h3>
+<div id="S3.SS1.p1">
+<p id="S3.SS1.p1.1">Rather than simple MLP mappings, Stage 1 leverages an MLLM to learn proxy embeddings for cold-start items, approximating the CTR model’s ID embedding distribution via contrastive learning.</p>
+</div>
+<section id="S3.SS1.SSS1">
+<h4><span>3.1.1. </span>ID Embedding Preprocessing</h4>
+<div id="S3.SS1.SSS1.p1">
+<p id="S3.SS1.SSS1.p1.1">Let <math alttext="\mathbf{e}_{i}^{\text{raw}}\in\mathbb{R}^{d}" class="ltx_Math" display="inline" id="S3.SS1.SSS1.p1.m1" intent=":literal"><semantics><mrow><msubsup><mi>𝐞</mi><mi>i</mi><mtext>raw</mtext></msubsup><mo>∈</mo><msup><mi>ℝ</mi><mi>d</mi></msup></mrow><annotation encoding="application/x-tex">\mathbf{e}_{i}^{\text{raw}}\in\mathbb{R}^{d}</annotation></semantics></math> denote the ID embedding of item <math alttext="i\in\mathcal{I}" class="ltx_Math" display="inline" id="S3.SS1.SSS1.p1.m2" intent=":literal"><semantics><mrow><mi>i</mi><mo>∈</mo><mi class="ltx_font_mathcaligraphic">ℐ</mi></mrow><annotation encoding="application/x-tex">i\in\mathcal{I}</annotation></semantics></math> learned by the online CTR model. As many items receive limited interactions in industrial systems (<a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#reference-31">Wang et al., 2018</a>), we apply a frequency threshold <math alttext="\tau" class="ltx_Math" display="inline" id="S3.SS1.SSS1.p1.m3" intent=":literal"><semantics><mi>τ</mi><annotation encoding="application/x-tex">\tau</annotation></semantics></math> to filter out items updated fewer than <math alttext="\tau" class="ltx_Math" display="inline" id="S3.SS1.SSS1.p1.m4" intent=":literal"><semantics><mi>τ</mi><annotation encoding="application/x-tex">\tau</annotation></semantics></math> times, ensuring reliable alignment targets. Moreover, since embedding magnitude often correlates with item popularity, we apply <math alttext="\ell_{2}" class="ltx_Math" display="inline" id="S3.SS1.SSS1.p1.m5" intent=":literal"><semantics><msub><mi mathvariant="normal">ℓ</mi><mn>2</mn></msub><annotation encoding="application/x-tex">\ell_{2}</annotation></semantics></math> normalization to remove magnitude-induced bias and stabilize alignment learning (<a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#reference-11">Kim et al., 2023</a>):
+<math alttext="\mathbf{e}_{i}=\mathbf{e}_{i}^{\text{raw}}/\|\mathbf{e}_{i}^{\text{raw}}\|_{2}\in\mathbb{R}^{d}." class="ltx_Math" display="inline" id="S3.SS1.SSS1.p1.m6" intent=":literal"><semantics><mrow><mrow><msub><mi>𝐞</mi><mi>i</mi></msub><mo>=</mo><mrow><msubsup><mi>𝐞</mi><mi>i</mi><mtext>raw</mtext></msubsup><mo>/</mo><msub><mrow><mo stretchy="false">‖</mo><msubsup><mi>𝐞</mi><mi>i</mi><mtext>raw</mtext></msubsup><mo stretchy="false">‖</mo></mrow><mn>2</mn></msub></mrow><mo>∈</mo><msup><mi>ℝ</mi><mi>d</mi></msup></mrow><mo lspace="0em">.</mo></mrow><annotation encoding="application/x-tex">\mathbf{e}_{i}=\mathbf{e}_{i}^{\text{raw}}/\|\mathbf{e}_{i}^{\text{raw}}\|_{2}\in\mathbb{R}^{d}.</annotation></semantics></math></p>
+</div>
+</section>
+<section id="S3.SS1.SSS2">
+<h4><span>3.1.2. </span>MLLM-Based Multimodal Encoding</h4>
+<div id="S3.SS1.SSS2.p1">
+<p id="S3.SS1.SSS2.p1.1">Each item <math alttext="i" class="ltx_Math" display="inline" id="S3.SS1.SSS2.p1.m1" intent=":literal"><semantics><mi>i</mi><annotation encoding="application/x-tex">i</annotation></semantics></math> has multimodal content, including text and images. We use an MLLM <math alttext="M" class="ltx_Math" display="inline" id="S3.SS1.SSS2.p1.m2" intent=":literal"><semantics><mi>M</mi><annotation encoding="application/x-tex">M</annotation></semantics></math> as the content encoder with the following input for proxy generation:</p>
+</div>
+<div id="S3.SS1.SSS2.p2">
+<p id="S3.SS1.SSS2.p2.1">
+<span id="S3.SS1.SSS2.p2.1.1">
+<span id="S3.SS1.SSS2.p2.1.1.1"><span id="S3.SS1.SSS2.p2.1.1.1.1">Prompt:</span></span>
+<span id="S3.SS1.SSS2.p2.1.1.2">[BOS]&lt;image&gt;&lt;text&gt;The compression
+word is:"[EMB]". [EOS]</span>
+</span>
+where [BOS], [EOS] and [EMB] are special tokens, while &lt;image&gt; and &lt;text&gt; are placeholders replaced with content.</p>
+</div>
+<div id="S3.SS1.SSS2.p3">
+<p id="S3.SS1.SSS2.p3.1">We use the final token-level hidden states <math alttext="\mathbf{H}_{i}\in\mathbb{R}^{T\times D}" class="ltx_Math" display="inline" id="S3.SS1.SSS2.p3.m1" intent=":literal"><semantics><mrow><msub><mi>𝐇</mi><mi>i</mi></msub><mo>∈</mo><msup><mi>ℝ</mi><mrow><mi>T</mi><mo lspace="0.222em" rspace="0.222em">×</mo><mi>D</mi></mrow></msup></mrow><annotation encoding="application/x-tex">\mathbf{H}_{i}\in\mathbb{R}^{T\times D}</annotation></semantics></math> to construct a content embedding <math alttext="\mathbf{z}_{i}=g(\mathbf{H}_{i})\in\mathbb{R}^{D}" class="ltx_Math" display="inline" id="S3.SS1.SSS2.p3.m2" intent=":literal"><semantics><mrow><msub><mi>𝐳</mi><mi>i</mi></msub><mo>=</mo><mrow><mi>g</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><msub><mi>𝐇</mi><mi>i</mi></msub><mo stretchy="false">)</mo></mrow></mrow><mo>∈</mo><msup><mi>ℝ</mi><mi>D</mi></msup></mrow><annotation encoding="application/x-tex">\mathbf{z}_{i}=g(\mathbf{H}_{i})\in\mathbb{R}^{D}</annotation></semantics></math> for item <math alttext="i" class="ltx_Math" display="inline" id="S3.SS1.SSS2.p3.m3" intent=":literal"><semantics><mi>i</mi><annotation encoding="application/x-tex">i</annotation></semantics></math>, where <math alttext="g(\cdot)" class="ltx_Math" display="inline" id="S3.SS1.SSS2.p3.m4" intent=":literal"><semantics><mrow><mi>g</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mo lspace="0em" rspace="0em">⋅</mo><mo stretchy="false">)</mo></mrow></mrow><annotation encoding="application/x-tex">g(\cdot)</annotation></semantics></math> is an attention-based aggregation over tokens, including [EMB]. Then, <math alttext="\mathbf{z}_{i}" class="ltx_Math" display="inline" id="S3.SS1.SSS2.p3.m5" intent=":literal"><semantics><msub><mi>𝐳</mi><mi>i</mi></msub><annotation encoding="application/x-tex">\mathbf{z}_{i}</annotation></semantics></math> is projected into the ID embedding space by an MLP <math alttext="\phi" class="ltx_Math" display="inline" id="S3.SS1.SSS2.p3.m6" intent=":literal"><semantics><mi>ϕ</mi><annotation encoding="application/x-tex">\phi</annotation></semantics></math> followed by <math alttext="\ell_{2}" class="ltx_Math" display="inline" id="S3.SS1.SSS2.p3.m7" intent=":literal"><semantics><msub><mi mathvariant="normal">ℓ</mi><mn>2</mn></msub><annotation encoding="application/x-tex">\ell_{2}</annotation></semantics></math> normalization: <math alttext="\tilde{\mathbf{h}}_{i}=\phi(\mathbf{z}_{i})/\|\phi(\mathbf{z}_{i})\|_{2}\in\mathbb{R}^{d}." class="ltx_Math" display="inline" id="S3.SS1.SSS2.p3.m8" intent=":literal"><semantics><mrow><mrow><msub><mover accent="true"><mi>𝐡</mi><mo>~</mo></mover><mi>i</mi></msub><mo>=</mo><mrow><mrow><mi>ϕ</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><msub><mi>𝐳</mi><mi>i</mi></msub><mo stretchy="false">)</mo></mrow></mrow><mo>/</mo><msub><mrow><mo stretchy="false">‖</mo><mrow><mi>ϕ</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><msub><mi>𝐳</mi><mi>i</mi></msub><mo stretchy="false">)</mo></mrow></mrow><mo stretchy="false">‖</mo></mrow><mn>2</mn></msub></mrow><mo>∈</mo><msup><mi>ℝ</mi><mi>d</mi></msup></mrow><mo lspace="0em">.</mo></mrow><annotation encoding="application/x-tex">\tilde{\mathbf{h}}_{i}=\phi(\mathbf{z}_{i})/\|\phi(\mathbf{z}_{i})\|_{2}\in\mathbb{R}^{d}.</annotation></semantics></math></p>
+</div>
+</section>
+<section id="S3.SS1.SSS3">
+<h4><span>3.1.3. </span>Proxy Alignment</h4>
+<div id="S3.SS1.SSS3.p1">
+<p id="S3.SS1.SSS3.p1.1">For training, we adopt a contrastive objective that pulls <math alttext="\tilde{\mathbf{h}}_{i}" class="ltx_Math" display="inline" id="S3.SS1.SSS3.p1.m1" intent=":literal"><semantics><msub><mover accent="true"><mi>𝐡</mi><mo>~</mo></mover><mi>i</mi></msub><annotation encoding="application/x-tex">\tilde{\mathbf{h}}_{i}</annotation></semantics></math> toward its corresponding ID embedding <math alttext="\mathbf{e}_{i}" class="ltx_Math" display="inline" id="S3.SS1.SSS3.p1.m2" intent=":literal"><semantics><msub><mi>𝐞</mi><mi>i</mi></msub><annotation encoding="application/x-tex">\mathbf{e}_{i}</annotation></semantics></math>, while pushing it away from other item embeddings. Given a mini-batch <math alttext="\mathcal{B}" class="ltx_Math" display="inline" id="S3.SS1.SSS3.p1.m3" intent=":literal"><semantics><mi class="ltx_font_mathcaligraphic">ℬ</mi><annotation encoding="application/x-tex">\mathcal{B}</annotation></semantics></math>, we treat <math alttext="(\tilde{\mathbf{h}}_{i},\mathbf{e}_{i})" class="ltx_Math" display="inline" id="S3.SS1.SSS3.p1.m4" intent=":literal"><semantics><mrow><mo stretchy="false">(</mo><msub><mover accent="true"><mi>𝐡</mi><mo>~</mo></mover><mi>i</mi></msub><mo>,</mo><msub><mi>𝐞</mi><mi>i</mi></msub><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">(\tilde{\mathbf{h}}_{i},\mathbf{e}_{i})</annotation></semantics></math> as a positive pair and <math alttext="(\tilde{\mathbf{h}}_{i},\mathbf{e}_{j})" class="ltx_Math" display="inline" id="S3.SS1.SSS3.p1.m5" intent=":literal"><semantics><mrow><mo stretchy="false">(</mo><msub><mover accent="true"><mi>𝐡</mi><mo>~</mo></mover><mi>i</mi></msub><mo>,</mo><msub><mi>𝐞</mi><mi>j</mi></msub><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">(\tilde{\mathbf{h}}_{i},\mathbf{e}_{j})</annotation></semantics></math> for <math alttext="j\neq i" class="ltx_Math" display="inline" id="S3.SS1.SSS3.p1.m6" intent=":literal"><semantics><mrow><mi>j</mi><mo>≠</mo><mi>i</mi></mrow><annotation encoding="application/x-tex">j\neq i</annotation></semantics></math> as in-batch negatives. We define the Proxy Alignment Loss <math alttext="\mathcal{L}_{\mathrm{PAL}}" class="ltx_Math" display="inline" id="S3.SS1.SSS3.p1.m7" intent=":literal"><semantics><msub><mi class="ltx_font_mathcaligraphic">ℒ</mi><mi>PAL</mi></msub><annotation encoding="application/x-tex">\mathcal{L}_{\mathrm{PAL}}</annotation></semantics></math> as:</p>
+<p><math alttext="\mathcal{L}_{\text{PAL}}=-\frac{1}{|\mathcal{B}|}\sum_{i\in\mathcal{B}}\log\frac{\exp\left(\tilde{\mathbf{h}}_{i}^{\top}\mathbf{e}_{i}/\tau_{c}\right)}{\sum_{j\in\mathcal{B}}\exp\left(\tilde{\mathbf{h}}_{i}^{\top}\mathbf{e}_{j}/\tau_{c}\right)}," class="ltx_math_unparsed" display="block" id="S3.E1.m1" intent=":literal"><semantics><mrow><mi class="ltx_font_mathcaligraphic">ℒ</mi><msub><mrow></mrow><mtext>PAL</mtext></msub><mo rspace="0em">=</mo><mo lspace="0em">−</mo><mfrac><mn>1</mn><mrow><mo stretchy="false">|</mo><mi class="ltx_font_mathcaligraphic">ℬ</mi><mo stretchy="false">|</mo></mrow></mfrac><mo movablelimits="false">∑</mo><msub><mrow></mrow><mrow><mi>i</mi><mo>∈</mo><mi class="ltx_font_mathcaligraphic">ℬ</mi></mrow></msub><mi>log</mi><mfrac><mrow><mi>exp</mi><mo>⁡</mo><mrow><mo>(</mo><mrow><mrow><msubsup><mover accent="true"><mi>𝐡</mi><mo>~</mo></mover><mi>i</mi><mo>⊤</mo></msubsup><mo lspace="0em" rspace="0em">​</mo><msub><mi>𝐞</mi><mi>i</mi></msub></mrow><mo>/</mo><msub><mi>τ</mi><mi>c</mi></msub></mrow><mo>)</mo></mrow></mrow><mrow><msub><mo>∑</mo><mrow><mi>j</mi><mo>∈</mo><mi class="ltx_font_mathcaligraphic">ℬ</mi></mrow></msub><mrow><mi>exp</mi><mo>⁡</mo><mrow><mo>(</mo><mrow><mrow><msubsup><mover accent="true"><mi>𝐡</mi><mo>~</mo></mover><mi>i</mi><mo>⊤</mo></msubsup><mo lspace="0em" rspace="0em">​</mo><msub><mi>𝐞</mi><mi>j</mi></msub></mrow><mo>/</mo><msub><mi>τ</mi><mi>c</mi></msub></mrow><mo>)</mo></mrow></mrow></mrow></mfrac><mo>,</mo></mrow><annotation encoding="application/x-tex">\mathcal{L}_{\text{PAL}}=-\frac{1}{|\mathcal{B}|}\sum_{i\in\mathcal{B}}\log\frac{\exp\left(\tilde{\mathbf{h}}_{i}^{\top}\mathbf{e}_{i}/\tau_{c}\right)}{\sum_{j\in\mathcal{B}}\exp\left(\tilde{\mathbf{h}}_{i}^{\top}\mathbf{e}_{j}/\tau_{c}\right)},</annotation></semantics></math> (1)</p>
+<p id="S3.SS1.SSS3.p1.2">for some temperature <math alttext="\tau_{c}&gt;0" class="ltx_Math" display="inline" id="S3.SS1.SSS3.p1.m8" intent=":literal"><semantics><mrow><msub><mi>τ</mi><mi>c</mi></msub><mo>&gt;</mo><mn>0</mn></mrow><annotation encoding="application/x-tex">\tau_{c}&gt;0</annotation></semantics></math>. Parameters of <math alttext="M" class="ltx_Math" display="inline" id="S3.SS1.SSS3.p1.m9" intent=":literal"><semantics><mi>M</mi><annotation encoding="application/x-tex">M</annotation></semantics></math> and <math alttext="\phi" class="ltx_Math" display="inline" id="S3.SS1.SSS3.p1.m10" intent=":literal"><semantics><mi>ϕ</mi><annotation encoding="application/x-tex">\phi</annotation></semantics></math> are jointly optimized via gradient descent to minimize <math alttext="\mathcal{L}_{\text{PAL}}" class="ltx_Math" display="inline" id="S3.SS1.SSS3.p1.m11" intent=":literal"><semantics><msub><mi class="ltx_font_mathcaligraphic">ℒ</mi><mtext>PAL</mtext></msub><annotation encoding="application/x-tex">\mathcal{L}_{\text{PAL}}</annotation></semantics></math>. After convergence, we define the coarse proxy embedding for item <math alttext="i" class="ltx_Math" display="inline" id="S3.SS1.SSS3.p1.m12" intent=":literal"><semantics><mi>i</mi><annotation encoding="application/x-tex">i</annotation></semantics></math> as <math alttext="\mathbf{p}_{i}^{\text{coarse}}=\tilde{\mathbf{h}}_{i}" class="ltx_Math" display="inline" id="S3.SS1.SSS3.p1.m13" intent=":literal"><semantics><mrow><msubsup><mi>𝐩</mi><mi>i</mi><mtext>coarse</mtext></msubsup><mo>=</mo><msub><mover accent="true"><mi>𝐡</mi><mo>~</mo></mover><mi>i</mi></msub></mrow><annotation encoding="application/x-tex">\mathbf{p}_{i}^{\text{coarse}}=\tilde{\mathbf{h}}_{i}</annotation></semantics></math>.</p>
+</div>
+</section>
+</section>
+<section id="S3.SS2">
+<h3><span>3.2. </span>Stage 2: CTR-Aware Proxy Alignment</h3>
+<div id="S3.SS2.p1">
+<p id="S3.SS2.p1.1">While Stage 1 proxies lie in the static item ID embedding space, coarse alignment alone cannot fully exploit the end-to-end optimization and evolving structural priors of CTR models. Motivated by evidence that MLLM hidden states encode rich semantics (see Section <a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#S2.SS2"><span>2.2</span></a>), we add a fine-grained alignment stage that leverages these states to refine proxies via end-to-end training with the CTR model using a lightweight adaptor.</p>
+</div>
+<section id="S3.SS2.SSS1">
+<h4><span>3.2.1. </span>Hierarchical Representation Partitioning</h4>
+<div id="S3.SS2.SSS1.p1">
+<p id="S3.SS2.SSS1.p1.1">We extract hidden states from multiple transformer layers of the MLLM <math alttext="M" class="ltx_Math" display="inline" id="S3.SS2.SSS1.p1.m1" intent=":literal"><semantics><mi>M</mi><annotation encoding="application/x-tex">M</annotation></semantics></math> trained in Stage 1, which typically consists of several tens of layers. To balance representational richness and learning efficiency, we use <math alttext="k" class="ltx_Math" display="inline" id="S3.SS2.SSS1.p1.m2" intent=":literal"><semantics><mi>k</mi><annotation encoding="application/x-tex">k</annotation></semantics></math>-means clustering (<a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#reference-15">Lloyd, 1982</a>) to extract three layer subgroups <math alttext="l_{n_{1}}" class="ltx_Math" display="inline" id="S3.SS2.SSS1.p1.m3" intent=":literal"><semantics><msub><mi>l</mi><msub><mi>n</mi><mn>1</mn></msub></msub><annotation encoding="application/x-tex">l_{n_{1}}</annotation></semantics></math>, <math alttext="l_{n_{2}}" class="ltx_Math" display="inline" id="S3.SS2.SSS1.p1.m4" intent=":literal"><semantics><msub><mi>l</mi><msub><mi>n</mi><mn>2</mn></msub></msub><annotation encoding="application/x-tex">l_{n_{2}}</annotation></semantics></math>, and <math alttext="l_{n_{3}}" class="ltx_Math" display="inline" id="S3.SS2.SSS1.p1.m5" intent=":literal"><semantics><msub><mi>l</mi><msub><mi>n</mi><mn>3</mn></msub></msub><annotation encoding="application/x-tex">l_{n_{3}}</annotation></semantics></math>, capturing hierarchical information from shallow to deep representations. We then apply the Stage 1 pooling function <math alttext="g(\cdot)" class="ltx_Math" display="inline" id="S3.SS2.SSS1.p1.m6" intent=":literal"><semantics><mrow><mi>g</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mo lspace="0em" rspace="0em">⋅</mo><mo stretchy="false">)</mo></mrow></mrow><annotation encoding="application/x-tex">g(\cdot)</annotation></semantics></math> to each subgroup:
+<math alttext="\mathbf{z}_{i}^{(l)}=g(\mathbf{H}_{i}^{(l)})\in\mathbb{R}^{D}" class="ltx_Math" display="inline" id="S3.SS2.SSS1.p1.m7" intent=":literal"><semantics><mrow><msubsup><mi>𝐳</mi><mi>i</mi><mrow><mo stretchy="false">(</mo><mi>l</mi><mo stretchy="false">)</mo></mrow></msubsup><mo>=</mo><mrow><mi>g</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><msubsup><mi>𝐇</mi><mi>i</mi><mrow><mo stretchy="false">(</mo><mi>l</mi><mo stretchy="false">)</mo></mrow></msubsup><mo stretchy="false">)</mo></mrow></mrow><mo>∈</mo><msup><mi>ℝ</mi><mi>D</mi></msup></mrow><annotation encoding="application/x-tex">\mathbf{z}_{i}^{(l)}=g(\mathbf{H}_{i}^{(l)})\in\mathbb{R}^{D}</annotation></semantics></math>, for <math alttext="l\in\{l_{n_{1}},l_{n_{2}},l_{n_{3}}\}" class="ltx_Math" display="inline" id="S3.SS2.SSS1.p1.m8" intent=":literal"><semantics><mrow><mi>l</mi><mo>∈</mo><mrow><mo stretchy="false">{</mo><msub><mi>l</mi><msub><mi>n</mi><mn>1</mn></msub></msub><mo>,</mo><msub><mi>l</mi><msub><mi>n</mi><mn>2</mn></msub></msub><mo>,</mo><msub><mi>l</mi><msub><mi>n</mi><mn>3</mn></msub></msub><mo stretchy="false">}</mo></mrow></mrow><annotation encoding="application/x-tex">l\in\{l_{n_{1}},l_{n_{2}},l_{n_{3}}\}</annotation></semantics></math>.</p>
+</div>
+</section>
+<section id="S3.SS2.SSS2">
+<h4><span>3.2.2. </span>Lightweight Multi-Granularity Adaptor for CTR</h4>
+<div id="S3.SS2.SSS2.p1">
+<p id="S3.SS2.SSS2.p1.1">The hidden states are already partially aligned with item ID embeddings via Stage 1. We refine them to capture fine-grained CTR-relevant information using a lightweight and multi-granularity adaptor:
+<math alttext="\mathbf{p}_{i}^{\text{raw\_fine}}=\tilde{\phi}(\text{Concat}(\mathbf{z}_{i}^{(l_{n_{1}})},\mathbf{z}_{i}^{(l_{n_{2}})},\mathbf{z}_{i}^{(l_{n_{3}})}))\in\mathbb{R}^{\tilde{d}}," class="ltx_Math" display="inline" id="S3.SS2.SSS2.p1.m1" intent=":literal"><semantics><mrow><mrow><msubsup><mi>𝐩</mi><mi>i</mi><mtext>raw_fine</mtext></msubsup><mo>=</mo><mrow><mover accent="true"><mi>ϕ</mi><mo>~</mo></mover><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><mrow><mtext>Concat</mtext><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><msubsup><mi>𝐳</mi><mi>i</mi><mrow><mo stretchy="false">(</mo><msub><mi>l</mi><msub><mi>n</mi><mn>1</mn></msub></msub><mo stretchy="false">)</mo></mrow></msubsup><mo>,</mo><msubsup><mi>𝐳</mi><mi>i</mi><mrow><mo stretchy="false">(</mo><msub><mi>l</mi><msub><mi>n</mi><mn>2</mn></msub></msub><mo stretchy="false">)</mo></mrow></msubsup><mo>,</mo><msubsup><mi>𝐳</mi><mi>i</mi><mrow><mo stretchy="false">(</mo><msub><mi>l</mi><msub><mi>n</mi><mn>3</mn></msub></msub><mo stretchy="false">)</mo></mrow></msubsup><mo stretchy="false">)</mo></mrow></mrow><mo stretchy="false">)</mo></mrow></mrow><mo>∈</mo><msup><mi>ℝ</mi><mover accent="true"><mi>d</mi><mo>~</mo></mover></msup></mrow><mo>,</mo></mrow><annotation encoding="application/x-tex">\mathbf{p}_{i}^{\text{raw\_fine}}=\tilde{\phi}(\text{Concat}(\mathbf{z}_{i}^{(l_{n_{1}})},\mathbf{z}_{i}^{(l_{n_{2}})},\mathbf{z}_{i}^{(l_{n_{3}})}))\in\mathbb{R}^{\tilde{d}},</annotation></semantics></math>
+where <math alttext="\tilde{\phi}" class="ltx_Math" display="inline" id="S3.SS2.SSS2.p1.m2" intent=":literal"><semantics><mover accent="true"><mi>ϕ</mi><mo>~</mo></mover><annotation encoding="application/x-tex">\tilde{\phi}</annotation></semantics></math> is an MLP with far fewer parameters than the MLLM or ranking model, fusing multi-granularity representations into the ranker embedding space.</p>
+</div>
+<div id="S3.SS2.SSS2.p2">
+<p id="S3.SS2.SSS2.p2.1">Since <math alttext="\mathbf{p}_{i}^{\text{raw\_fine}}" class="ltx_Math" display="inline" id="S3.SS2.SSS2.p2.m1" intent=":literal"><semantics><msubsup><mi>𝐩</mi><mi>i</mi><mtext>raw_fine</mtext></msubsup><annotation encoding="application/x-tex">\mathbf{p}_{i}^{\text{raw\_fine}}</annotation></semantics></math> may contain information redundant with <math alttext="\mathbf{p}_{i}^{\text{coarse}}" class="ltx_Math" display="inline" id="S3.SS2.SSS2.p2.m2" intent=":literal"><semantics><msubsup><mi>𝐩</mi><mi>i</mi><mtext>coarse</mtext></msubsup><annotation encoding="application/x-tex">\mathbf{p}_{i}^{\text{coarse}}</annotation></semantics></math>, we further introduce a residual gating module to adaptively control the contribution of fine-grained signals, encouraging the model to capture information beyond the coarse proxy. The final item proxy embedding, which fuses coarse- and fine-grained representations, is
+<math alttext="\mathbf{p}_{i}^{\text{fine}}=W_{c}\mathbf{p}_{i}^{\text{coarse}}+r\odot\mathbf{p}_{i}^{\text{raw\_fine}}" class="ltx_Math" display="inline" id="S3.SS2.SSS2.p2.m3" intent=":literal"><semantics><mrow><msubsup><mi>𝐩</mi><mi>i</mi><mtext>fine</mtext></msubsup><mo>=</mo><mrow><mrow><msub><mi>W</mi><mi>c</mi></msub><mo lspace="0em" rspace="0em">​</mo><msubsup><mi>𝐩</mi><mi>i</mi><mtext>coarse</mtext></msubsup></mrow><mo>+</mo><mrow><mi>r</mi><mo lspace="0.222em" rspace="0.222em">⊙</mo><msubsup><mi>𝐩</mi><mi>i</mi><mtext>raw_fine</mtext></msubsup></mrow></mrow></mrow><annotation encoding="application/x-tex">\mathbf{p}_{i}^{\text{fine}}=W_{c}\mathbf{p}_{i}^{\text{coarse}}+r\odot\mathbf{p}_{i}^{\text{raw\_fine}}</annotation></semantics></math>,
+with <math alttext="r=\sigma(W_{g}[\mathbf{p}_{i}^{\text{coarse}},\mathbf{p}_{i}^{\text{raw\_fine}}])" class="ltx_Math" display="inline" id="S3.SS2.SSS2.p2.m4" intent=":literal"><semantics><mrow><mi>r</mi><mo>=</mo><mrow><mi>σ</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mrow><msub><mi>W</mi><mi>g</mi></msub><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">[</mo><mrow><msubsup><mi>𝐩</mi><mi>i</mi><mtext>coarse</mtext></msubsup><mo>,</mo><msubsup><mi>𝐩</mi><mi>i</mi><mtext>raw_fine</mtext></msubsup></mrow><mo stretchy="false">]</mo></mrow></mrow><mo stretchy="false">)</mo></mrow></mrow></mrow><annotation encoding="application/x-tex">r=\sigma(W_{g}[\mathbf{p}_{i}^{\text{coarse}},\mathbf{p}_{i}^{\text{raw\_fine}}])</annotation></semantics></math>.</p>
+</div>
+</section>
+<section id="S3.SS2.SSS3">
+<h4><span>3.2.3. </span>End-to-End Joint Training with CTR Ranker</h4>
+<div id="S3.SS2.SSS3.p1">
+<p id="S3.SS2.SSS3.p1.1">In modern CTR ranking models, feature interaction and sequence modeling are critical components (see Figure <a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#S3.F2"><span>2</span></a>). To inject fine-grained item information into these components, we augment the original feature set, composed of the item ID and <math alttext="\mathbf{p}_{i}^{\text{coarse}}" class="ltx_Math" display="inline" id="S3.SS2.SSS3.p1.m1" intent=":literal"><semantics><msubsup><mi>𝐩</mi><mi>i</mi><mtext>coarse</mtext></msubsup><annotation encoding="application/x-tex">\mathbf{p}_{i}^{\text{coarse}}</annotation></semantics></math>, with the refined proxy <math alttext="\mathbf{p}_{i}^{\text{fine}}" class="ltx_Math" display="inline" id="S3.SS2.SSS3.p1.m2" intent=":literal"><semantics><msubsup><mi>𝐩</mi><mi>i</mi><mtext>fine</mtext></msubsup><annotation encoding="application/x-tex">\mathbf{p}_{i}^{\text{fine}}</annotation></semantics></math>, for both the feature interaction and target attention modules.</p>
+</div>
+<div id="S3.SS2.SSS3.p2">
+<p id="S3.SS2.SSS3.p2.1">Let <math alttext="f_{\theta}" class="ltx_Math" display="inline" id="S3.SS2.SSS3.p2.m1" intent=":literal"><semantics><msub><mi>f</mi><mi>θ</mi></msub><annotation encoding="application/x-tex">f_{\theta}</annotation></semantics></math> denote the CTR ranking model, with parameters <math alttext="\theta" class="ltx_Math" display="inline" id="S3.SS2.SSS3.p2.m2" intent=":literal"><semantics><mi>θ</mi><annotation encoding="application/x-tex">\theta</annotation></semantics></math>. For a training instance <math alttext="(u,i,\mathbf{x}_{ui},y_{ui})" class="ltx_Math" display="inline" id="S3.SS2.SSS3.p2.m3" intent=":literal"><semantics><mrow><mo stretchy="false">(</mo><mi>u</mi><mo>,</mo><mi>i</mi><mo>,</mo><msub><mi>𝐱</mi><mrow><mi>u</mi><mo lspace="0em" rspace="0em">​</mo><mi>i</mi></mrow></msub><mo>,</mo><msub><mi>y</mi><mrow><mi>u</mi><mo lspace="0em" rspace="0em">​</mo><mi>i</mi></mrow></msub><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">(u,i,\mathbf{x}_{ui},y_{ui})</annotation></semantics></math>, with a click/no-click signal <math alttext="y_{ui}\in\{0,1\}" class="ltx_Math" display="inline" id="S3.SS2.SSS3.p2.m4" intent=":literal"><semantics><mrow><msub><mi>y</mi><mrow><mi>u</mi><mo lspace="0em" rspace="0em">​</mo><mi>i</mi></mrow></msub><mo>∈</mo><mrow><mo stretchy="false">{</mo><mrow><mn>0</mn><mo>,</mo><mn>1</mn></mrow><mo stretchy="false">}</mo></mrow></mrow><annotation encoding="application/x-tex">y_{ui}\in\{0,1\}</annotation></semantics></math>, the CTR prediction becomes <math alttext="\hat{y}_{ui}=f_{\theta}(\mathbf{e}_{u},\mathbf{e}_{i},\mathbf{p}_{i}^{\text{coarse}},\mathbf{p}_{i}^{\text{fine}},\mathbf{x}_{ui})." class="ltx_Math" display="inline" id="S3.SS2.SSS3.p2.m5" intent=":literal"><semantics><mrow><mrow><msub><mover accent="true"><mi>y</mi><mo>^</mo></mover><mrow><mi>u</mi><mo lspace="0em" rspace="0em">​</mo><mi>i</mi></mrow></msub><mo>=</mo><mrow><msub><mi>f</mi><mi>θ</mi></msub><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><msub><mi>𝐞</mi><mi>u</mi></msub><mo>,</mo><msub><mi>𝐞</mi><mi>i</mi></msub><mo>,</mo><msubsup><mi>𝐩</mi><mi>i</mi><mtext>coarse</mtext></msubsup><mo>,</mo><msubsup><mi>𝐩</mi><mi>i</mi><mtext>fine</mtext></msubsup><mo>,</mo><msub><mi>𝐱</mi><mrow><mi>u</mi><mo lspace="0em" rspace="0em">​</mo><mi>i</mi></mrow></msub><mo stretchy="false">)</mo></mrow></mrow></mrow><mo lspace="0em">.</mo></mrow><annotation encoding="application/x-tex">\hat{y}_{ui}=f_{\theta}(\mathbf{e}_{u},\mathbf{e}_{i},\mathbf{p}_{i}^{\text{coarse}},\mathbf{p}_{i}^{\text{fine}},\mathbf{x}_{ui}).</annotation></semantics></math>
+<math alttext="f_{\theta}" class="ltx_Math" display="inline" id="S3.SS2.SSS3.p2.m6" intent=":literal"><semantics><msub><mi>f</mi><mi>θ</mi></msub><annotation encoding="application/x-tex">f_{\theta}</annotation></semantics></math> is trained for classification, e.g., using a cross-entropy loss:</p>
+<p><math alttext="\mathcal{L}_{\text{CTR}}=-\frac{1}{|\mathcal{D}|}\sum_{(u,i,\mathbf{x}_{ui},y_{ui})\in\mathcal{D}}[y_{ui}\log\hat{y}_{ui}+(1-y_{ui})\log(1-\hat{y}_{ui})]." class="ltx_math_unparsed" display="block" id="S3.E2.m1" intent=":literal"><semantics><mrow><msub><mi class="ltx_font_mathcaligraphic">ℒ</mi><mtext>CTR</mtext></msub><mo rspace="0em">=</mo><mo lspace="0em">−</mo><mfrac><mn>1</mn><mrow><mo stretchy="false">|</mo><mi class="ltx_font_mathcaligraphic">𝒟</mi><mo stretchy="false">|</mo></mrow></mfrac><munder><mo movablelimits="false" rspace="0em">∑</mo><mrow><mrow><mo stretchy="false">(</mo><mi>u</mi><mo>,</mo><mi>i</mi><mo>,</mo><msub><mi>𝐱</mi><mrow><mi>u</mi><mo lspace="0em" rspace="0em">​</mo><mi>i</mi></mrow></msub><mo>,</mo><msub><mi>y</mi><mrow><mi>u</mi><mo lspace="0em" rspace="0em">​</mo><mi>i</mi></mrow></msub><mo stretchy="false">)</mo></mrow><mo>∈</mo><mi class="ltx_font_mathcaligraphic">𝒟</mi></mrow></munder><mrow><mo stretchy="false">[</mo><msub><mi>y</mi><mrow><mi>u</mi><mo lspace="0em" rspace="0em">​</mo><mi>i</mi></mrow></msub><mi>log</mi><msub><mover accent="true"><mi>y</mi><mo>^</mo></mover><mrow><mi>u</mi><mo lspace="0em" rspace="0em">​</mo><mi>i</mi></mrow></msub><mo>+</mo><mrow><mo stretchy="false">(</mo><mn>1</mn><mo>−</mo><msub><mi>y</mi><mrow><mi>u</mi><mo lspace="0em" rspace="0em">​</mo><mi>i</mi></mrow></msub><mo rspace="0.167em" stretchy="false">)</mo></mrow><mi>log</mi><mrow><mo stretchy="false">(</mo><mn>1</mn><mo>−</mo><msub><mover accent="true"><mi>y</mi><mo>^</mo></mover><mrow><mi>u</mi><mo lspace="0em" rspace="0em">​</mo><mi>i</mi></mrow></msub><mo stretchy="false">)</mo></mrow><mo stretchy="false">]</mo></mrow><mo lspace="0em">.</mo></mrow><annotation encoding="application/x-tex">\mathcal{L}_{\text{CTR}}=-\frac{1}{|\mathcal{D}|}\sum_{(u,i,\mathbf{x}_{ui},y_{ui})\in\mathcal{D}}[y_{ui}\log\hat{y}_{ui}+(1-y_{ui})\log(1-\hat{y}_{ui})].</annotation></semantics></math> (2)</p>
+<p id="S3.SS2.SSS3.p2.2">During Stage 2, parameters of the MLP adaptor <math alttext="\tilde{\phi}" class="ltx_Math" display="inline" id="S3.SS2.SSS3.p2.m7" intent=":literal"><semantics><mover accent="true"><mi>ϕ</mi><mo>~</mo></mover><annotation encoding="application/x-tex">\tilde{\phi}</annotation></semantics></math>, together with <math alttext="W_{g}" class="ltx_Math" display="inline" id="S3.SS2.SSS3.p2.m8" intent=":literal"><semantics><msub><mi>W</mi><mi>g</mi></msub><annotation encoding="application/x-tex">W_{g}</annotation></semantics></math>, <math alttext="W_{c}" class="ltx_Math" display="inline" id="S3.SS2.SSS3.p2.m9" intent=":literal"><semantics><msub><mi>W</mi><mi>c</mi></msub><annotation encoding="application/x-tex">W_{c}</annotation></semantics></math>, and <math alttext="\theta" class="ltx_Math" display="inline" id="S3.SS2.SSS3.p2.m10" intent=":literal"><semantics><mi>θ</mi><annotation encoding="application/x-tex">\theta</annotation></semantics></math>, are optimized via gradient descent, while MLLM parameters are frozen. This end-to-end optimization under the CTR objective enables <math alttext="\mathbf{p}_{i}^{\text{fine}}" class="ltx_Math" display="inline" id="S3.SS2.SSS3.p2.m11" intent=":literal"><semantics><msubsup><mi>𝐩</mi><mi>i</mi><mtext>fine</mtext></msubsup><annotation encoding="application/x-tex">\mathbf{p}_{i}^{\text{fine}}</annotation></semantics></math> to capture information beyond <math alttext="\mathbf{p}_{i}^{\text{coarse}}" class="ltx_Math" display="inline" id="S3.SS2.SSS3.p2.m12" intent=":literal"><semantics><msubsup><mi>𝐩</mi><mi>i</mi><mtext>coarse</mtext></msubsup><annotation encoding="application/x-tex">\mathbf{p}_{i}^{\text{coarse}}</annotation></semantics></math> and allows seamless integration into the CTR production system.</p>
+</div>
+</section>
+<section id="S3.SS2.SSS4">
+<h4><span>3.2.4. </span>Deployment</h4>
+<div id="S3.SS2.SSS4.p1">
+<p id="S3.SS2.SSS4.p1.1">We stress that IDProxy is designed for large-scale deployment. The lightweight multi-granularity adaptor only needs to be trained offline once, after which its parameters can be stored and packaged together with the MLLM as an IDProxy generation service. In practice, for each new item, we compute coarse and fine proxies in real time and write them into online storage. Production-facing recommender systems can then retrieve them via IDs for seamless integration into the CTR ranking pipeline.</p>
+</div>
+</section>
+</section>
+</section>
+<section id="S4">
+<h2><span>4. </span>Experimental Analysis</h2>
+<div id="S4.p1">
+<p id="S4.p1.1">We evaluate IDProxy through large-scale offline experiments and online A/B tests, designed to address the following questions:</p>
+<ul id="S4.I1">
+<li id="S4.I1.i1"><span>•</span>
+<div id="S4.I1.i1.p1">
+<p id="S4.I1.i1.p1.1"><span id="S4.I1.i1.p1.1.1">Q1</span>: What is the contribution of the coarse stage, and how does IDProxy compare with existing alignment methods?</p>
+</div></li>
+<li id="S4.I1.i2"><span>•</span>
+<div id="S4.I1.i2.p1">
+<p id="S4.I1.i2.p1.1"><span id="S4.I1.i2.p1.1.1">Q2</span>: What is the contribution of the fine stage, i.e., what is the impact of end-to-end modeling and structural reuse?</p>
+</div></li>
+<li id="S4.I1.i3"><span>•</span>
+<div id="S4.I1.i3.p1">
+<p id="S4.I1.i3.p1.1"><span id="S4.I1.i3.p1.1.1">Q3</span>: Does IDProxy effectively alleviate the cold-start problem for newly published content on Xiaohongshu?</p>
+</div></li>
+<li id="S4.I1.i4"><span>•</span>
+<div id="S4.I1.i4.p1">
+<p id="S4.I1.i4.p1.1"><span id="S4.I1.i4.p1.1.1">Q4</span>: What is the impact of IDProxy on real-world business metrics in large-scale industrial scenarios at Xiaohongshu?</p>
+</div></li>
+</ul>
+</div>
+<section id="S4.SS1">
+<h3><span>4.1. </span>Experimental Setup</h3>
+<div id="S4.SS1.p1">
+<p id="S4.SS1.p1.1">We compare IDProxy to the production baseline at Xiaohongshu, denoted as Base. We adopt InternVL (<a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#reference-6">Chen et al., 2024</a>) as the MLLM and train all methods using the AdamW optimizer (<a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#reference-17">Loshchilov and Hutter, 2017</a>) with a learning rate of <math alttext="1\times 10^{-4}" class="ltx_Math" display="inline" id="S4.SS1.p1.m1" intent=":literal"><semantics><mrow><mn>1</mn><mo lspace="0.222em" rspace="0.222em">×</mo><msup><mn>10</mn><mrow><mo>−</mo><mn>4</mn></mrow></msup></mrow><annotation encoding="application/x-tex">1\times 10^{-4}</annotation></semantics></math> and a batch size of 512. Base is a highly optimized industrial CTR system incorporating complex ID-based feature interactions and user sequential behavior modeling. For both methods, some implementation details are omitted for confidentiality reasons.</p>
+</div>
+<div id="S4.SS1.p2">
+<p id="S4.SS1.p2.1">We also run online A/B tests on millions of users in Xiaohongshu’s Explore Feed for content discovery, deploying IDProxy to a randomly selected treatment group in two scenarios: Content Feed, which recommends user posts (test done in August 2025), and Display Ads, which serves ads (in March 2025). For Content Feed, we report Time Spent, number of Reads (clicks), and number of Engagements (including likes, comments…) as evaluation metrics. For Display Ads, we report standard ads metrics: Advertiser Value (ADVV) and COST to measure business value, as well as Impression and CTR to reflect user experience.</p>
+</div>
+</section>
+<section id="S4.SS2">
+<h3><span>4.2. </span>Experimental Results</h3>
+<section id="S4.SS2.SSS1">
+<h4><span>4.2.1. </span>Offline Performance of Stage 1 (Q1)</h4>
+<div id="S4.SS2.SSS1.p1">
+<p id="S4.SS2.SSS1.p1.1">The first four rows of Table <a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#S4.T1"><span>1</span></a> compare Stage 1 of IDProxy (v3) with multimodal baselines. Mainstream multimodal embeddings (v1, similar to notellm2(<a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#reference-37">Zhang et al., 2025e</a>)) yield limited improvements over Base due to misalignment with the item ID embedding distribution. Similarly, using frozen embeddings with an MLP mapper (v2, CB2CF-style) achieves only marginal gains, which confirms the limitations of simple MLP-based mappings in bridging the semantic gap between content representations and the irregular distribution of industrial ID embeddings. By explicitly fitting the ID distribution and leveraging an MLLM for alignment, Stage 1 of IDProxy (v3) outperforms both approaches.</p>
+</div>
+<figure id="S4.T1"><img alt="Table 1 . Offline CTR prediction gains relative to the baseline." height="340" src="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/table-1.jpg" width="1002"/><figcaption><span><span id="S4.T1.3">Table 1</span>. </span><span id="S4.T1.4">Offline CTR prediction gains relative to the baseline.</span></figcaption></figure>
+<figure id="S4.T2"><img alt="Table 2 . Online Δ \Delta AUC gains for global notes and new notes." height="171" src="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/table-2.jpg" width="1001"/><figcaption><span><span id="S4.T2.3">Table 2</span>. </span><span id="S4.T2.4">Online <math alttext="\Delta" class="ltx_Math" display="inline" id="S4.T2.m2" intent=":literal"><semantics><mi mathvariant="normal">Δ</mi><annotation encoding="application/x-tex">\Delta</annotation></semantics></math>AUC gains for global notes and new notes.</span></figcaption></figure>
+<figure id="S4.T3"><img alt="Table 3 . Online A/B tests on Xiaohongshu’s Explore Feed." height="512" src="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/table-3.jpg" width="1001"/><figcaption><span><span id="S4.T3.3">Table 3</span>. </span><span id="S4.T3.4">Online A/B tests on Xiaohongshu’s Explore Feed.</span></figcaption></figure>
+</section>
+<section id="S4.SS2.SSS2">
+<h4><span>4.2.2. </span>Offline Performance of Stage2 (Q2)</h4>
+<div id="S4.SS2.SSS2.p1">
+<p id="S4.SS2.SSS2.p1.1">The last two rows of Table <a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#S4.T1"><span>1</span></a> evaluate the effect of adding Stage 2. In v4, MLLM hidden features are treated as ordinary item features, concatenated with existing inputs and trained end-to-end using the CTR loss. This already improves performance over v3, indicating the benefit of end-to-end learning. However, v4 does not explicitly reuse the Base model’s sequence and feature interaction structures. In contrast, v5 integrates IDProxy directly into the ranker’s atomic ID slots, leading to a substantial performance gain of <math alttext="+0.14\%" class="ltx_Math" display="inline" id="S4.SS2.SSS2.p1.m1" intent=":literal"><semantics><mrow><mo>+</mo><mrow><mn>0.14</mn><mo>%</mo></mrow></mrow><annotation encoding="application/x-tex">+0.14\%</annotation></semantics></math>. This confirms the benefit of allowing multimodal features to inherit the well-trained structural priors of ID-based CTR models. Although the <math alttext="\Delta" class="ltx_Math" display="inline" id="S4.SS2.SSS2.p1.m2" intent=":literal"><semantics><mi mathvariant="normal">Δ</mi><annotation encoding="application/x-tex">\Delta</annotation></semantics></math>AUC may appear small, results are considered valuable in practice given the strength of the Xiaohongshu production Base model.</p>
+</div>
+</section>
+<section id="S4.SS2.SSS3">
+<h4><span>4.2.3. </span>Online Cold-Start (Q3) and Business (Q4) Performance</h4>
+<div id="S4.SS2.SSS3.p1">
+<p id="S4.SS2.SSS3.p1.1">Table <a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#S4.T2"><span>2</span></a> compares the online AUC performance of IDProxy over a 5-day period for both global traffic and "new notes", i.e., posts published within 24 hours. The AUC lift for global notes stabilizes around <math alttext="0.12\%" class="ltx_Math" display="inline" id="S4.SS2.SSS3.p1.m1" intent=":literal"><semantics><mrow><mn>0.12</mn><mo>%</mo></mrow><annotation encoding="application/x-tex">0.12\%</annotation></semantics></math>–<math alttext="0.15\%" class="ltx_Math" display="inline" id="S4.SS2.SSS3.p1.m2" intent=":literal"><semantics><mrow><mn>0.15</mn><mo>%</mo></mrow><annotation encoding="application/x-tex">0.15\%</annotation></semantics></math>, whereas new notes exhibit substantially larger gains of <math alttext="0.23\%" class="ltx_Math" display="inline" id="S4.SS2.SSS3.p1.m3" intent=":literal"><semantics><mrow><mn>0.23</mn><mo>%</mo></mrow><annotation encoding="application/x-tex">0.23\%</annotation></semantics></math>–<math alttext="0.32\%" class="ltx_Math" display="inline" id="S4.SS2.SSS3.p1.m4" intent=":literal"><semantics><mrow><mn>0.32</mn><mo>%</mo></mrow><annotation encoding="application/x-tex">0.32\%</annotation></semantics></math>. This roughly <math alttext="2\times" class="ltx_math_unparsed" display="inline" id="S4.SS2.SSS3.p1.m5" intent=":literal"><semantics><mrow><mn>2</mn><mo lspace="0.222em">×</mo></mrow><annotation encoding="application/x-tex">2\times</annotation></semantics></math> improvement demonstrates that IDProxy effectively transfers semantic information to items lacking interaction history, boosting cold-start performance. In addition,
+Table <a href="https://theopinard.github.io/vrac/articles/idproxy-cold-start-ctr-prediction-for-ads-and-recommendation-at-xiaohongshu-with-multimodal-llms/#S4.T3"><span>3</span></a> reports statistically significant improvements (at the 1% level) across all online metrics in both Content Feed and Display Ads scenarios. Overall, these consistent results confirm the robustness and business impact of IDProxy in large-scale industrial deployment.</p>
+</div>
+</section>
+</section>
+</section>
+<section id="S5">
+<h2><span>5. </span>Conclusion</h2>
+<div id="S5.p1">
+<p id="S5.p1.1">IDProxy is now deployed for both Content Feed and Display Ads at Xiaohongshu, serving hundreds of millions of users daily. Beyond its industrial impact, this work demonstrates the benefits of MLLM-based alignment of multimodal content with item ID embeddings, and the importance of end-to-end refinement with CTR models while reusing their core components. Our results also confirm the potential of MLLM hidden states for content representations, motivating future research on their integration for recommendation.</p>
+</div>
+</section>
+<div><h2 id="works-cited">References</h2><p id="reference-1">[1]
+<span>
+Haoyue Bai, Min Hou, Le Wu, Yonghui Yang, Kun Zhang, Richang Hong, and Meng Wang. 2023.
+
+</span>
+<span>Gorec: A Generative cold-start recommendation framework. In <em id="bib.bib2.3">Proceedings of the 31st ACM international conference on multimedia</em>. 1004–1012.
+
+</span>
+<span>
+</span></p><p id="reference-2">[2]
+<span>
+Oren Barkan, Noam Koenigstein, Eylon Yogev, and Ori Katz. 2019.
+
+</span>
+<span>CB2CF: a neural multiview content-to-collaborative filtering model for completely cold item recommendations. In <em id="bib.bib3.3">Proceedings of the 13th ACM Conference on Recommender Systems</em>. ACM, Copenhagen Denmark, 228–236.
+
+</span>
+<span>
+<a href="https://doi.org/10.1145/3298689.3347038">doi:<span>10.1145/3298689.3347038</span></a>
+</span></p><p id="reference-3">[3]
+<span>
+Florian Bordes, Randall Balestriero, Quentin Garrido, Adrien Bardes, and Pascal Vincent. 2022.
+
+</span>
+<span>Guillotine regularization: Why removing layers is needed to improve generalization in self-supervised learning.
+
+</span>
+<span><em id="bib.bib4.3">arXiv preprint arXiv:2206.13378</em> (2022).
+
+</span>
+<span>
+</span></p><p id="reference-4">[4]
+<span>
+Léa Briand, Guillaume Salha-Galvan, Walid Bendada, Mathieu Morlon, and Viet-Anh Tran. 2021.
+
+</span>
+<span>A Semi-Personalized System for User Cold Start Recommendation on Music Streaming Apps. In <em id="bib.bib5.3">Proceedings of the 27th ACM SIGKDD Conference on Knowledge Discovery &amp; Data Mining</em>. 2601–2609.
+
+</span>
+<span>
+</span></p><p id="reference-5">[5]
+<span>
+Hao Chen, Zefan Wang, Feiran Huang, Xiao Huang, Yue Xu, Yishi Lin, Peng He, and Zhoujun Li. 2022.
+
+</span>
+<span>Generative adversarial framework for cold-start item recommendation. In <em id="bib.bib6.3">Proceedings of the 45th International ACM SIGIR Conference on Research and Development in Information Retrieval</em>. 2565–2571.
+
+</span>
+<span>
+</span></p><p id="reference-6">[6]
+<span>
+Zhe Chen, Jiannan Wu, Wenhai Wang, Weijie Su, Guo Chen, Sen Xing, et al<span id="bib.bib7.3">.</span> 2024.
+
+</span>
+<span>Internvl: Scaling Up Vision Foundation Models and Aligning for Generic Visual-Linguistic Tasks. In <em id="bib.bib7.4">Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition</em>. 24185–24198.
+
+</span>
+<span>
+</span></p><p id="reference-7">[7]
+<span>
+F. Maxwell Harper and Joseph A. Konstan. 2015.
+
+</span>
+<span>The MovieLens Datasets: History and Context.
+
+</span>
+<span><em id="bib.bib8.1">ACM Trans. Interact. Intell. Syst.</em> 5, 4, Article 19 (Dec. 2015), 19 pages.
+
+</span>
+<span>
+<a href="https://doi.org/10.1145/2827872">doi:<span>10.1145/2827872</span></a>
+</span></p><p id="reference-8">[8]
+<span>
+Feiran Huang, Yuanchen Bei, Zhenghang Yang, Junyi Jiang, Hao Chen, Qijie Shen, Senzhang Wang, Fakhri Karray, and Philip S Yu. 2025.
+
+</span>
+<span>Large Language Model Simulator for Cold-Start Recommendation. In <em id="bib.bib9.3">Proceedings of the Eighteenth ACM International Conference on Web Search and Data Mining</em>. 261–270.
+
+</span>
+<span>
+</span></p><p id="reference-9">[9]
+<span>
+Manisha Jangid and Rakesh Kumar. 2025.
+
+</span>
+<span>Deep Learning Approaches to Address Cold Start and Long Tail Challenges in Recommendation Systems: A Systematic Review.
+
+</span>
+<span><em id="bib.bib10.1">Multimedia Tools and Applications</em> 84, 5 (2025), 2293–2325.
+
+</span>
+<span>
+</span></p><p id="reference-10">[10]
+<span>
+Wang-Cheng Kang and Julian McAuley. 2018.
+
+</span>
+<span>Self-Attentive Sequential Recommendation. In <em id="bib.bib11.1">Proceedings of the 2018 IEEE International Conference on Data Mining</em>. 197–206.
+
+</span>
+<span>
+</span></p><p id="reference-11">[11]
+<span>
+Dain Kim, Jinhyeok Park, and Dongwoo Kim. 2023.
+
+</span>
+<span>Test Time Embedding Normalization for Popularity Bias Mitigation. In <em id="bib.bib12.3">Proceedings of the 32nd ACM International Conference on Information and Knowledge Management</em>. 4023–4027.
+
+</span>
+<span><a href="https://doi.org/10.1145/3583780.3615281">doi:<span>10.1145/3583780.3615281</span></a>
+</span>
+<span>arXiv:2308.11288 [cs].
+
+</span></p><p id="reference-12">[12]
+<span>
+Lei Li, Yongfeng Zhang, Dugang Liu, and Li Chen. 2024b.
+
+</span>
+<span>Large Language Models for Generative Recommendation: A Survey and Visionary Discussions. In <em id="bib.bib13.3">Proceedings of the 2024 Joint International Conference on Computational Linguistics, Language Resources and Evaluation</em>. 10146–10159.
+
+</span>
+<span>
+</span></p><p id="reference-13">[13]
+<span>
+Yang Li, Kangbo Liu, Ranjan Satapathy, Suhang Wang, and Erik Cambria. 2024a.
+
+</span>
+<span>Recent Developments in Recommender Systems: A Survey.
+
+</span>
+<span><em id="bib.bib14.3">IEEE Computational Intelligence Magazine</em> 19, 2 (2024), 78–95.
+
+</span>
+<span>
+</span></p><p id="reference-14">[14]
+<span>
+Nelson F Liu, Matt Gardner, Yonatan Belinkov, Matthew E Peters, and Noah A Smith. 2019.
+
+</span>
+<span>Linguistic knowledge and transferability of contextual representations.
+
+</span>
+<span><em id="bib.bib15.3">arXiv preprint arXiv:1903.08855</em> (2019).
+
+</span>
+<span>
+</span></p><p id="reference-15">[15]
+<span>
+Stuart Lloyd. 1982.
+
+</span>
+<span>Least Squares Quantization in PCM.
+
+</span>
+<span><em id="bib.bib16.1">IEEE Transactions on Information Theory</em> 28, 2 (1982), 129–137.
+
+</span>
+<span>
+</span></p><p id="reference-16">[16]
+<span>
+Alejo Lopez-Avila and Jinhua Du. 2025.
+
+</span>
+<span>A Survey on Large Language Models in Multimodal Recommender Systems.
+
+</span>
+<span><em id="bib.bib17.1">arXiv preprint arXiv:2505.09777</em> (2025).
+
+</span>
+<span>
+</span></p><p id="reference-17">[17]
+<span>
+Ilya Loshchilov and Frank Hutter. 2017.
+
+</span>
+<span>Decoupled weight decay regularization.
+
+</span>
+<span><em id="bib.bib18.1">arXiv preprint arXiv:1711.05101</em> (2017).
+
+</span>
+<span>
+</span></p><p id="reference-18">[18]
+<span>
+Xinchen Luo, Jiangxia Cao, Tianyu Sun, Jinkai Yu, et al<span id="bib.bib19.3">.</span> 2025.
+
+</span>
+<span>QAM: Quantitative Alignment Multi-Modal Recommendation at Kuaishou.
+
+</span>
+<span>5915–5922 pages.
+
+</span>
+<span>
+</span></p><p id="reference-19">[19]
+<span>
+Laurens van der Maaten and Geoffrey Hinton. 2008.
+
+</span>
+<span>Visualizing Data using t-SNE.
+
+</span>
+<span><em id="bib.bib20.1">Journal of Machine Learning Research</em> 9, Nov (2008), 2579–2605.
+
+</span>
+<span>
+</span></p><p id="reference-20">[20]
+<span>
+H Brendan McMahan, Gary Holt, David Sculley, Michael Young, et al<span id="bib.bib21.3">.</span> 2013.
+
+</span>
+<span>Ad Click Prediction: A View from the Trenches. In <em id="bib.bib21.4">Proceedings of the 19th ACM SIGKDD International Conf. on Knowledge Discovery and Data Mining</em>. 1222–1230.
+
+</span>
+<span>
+</span></p><p id="reference-21">[21]
+<span>
+Feiyang Pan, Shuokai Li, Xiang Ao, Pingzhong Tang, and Qing He. 2019.
+
+</span>
+<span>Warm Up Cold-Start Advertisements: Improving CTR Predictions via Learning to Learn ID Embeddings. In <em id="bib.bib22.3">Proceedings of the 42nd International ACM SIGIR Conference on Research and Development in Information Retrieval</em>. 695–704.
+
+</span>
+<span>
+</span></p><p id="reference-22">[22]
+<span>
+Xingyu Pan, Yushuo Chen, Changxin Tian, Zihan Lin, Jinpeng Wang, He Hu, and Wayne Xin Zhao. 2022.
+
+</span>
+<span>Multimodal Meta-Learning for Cold-Start Sequential Recommendation. In <em id="bib.bib23.3">Proceedings of the 31st ACM International Conference on Information &amp; Knowledge Management</em>. 3421–3430.
+
+</span>
+<span>
+</span></p><p id="reference-23">[23]
+<span>
+Harris Papadakis, Antonis Papagrigoriou, Costas Panagiotakis, Eleftherios Kosmas, and Paraskevi Fragopoulou. 2022.
+
+</span>
+<span>Collaborative Filtering Recommender Systems Taxonomy.
+
+</span>
+<span><em id="bib.bib24.3">Knowledge and Information Systems</em> 64, 1 (2022), 35–74.
+
+</span>
+<span>
+</span></p><p id="reference-24">[24]
+<span>
+Guillaume Salha-Galvan, Romain Hennequin, Benjamin Chapus, et al<span id="bib.bib25.3">.</span> 2021.
+
+</span>
+<span>Cold Start Similar Artists Ranking with Gravity-Inspired Graph Autoencoders. In <em id="bib.bib25.4">Proceedings of the 15th ACM Conference on Recommender Systems</em>. 443–452.
+
+</span>
+<span>
+</span></p><p id="reference-25">[25]
+<span>
+Xiang-Rong Sheng, Feifan Yang, Litong Gong, Biao Wang, et al<span id="bib.bib26.3">.</span> 2024.
+
+</span>
+<span>Enhancing Taobao Display Advertising with Multimodal Representations: Challenges, Approaches and Insights. In <em id="bib.bib26.4">Proceedings of the 33rd ACM International Conference on Information and Knowledge Management</em>. 4858–4865.
+
+</span>
+<span>
+</span></p><p id="reference-26">[26]
+<span>
+Ravid Shwartz-Ziv and Naftali Tishby. 2017.
+
+</span>
+<span>Opening the black box of deep neural networks via information.
+
+</span>
+<span><em id="bib.bib27.1">arXiv preprint arXiv:1703.00810</em> (2017).
+
+</span>
+<span>
+</span></p><p id="reference-27">[27]
+<span>
+Oscar Skean, Md Rifat Arefin, Yann LeCun, and Ravid Shwartz-Ziv. 2024.
+
+</span>
+<span>Does representation matter? exploring intermediate layers in large language models.
+
+</span>
+<span><em id="bib.bib28.3">arXiv preprint arXiv:2412.09563</em> (2024).
+
+</span>
+<span>
+</span></p><p id="reference-28">[28]
+<span>
+Oscar Skean, Md Rifat Arefin, Dan Zhao, Niket Patel, Jalal Naghiyev, Yann LeCun, and Ravid Shwartz-Ziv. 2025.
+
+</span>
+<span>Layer by layer: Uncovering hidden representations in language models.
+
+</span>
+<span><em id="bib.bib29.3">arXiv preprint arXiv:2502.02013</em> (2025).
+
+</span>
+<span>
+</span></p><p id="reference-29">[29]
+<span>
+Brent Smith and Greg Linden. 2017.
+
+</span>
+<span>Two Decades of Recommender Systems at Amazon.com.
+
+</span>
+<span><em id="bib.bib30.1">IEEE Internet Computing</em> 21, 3 (2017), 12–18.
+
+</span>
+<span>
+</span></p><p id="reference-30">[30]
+<span>
+Maksims Volkovs, Guangwei Yu, and Tomi Poutanen. 2017.
+
+</span>
+<span>DropoutNet: Addressing Cold Start in Recommender Systems.
+
+</span>
+<span><em id="bib.bib31.3">Advances in Neural Information Processing Systems</em> 30 (2017).
+
+</span>
+<span>
+</span></p><p id="reference-31">[31]
+<span>
+Jizhe Wang, Pipei Huang, Huan Zhao, Zhibo Zhang, Binqiang Zhao, and Dik Lun Lee. 2018.
+
+</span>
+<span>Billion-Scale Commodity Embedding for E-Commerce Recommendation in Alibaba. In <em id="bib.bib32.3">Proceedings of the 24th ACM SIGKDD International Conference on Knowledge Discovery &amp; Data Mining</em>. 839–848.
+
+</span>
+<span>
+</span></p><p id="reference-32">[32]
+<span>
+Jianling Wang, Haokai Lu, James Caverlee, Ed H Chi, and Minmin Chen. 2024.
+
+</span>
+<span>Large Language Models as Data Augmenters for Cold-Start Item Recommendation. In <em id="bib.bib33.3">Companion Proceedings of the 2024 ACM Web Conference</em>. 726–729.
+
+</span>
+<span>
+</span></p><p id="reference-33">[33]
+<span>
+Yinwei Wei, Xiang Wang, Qi Li, Liqiang Nie, Yan Li, Xuanping Li, and Tat-Seng Chua. 2021.
+
+</span>
+<span>Contrastive learning for cold-start recommendation. In <em id="bib.bib34.3">Proceedings of the 29th ACM international conference on multimedia</em>. 5382–5390.
+
+</span>
+<span>
+</span></p><p id="reference-34">[34]
+<span>
+Likang Wu, Zhi Zheng, Zhaopeng Qiu, Hao Wang, Hongchao Gu, Tingjia Shen, Chuan Qin, Chen Zhu, Hengshu Zhu, Qi Liu, et al<span id="bib.bib35.3">.</span> 2024.
+
+</span>
+<span>A Survey on Large Language Models for Recommendation.
+
+</span>
+<span><em id="bib.bib35.4">World Wide Web</em> 27, 5 (2024), 60.
+
+</span>
+<span>
+</span></p><p id="reference-35">[35]
+<span>
+Xiaoxiao Xu, Chen Yang, Qian Yu, Zhiwei Fang, Jiaxing Wang, Chaosheng Fan, Yang He, Changping Peng, Zhangang Lin, and Jingping Shao. 2022.
+
+</span>
+<span>Alleviating Cold-Start Problem in CTR Prediction with a Variational Embedding Learning Framework. In <em id="bib.bib36.3">Proceedings of the 2022 ACM Web Conference</em>. 27–35.
+
+</span>
+<span>
+</span></p><p id="reference-36">[36]
+<span>
+Yuyang Ye, Zhi Zheng, Yishan Shen, Tianshu Wang, Hengruo Zhang, Peijun Zhu, Runlong Yu, Kai Zhang, and Hui Xiong. 2025.
+
+</span>
+<span>Harnessing Multimodal Large Language Models for Multimodal Sequential Recommendation. In <em id="bib.bib37.3">Proceedings of the AAAI Conference on Artificial Intelligence</em>, Vol. 39. 13069–13077.
+
+</span>
+<span>
+</span></p><p id="reference-37">[37]
+<span>
+Chao Zhang, Haoxin Zhang, Shiwei Wu, Di Wu, Tong Xu, Xiangyu Zhao, Yan Gao, Yao Hu, and Enhong Chen. 2025e.
+
+</span>
+<span>Notellm-2: Multimodal large representation models for recommendation. In <em id="bib.bib38.3">Proceedings of the 31st ACM SIGKDD Conference on Knowledge Discovery and Data Mining V. 1</em>. 2815–2826.
+
+</span>
+<span>
+</span></p><p id="reference-38">[38]
+<span>
+Daoze Zhang, Chenghan Fu, Zhanheng Nie, Jianyu Liu, Wanxian Guan, Yuan Gao, Jun Song, Pengjie Wang, Jian Xu, and Bo Zheng. 2025b.
+
+</span>
+<span>MOON: Generative MLLM-based Multimodal Representation Learning for E-commerce Product Understanding.
+
+</span>
+<span><a href="https://doi.org/10.48550/arXiv.2508.11999">doi:<span>10.48550/arXiv.2508.11999</span></a>
+</span>
+<span>arXiv:2508.11999 [cs].
+
+</span></p><p id="reference-39">[39]
+<span>
+Shuai Zhang, Lina Yao, Aixin Sun, and Yi Tay. 2019.
+
+</span>
+<span>Deep Learning Based Recommender System: A Survey and New Perspectives.
+
+</span>
+<span><em id="bib.bib40.3">Comput. Surveys</em> 52, 1 (2019), 1–38.
+
+</span>
+<span>
+</span></p><p id="reference-40">[40]
+<span>
+Weizhi Zhang, Yuanchen Bei, Liangwei Yang, Henry Peng Zou, et al<span id="bib.bib41.3">.</span> 2025a.
+
+</span>
+<span>Cold-Start Recommendation Towards the Era of Large Language Models (LLMs): A Comprehensive Survey and Roadmap.
+
+</span>
+<span><em id="bib.bib41.4">arXiv preprint arXiv:2501.01945</em> (2025).
+
+</span>
+<span>
+</span></p><p id="reference-41">[41]
+<span>
+Weinan Zhang, Jiarui Qin, Wei Guo, Ruiming Tang, and Xiuqiang He. 2021.
+
+</span>
+<span>Deep Learning for Click-Through Rate Estimation. In <em id="bib.bib42.3">Proceedings of the Thirtieth International Joint Conference on Artificial Intelligence</em>. 4695–4703.
+
+</span>
+<span>
+</span></p><p id="reference-42">[42]
+<span>
+Wenlin Zhang, Chuhan Wu, Xiangyang Li, Yuhao Wang, Kuicai Dong, Yichao Wang, Xinyi Dai, Xiangyu Zhao, Huifeng Guo, and Ruiming Tang. 2025d.
+
+</span>
+<span>LLMTreeRec: Unleashing the Power of Large Language Models for Cold-Start Recommendations. In <em id="bib.bib43.3">Proceedings of the 31st International Conference on Computational Linguistics</em>. 886–896.
+
+</span>
+<span>
+</span></p><p id="reference-43">[43]
+<span>
+Yubin Zhang, Yanhua Huang, Haiming Xu, Mingliang Qi, Chang Wang, Jiarui Jin, Xiangyuan Ren, Xiaodan Wang, and Ruiwen Xu. 2025c.
+
+</span>
+<span>A Metric for MLLM Alignment in Large-scale Recommendation.
+
+</span>
+<span><em id="bib.bib44.3">RecSys 2025 Workshop on Evaluating and Applying Recommender Systems with Large Language Models</em> (2025).
+
+</span>
+<span>
+</span></p><p id="reference-44">[44]
+<span>
+Zhao-Yu Zhang, Xiang-Rong Sheng, Yujing Zhang, Biye Jiang, Shuguang Han, Hongbo Deng, and Bo Zheng. 2022.
+
+</span>
+<span>Towards understanding the overfitting phenomenon of deep click-through rate models. In <em id="bib.bib45.3">Proceedings of the 31st ACM international conference on information &amp; knowledge management</em>. 2671–2680.
+
+</span>
+<span>
+</span></p><p id="reference-45">[45]
+<span>
+Guorui Zhou, Xiaoqiang Zhu, Chenru Song, Ying Fan, Han Zhu, Xiao Ma, Yanghui Yan, Junqi Jin, Han Li, and Kun Gai. 2018.
+
+</span>
+<span>Deep Interest Network for Click-Through Rate Prediction. In <em id="bib.bib46.3">Proceedings of the 24th ACM SIGKDD International Conference on Knowledge Discovery &amp; Data Mining</em>. 1059–1068.
+
+</span>
+<span>
+</span></p><p id="reference-46">[46]
+<span>
+Zhihui Zhou, Lilin Zhang, and Ning Yang. 2023.
+
+</span>
+<span>Contrastive Collaborative Filtering for Cold-Start Item Recommendation. In <em id="bib.bib47.3">Proceedings of the 2023 ACM Web Conference</em>. 928–937.
+
+</span>
+<span>
+</span></p></div>
+</article></body></html>

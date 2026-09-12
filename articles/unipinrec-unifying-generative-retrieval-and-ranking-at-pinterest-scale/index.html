@@ -1,0 +1,1235 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1" name="viewport"/><title>UniPinRec: Unifying Generative Retrieval and Ranking at Pinterest Scale</title><style>body {
+  max-width: 760px;
+  margin: 2rem auto;
+  padding: 0 1rem;
+  color: #202020;
+  background: #fff;
+  font-family: Georgia, serif;
+  line-height: 1.55;
+}
+a { color: #315f8c; }
+.library-link { margin-bottom: 2rem; }
+img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 1.5rem auto;
+}
+figure { margin: 2rem 0; }
+figcaption, .article-meta { font-size: 0.9em; }
+pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+blockquote {
+  margin-left: 0;
+  padding-left: 1rem;
+  border-left: 3px solid #999;
+}
+math[display="block"] { margin: 1rem auto; overflow-x: auto; }</style><meta content="unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale" name="vrac-slug"/><meta content="arxiv" name="vrac-source-type"/><meta content="https://arxiv.org/abs/2606.00422" name="vrac-source-url"/><meta content="UniPinRec: Unifying Generative Retrieval and Ranking at Pinterest Scale" name="vrac-title"/><meta content="Hanyu Li, Yi-Ping Hsu, Aditya Mantha, Prabhat Agarwal, Laksh Bhasin, Jialu Wang, Hongtao Lin, Bella Huang, Yaxin Li, Xinyi Li, Chuxi Wang, Kousik Rajesh, Hooshmand S. Razaghi, Shunyao Li, Zongyue Qin, Jaewon Yang, James Li, Dhruvil Deven Badani, Jiajing Xu, Charles Rosenberg" name="vrac-author"/><meta content="arXiv:2606.00422v1" name="vrac-publication"/><meta content="29 May 2026" name="vrac-published"/><meta content="df271b94f7e4595c07bb1caa47542c7ee893b776d0de46b94068eade8e49ce49" name="vrac-content-sha256"/></head><body><p class="library-link"><a href="https://theopinard.github.io/vrac/">All articles</a></p><article><h1>UniPinRec: Unifying Generative Retrieval and Ranking at Pinterest Scale</h1><p class="article-meta">Hanyu Li, Yi-Ping Hsu, Aditya Mantha, Prabhat Agarwal, Laksh Bhasin, Jialu Wang, Hongtao Lin, Bella Huang, Yaxin Li, Xinyi Li, Chuxi Wang, Kousik Rajesh, Hooshmand S. Razaghi, Shunyao Li, Zongyue Qin, Jaewon Yang, James Li, Dhruvil Deven Badani, Jiajing Xu, Charles Rosenberg · arXiv:2606.00422v1 · 29 May 2026</p><p class="article-meta">Original: <a href="https://arxiv.org/html/2606.00422v1">arXiv HTML</a> · <a href="https://arxiv.org/pdf/2606.00422v1">PDF</a></p>
+<span><span><span><span>CCS: </span>Information systems Recommender systems</span></span></span>
+<div id="abstract1"><h2>Abstract</h2>
+<p id="abstract1.1">Modern recommendation systems predominantly train retrieval and ranking as separate models despite both increasingly relying on large transformers encoding the same user behavior data, duplicating parameters, compute, and serving cost.
+Prior work unifies the model architecture but not the full pipeline: input formats, training procedures, and serving stacks remain fragmented across stages.</p>
+<p id="abstract1.2">We present <span id="abstract1.2.1">UniPinRec</span>, which achieves full-stack unification of retrieval and ranking at Pinterest: one input format, one model, one training stage, deployed within existing serving infrastructure.
+A shared transformer encodes the user action sequence into candidate-independent representations that branch into retrieval (ANN dot-product) and ranking (cross-attention) via task-specific heads.
+Three ideas make this work: (1) Masked Action Modeling (MAM) eliminates interleaving, enabling weight sharing without doubling context length; (2) Blended training examples pair action sequences with feedview impression slates to satisfy both objectives jointly; (3) Cross-stage KV cache sharing reuses user-history computation from retrieval for ranking, reducing total FLOPs versus serving two independent models.</p>
+<p id="abstract1.3">Deployed in the Pinterest core surfaces, UniPinRec delivers approximately +1% online engagement lift while cutting end-to-end serving latency by 11.1% and lifting QPS by 63.6%.
+To our knowledge, this is the first full-stack unification of retrieval and ranking, covering inputs, model, training and serving, deployed in a production recommendation system.</p>
+</div>
+<div>
+<h6>Keywords: </h6>generative recommendation, unified retrieval and ranking, KV-cache reuse
+</div>
+<section id="S1">
+<h2><span>1. </span>Introduction</h2>
+<div id="S1.p1">
+<p id="S1.p1.1">Modern industrial recommendation systems (<a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-7">Chen et al., 2025b</a>; <a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-1">Agarwal et al., 2025</a>; <a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-23">Xia et al., 2023</a>) are built as multi-stage funnels: candidate generation retrieves thousands of items from a corpus of millions, ranking scores these candidates with richer features, and blending assembles the final page.
+Each stage is trained in isolation with its own architecture, objective, and training data.
+This separation carries a fundamental cost: retrieval and ranking both learn representations from the same user behavior data, yet cannot share parameters or transfer learned signals across stages.</p>
+</div>
+<figure id="S1.F1"><img alt="Figure 1. Prior methods unify the architecture but leave input format, training, and serving fragmented. Our approach unifies all four dimensions." height="340" src="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/figure-2.jpg" width="1199"/><figcaption><span>Figure 1. </span>Prior methods unify the architecture but leave input format, training, and serving fragmented. Our approach unifies all four dimensions.</figcaption></figure>
+<div id="S1.p2">
+<p id="S1.p2.1">The emergence of transformer-based sequence models as the dominant backbone at every stage (<a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-32">Zhai et al., 2024</a>; <a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-29">Ye et al., 2025a</a>; <a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-8">Chen et al., 2026</a>; <a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-20">Sun et al., 2026b</a>; <a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-9">Dai et al., 2025</a>) has made this redundancy more acute.
+When both stages are powered by large transformers encoding the same user action history, duplication becomes the primary source of inefficiency: in parameters, training compute, and serving cost.
+This creates a concrete opportunity: unify the two stages into a single model that encodes the user once, serves both stages from a common representation, and enables signal sharing where ranking supervision informs retrieval and retrieval’s broader corpus exposure regularizes ranking (<a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-9">Dai et al., 2025</a>; <a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-20">Sun et al., 2026b</a>).</p>
+</div>
+<div id="S1.p3">
+<p id="S1.p3.1">We call this goal <em id="S1.p3.1.1">full-stack unification</em> (Figure <a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#S1.F1"><span>1</span></a>): sharing not just the model architecture, but the entire pipeline, including input format, training, and serving infrastructure.
+In this paper, we achieve full-stack unification and deploy it in production at Pinterest.</p>
+</div>
+<section id="S1.SS0.SSS0.Px1">
+<h5>Why full-stack unification is hard.</h5>
+<div id="S1.SS0.SSS0.Px1.p1">
+<p id="S1.SS0.SSS0.Px1.p1.1">Three challenges have prevented prior work from achieving this.
+<span id="S1.SS0.SSS0.Px1.p1.1.1">(1) Usage divergence:</span> Although the backbone architecture has converged, the computational regimes remain distinct: retrieval must score millions of candidates under millisecond latency (e.g., via ANN dot-product scoring (<a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-1">Agarwal et al., 2025</a>)), while ranking scores hundreds and can afford richer per-candidate computation (e.g., cross-attention (<a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-7">Chen et al., 2025b</a>; <a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-32">Zhai et al., 2024</a>)).
+<span id="S1.SS0.SSS0.Px1.p1.1.2">(2) Training complexity:</span> Retrieval and ranking use different objectives (sampled softmax over the full corpus vs. binary classification over a small impression set), but prior work on next-action prediction (<a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-7">Chen et al., 2025b</a>; <a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-24">Xia et al., 2025</a>) already suggests these tasks could be complementary. Nonetheless, existing unified models resort to multi-stage pipelines (pre-training, fine-tuning, RL alignment) to reconcile them, adding complexity that itself prevents full-stack unification.
+<span id="S1.SS0.SSS0.Px1.p1.1.3">(3) Serving and operational challenges:</span> A unified model must serve at a lower cost than when separately deployed to justify the change; another desirable property is composability with existing candidate generators (e.g., keywords, trending), and preserve the flexibility to determine the level of unification, and A/B test and roll back each stage independently.
+These challenges are largely unexplored; very few systems have deployed a unified retrieval-ranking model in production (<a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-10">Deng et al., 2025</a>; <a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-20">Sun et al., 2026b</a>).</p>
+</div>
+</section>
+<section id="S1.SS0.SSS0.Px2">
+<h5>Why existing methods fall short.</h5>
+<div id="S1.SS0.SSS0.Px2.p1">
+<p id="S1.SS0.SSS0.Px2.p1.1">Existing approaches fall into two broad directions (Figure <a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#S1.F1"><span>1</span></a>).
+The first proposes <em id="S1.SS0.SSS0.Px2.p1.1.1">unified architectures</em> across stages.
+HSTU (<a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-32">Zhai et al., 2024</a>) uses a shared transformer paradigm but requires different input formats for retrieval (non-interleaved) and ranking (interleaved), so the stages are trained independently and cannot share computation.
+OnePiece (<a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-9">Dai et al., 2025</a>) adds unified multi-task training but was only deployed as either a retrieval or ranking model, never serving both stages from one unified model.
+In short, these methods share the architecture but remain far from full-stack unification.</p>
+</div>
+<div id="S1.SS0.SSS0.Px2.p2">
+<p id="S1.SS0.SSS0.Px2.p2.1">The second direction proposes <em id="S1.SS0.SSS0.Px2.p2.1.1">end-to-end generative methods</em> that bypass the funnel entirely.
+OneRec (<a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-10">Deng et al., 2025</a>) and OneRanker (<a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-20">Sun et al., 2026b</a>) produce candidates via autoregressive decoding of semantic IDs, achieving unification by construction.
+However, replacing the production funnel entirely makes it harder to compose with existing candidate sources and loses per-stage operational control.</p>
+</div>
+</section>
+<section id="S1.SS0.SSS0.Px3">
+<h5>Our approach.</h5>
+<div id="S1.SS0.SSS0.Px3.p1">
+<p id="S1.SS0.SSS0.Px3.p1.1">Our design principle is to compose existing, proven components (ANN indexing, cross-attention ranking, KV caching) rather than introducing new mechanisms, making the unified model a drop-in replacement within existing production infrastructure.
+Unification is not merely an elegance goal: a separate ranker would duplicate the expensive user-history encoding that retrieval already performs. By sharing this computation, UniPinRec adds ranking at marginal cost, making it practical to rank within the same latency budget as retrieval alone.</p>
+</div>
+<div id="S1.SS0.SSS0.Px3.p2">
+<p id="S1.SS0.SSS0.Px3.p2.1">UniPinRec achieves this with three design choices. First, Masked Action Modeling adds ranking supervision to the same non interleaved user sequence used for retrieval. Second, blended training examples and a joint loss train retrieval and ranking in a single stage. Third, cross-stage KV-cache sharing lets ranking reuse the user-history computation from retrieval, preserving modular serving while avoiding duplicate transformer work.</p>
+</div>
+<div id="S1.SS0.SSS0.Px3.p3">
+<p id="S1.SS0.SSS0.Px3.p3.1">Together, these choices achieve full-stack unification: same input format for both stages, single-stage joint training, and deployment within existing serving infrastructure.</p>
+</div>
+</section>
+<section id="S1.SS0.SSS0.Px4">
+<h5>Results.</h5>
+<div id="S1.SS0.SSS0.Px4.p1">
+<p id="S1.SS0.SSS0.Px4.p1.1">The unified model adds ranking capability while maintaining retrieval recall and reducing serving cost, a combination not achievable without model/system co-design.
+Offline, UniPinRec lifts ranking Hit@3 by <math alttext="+14.8\%" class="ltx_Math" display="inline" id="S1.SS0.SSS0.Px4.p1.m1" intent=":literal"><semantics><mrow><mo>+</mo><mrow><mn>14.8</mn><mo>%</mo></mrow></mrow><annotation encoding="application/x-tex">+14.8\%</annotation></semantics></math> over the production ranker while matching production retrieval recall.</p>
+</div>
+<div id="S1.SS0.SSS0.Px4.p2">
+<p id="S1.SS0.SSS0.Px4.p2.1">Because UniPinRec couples retrieval and ranking through a shared backbone, the most natural incremental rollout scheme starts from the L0 side: we ship retrieval together with L1 light-weight ranking as a single service (L0+L1), and extend to L2 fine ranking as a follow-up. This keeps the downstream ranker/blender untouched and gives us clean A/B attribution early.</p>
+</div>
+<div id="S1.SS0.SSS0.Px4.p3">
+<p id="S1.SS0.SSS0.Px4.p3.1">Although the offline ranking lift is attenuated by the downstream ranker/blender, it still delivered consistent engagement wins, <math alttext="+0.95\%" class="ltx_Math" display="inline" id="S1.SS0.SSS0.Px4.p3.m1" intent=":literal"><semantics><mrow><mo>+</mo><mrow><mn>0.95</mn><mo>%</mo></mrow></mrow><annotation encoding="application/x-tex">+0.95\%</annotation></semantics></math> on Board More Ideas saves and <math alttext="+0.91\%" class="ltx_Math" display="inline" id="S1.SS0.SSS0.Px4.p3.m2" intent=":literal"><semantics><mrow><mo>+</mo><mrow><mn>0.91</mn><mo>%</mo></mrow></mrow><annotation encoding="application/x-tex">+0.91\%</annotation></semantics></math> on Notifications push opens.
+On serving, optimizations like cross-stage KV-cache reuse yield a <math alttext="&gt;3\times" class="ltx_math_unparsed" display="inline" id="S1.SS0.SSS0.Px4.p3.m3" intent=":literal"><semantics><mrow><mo>&gt;</mo><mn>3</mn><mo lspace="0.222em">×</mo></mrow><annotation encoding="application/x-tex">&gt;3\times</annotation></semantics></math> total ranking forward-pass speedup (Table <a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#S4.T2"><span>2</span></a>) and in production, -11.1% e2e latency reduction and +63.6% QPS lift from naive separate deployment (Table <a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#S4.T3"><span>3</span></a>).</p>
+</div>
+</section>
+</section>
+<section id="S2">
+<h2><span>2. </span>Related Work</h2>
+<section id="S2.SS0.SSS0.Px1">
+<h5>Transformer-based recommendation architectures.</h5>
+<div id="S2.SS0.SSS0.Px1.p1">
+<p id="S2.SS0.SSS0.Px1.p1.1">HSTU (<a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-32">Zhai et al., 2024</a>) established a new paradigm of generative recommender with transformers as the dominant backbone, with subsequent works scaling capacity (<a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-29">Ye et al., 2025a</a>; <a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-30">Ye et al., 2025b</a>; <a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-8">Chen et al., 2026</a>; <a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-25">Yan et al., 2026</a>; <a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-18">Pardoe et al., 2026</a>), improving multi-task optimization (<a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-28">Yang et al., 2025</a>; <a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-35">Zhang et al., 2026</a>; <a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-31">Yuan et al., 2024</a>; <a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-5">Cao et al., 2025</a>), or further productionize the idea (<a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-13">Han et al., 2025</a>; <a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-15">Hertel et al., 2025</a>).
+OnePiece (<a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-9">Dai et al., 2025</a>) applied unified multi-task training on a shared backbone for cascade ranking at Shopee.
+RelayGR (<a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-22">Wang et al., 2026</a>) enables KV cache reuse across pipeline stages but assume independently trained models.
+Each of these methods achieves partial unification, whether in architecture (HSTU, OnePiece), training (OnePiece), or serving (RelayGR), but none unifies input, model, training and serving end-to-end.</p>
+</div>
+</section>
+<section id="S2.SS0.SSS0.Px2">
+<h5>End-to-end generative methods.</h5>
+<div id="S2.SS0.SSS0.Px2.p1">
+<p id="S2.SS0.SSS0.Px2.p1.1">OneRec (<a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-10">Deng et al., 2025</a>), OneRanker (<a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-20">Sun et al., 2026b</a>), and GPR (<a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-33">Zhang et al., 2025a</a>) replace the cascaded pipeline with generative models that produce candidates via autoregressive decoding.
+This paradigm has been extended to unified search and recommendation (<a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-12">Gao et al., 2025</a>; <a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-6">Chen et al., 2025a</a>; <a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-26">Yan et al., 2025</a>) and deployed across multiple companies (<a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-13">Han et al., 2025</a>; <a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-21">Sun et al., 2026a</a>; <a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-36">Zou et al., 2026</a>; <a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-19">Su et al., 2026</a>).
+Beyond infrastructure concerns, recent work (<a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-27">Yang et al., 2024</a>; <a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-11">Ding et al., 2026</a>) has shown that generative retrieval with semantic ID is not a clear win over dense retrieval due to lossy compression, inefficiency of the generation objective, and cold-start failures, also token relations are memorized in-parameter rather than delegated to external scalable indices where embedding proximity is naturally preserved.</p>
+</div>
+</section>
+</section>
+<section id="S3">
+<h2><span>3. </span>Methodology</h2>
+<section id="S3.SS0.SSS1">
+<h4><span>3.0.1. </span>Background:</h4>
+<figure id="S3.F2"><img alt="Figure 2. End-to-end flow of UniPinRec: a single shared backbone is trained jointly on retrieval and ranking objectives, then co-served as two Triton processes that share the user-history KV cache across stages." height="613" src="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/figure-3.jpg" width="1199"/><figcaption><span>Figure 2. </span>End-to-end flow of UniPinRec: a single shared backbone is trained jointly on retrieval and ranking objectives, then co-served as two Triton processes that share the user-history KV cache across stages.</figcaption></figure>
+<div id="S3.SS0.SSS1.p1">
+<p id="S3.SS0.SSS1.p1.1">UniPinRec builds on PinRec (<a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-1">Agarwal et al., 2025</a>), a generative retrieval model. Each item is represented by pre-trained item embeddings Omnisage(<a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-3">Badrinath et al., 2025</a>), and CLIP based multimodal embeddings(<a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-4">Beal et al., 2026</a>), search queries use pre-trained search embeddings(<a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-2">Agarwal et al., 2024</a>). These features are projected through an MLP into an <math alttext="L_{2}" class="ltx_Math" display="inline" id="S3.SS0.SSS1.p1.m1" intent=":literal"><semantics><msub><mi>L</mi><mn>2</mn></msub><annotation encoding="application/x-tex">L_{2}</annotation></semantics></math>-normalised embedding. Given a user’s history of positively interacted items <math alttext="H(u,t_{\max})" class="ltx_Math" display="inline" id="S3.SS0.SSS1.p1.m2" intent=":literal"><semantics><mrow><mi>H</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mi>u</mi><mo>,</mo><msub><mi>t</mi><mi>max</mi></msub><mo stretchy="false">)</mo></mrow></mrow><annotation encoding="application/x-tex">H(u,t_{\max})</annotation></semantics></math>, PinRec feeds the embedding sequence into a causal decoder-only transformer and trains with a sampled softmax loss over in-batch and random negatives:</p>
+<p><math alttext="L_{s}(\hat{i}_{u,t},i_{u,t+1})=-\log\frac{\exp\bigl(s(\hat{i}_{u,t},i_{u,t+1})\bigr)}{\exp\bigl(s(\hat{i}_{u,t},i_{u,t+1})\bigr)+\sum_{i_{n}\in N}\exp\bigl(s(\hat{i}_{u,t},i_{n})\bigr)}," class="ltx_Math" display="block" id="S3.E1.m1" intent=":literal"><semantics><mrow><mrow><mrow><msub><mi>L</mi><mi>s</mi></msub><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><msub><mover accent="true"><mi>i</mi><mo>^</mo></mover><mrow><mi>u</mi><mo>,</mo><mi>t</mi></mrow></msub><mo>,</mo><msub><mi>i</mi><mrow><mi>u</mi><mo>,</mo><mrow><mi>t</mi><mo>+</mo><mn>1</mn></mrow></mrow></msub><mo stretchy="false">)</mo></mrow></mrow><mo>=</mo><mrow><mo rspace="0.167em">−</mo><mrow><mi>log</mi><mo lspace="0.167em">⁡</mo><mfrac><mrow><mi>exp</mi><mo>⁡</mo><mrow><mo maxsize="1.200em" minsize="1.200em">(</mo><mrow><mi>s</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><msub><mover accent="true"><mi>i</mi><mo>^</mo></mover><mrow><mi>u</mi><mo>,</mo><mi>t</mi></mrow></msub><mo>,</mo><msub><mi>i</mi><mrow><mi>u</mi><mo>,</mo><mrow><mi>t</mi><mo>+</mo><mn>1</mn></mrow></mrow></msub><mo stretchy="false">)</mo></mrow></mrow><mo maxsize="1.200em" minsize="1.200em">)</mo></mrow></mrow><mrow><mrow><mi>exp</mi><mo>⁡</mo><mrow><mo maxsize="1.200em" minsize="1.200em">(</mo><mrow><mi>s</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><msub><mover accent="true"><mi>i</mi><mo>^</mo></mover><mrow><mi>u</mi><mo>,</mo><mi>t</mi></mrow></msub><mo>,</mo><msub><mi>i</mi><mrow><mi>u</mi><mo>,</mo><mrow><mi>t</mi><mo>+</mo><mn>1</mn></mrow></mrow></msub><mo stretchy="false">)</mo></mrow></mrow><mo maxsize="1.200em" minsize="1.200em">)</mo></mrow></mrow><mo rspace="0.055em">+</mo><mrow><msub><mo>∑</mo><mrow><msub><mi>i</mi><mi>n</mi></msub><mo>∈</mo><mi>N</mi></mrow></msub><mrow><mi>exp</mi><mo>⁡</mo><mrow><mo maxsize="1.200em" minsize="1.200em">(</mo><mrow><mi>s</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><msub><mover accent="true"><mi>i</mi><mo>^</mo></mover><mrow><mi>u</mi><mo>,</mo><mi>t</mi></mrow></msub><mo>,</mo><msub><mi>i</mi><mi>n</mi></msub><mo stretchy="false">)</mo></mrow></mrow><mo maxsize="1.200em" minsize="1.200em">)</mo></mrow></mrow></mrow></mrow></mfrac></mrow></mrow></mrow><mo>,</mo></mrow><annotation encoding="application/x-tex">L_{s}(\hat{i}_{u,t},i_{u,t+1})=-\log\frac{\exp\bigl(s(\hat{i}_{u,t},i_{u,t+1})\bigr)}{\exp\bigl(s(\hat{i}_{u,t},i_{u,t+1})\bigr)+\sum_{i_{n}\in N}\exp\bigl(s(\hat{i}_{u,t},i_{n})\bigr)},</annotation></semantics></math> (1)</p>
+<p id="S3.SS0.SSS1.p1.2">where <math alttext="s(\hat{i}_{u,t},i_{c})=\lambda\cdot\hat{i}_{u,t}^{\top}i_{c}-\log Q(i_{c})" class="ltx_Math" display="inline" id="S3.SS0.SSS1.p1.m3" intent=":literal"><semantics><mrow><mrow><mi>s</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><msub><mover accent="true"><mi>i</mi><mo>^</mo></mover><mrow><mi>u</mi><mo>,</mo><mi>t</mi></mrow></msub><mo>,</mo><msub><mi>i</mi><mi>c</mi></msub><mo stretchy="false">)</mo></mrow></mrow><mo>=</mo><mrow><mrow><mrow><mi>λ</mi><mo lspace="0.222em" rspace="0.222em">⋅</mo><msubsup><mover accent="true"><mi>i</mi><mo>^</mo></mover><mrow><mi>u</mi><mo>,</mo><mi>t</mi></mrow><mo>⊤</mo></msubsup></mrow><mo lspace="0em" rspace="0em">​</mo><msub><mi>i</mi><mi>c</mi></msub></mrow><mo>−</mo><mrow><mi>log</mi><mo lspace="0.167em">⁡</mo><mrow><mi>Q</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><msub><mi>i</mi><mi>c</mi></msub><mo stretchy="false">)</mo></mrow></mrow></mrow></mrow></mrow><annotation encoding="application/x-tex">s(\hat{i}_{u,t},i_{c})=\lambda\cdot\hat{i}_{u,t}^{\top}i_{c}-\log Q(i_{c})</annotation></semantics></math> is a frequency-corrected similarity, <math alttext="Q(i_{c})" class="ltx_Math" display="inline" id="S3.SS0.SSS1.p1.m4" intent=":literal"><semantics><mrow><mi>Q</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><msub><mi>i</mi><mi>c</mi></msub><mo stretchy="false">)</mo></mrow></mrow><annotation encoding="application/x-tex">Q(i_{c})</annotation></semantics></math> is the estimated sampling probability of candidate <math alttext="i_{c}" class="ltx_Math" display="inline" id="S3.SS0.SSS1.p1.m5" intent=":literal"><semantics><msub><mi>i</mi><mi>c</mi></msub><annotation encoding="application/x-tex">i_{c}</annotation></semantics></math> (computed via a count-min sketch), and <math alttext="N" class="ltx_Math" display="inline" id="S3.SS0.SSS1.p1.m6" intent=":literal"><semantics><mi>N</mi><annotation encoding="application/x-tex">N</annotation></semantics></math> is the set of negative samples. The model is optimized to minimize <math alttext="L_{s}" class="ltx_Math" display="inline" id="S3.SS0.SSS1.p1.m7" intent=":literal"><semantics><msub><mi>L</mi><mi>s</mi></msub><annotation encoding="application/x-tex">L_{s}</annotation></semantics></math> averaged over all positions in the history.</p>
+</div>
+<section id="S3.SS0.SSS1.Px1">
+<h5>Section roadmap.</h5>
+<div id="S3.SS0.SSS1.Px1.p1">
+<p id="S3.SS0.SSS1.Px1.p1.1">The remainder of this section addresses each challenge from the introduction in turn: Section <a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#S3.SS1"><span>3.1</span></a> resolves architectural and training divergence via Masked Action Modeling and a joint loss; Section <a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#S3.SS2"><span>3.2</span></a> describes the data infrastructure that makes joint training feasible at scale; Section <a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#S3.SS3"><span>3.3</span></a> resolves serving and operational challenges via cross-request KV-cache sharing.</p>
+</div>
+</section>
+</section>
+<section id="S3.SS1">
+<h3><span>3.1. </span>Reformulating PinRec for ranking</h3>
+<div id="S3.SS1.p1">
+<p id="S3.SS1.p1.1">Extending PinRec to ranking requires three changes:</p>
+<ol id="S3.I1">
+<li id="S3.I1.i1"><span>(1)</span>
+<div id="S3.I1.i1.p1">
+<p id="S3.I1.i1.p1.1"><span id="S3.I1.i1.p1.1.1">Objective:</span> rather than maximizing next-item likelihood over the full corpus, the model must predict per-candidate action probabilities over a small impression set.</p>
+</div></li>
+<li id="S3.I1.i2"><span>(2)</span>
+<div id="S3.I1.i2.p1">
+<p id="S3.I1.i2.p1.1"><span id="S3.I1.i2.p1.1.1">Targets:</span> the supervision shifts from a softmax over item embeddings to binary labels for each action type <math alttext="c\in\{1,\dots,C\}" class="ltx_Math" display="inline" id="S3.I1.i2.p1.m1" intent=":literal"><semantics><mrow><mi>c</mi><mo>∈</mo><mrow><mo stretchy="false">{</mo><mrow><mn>1</mn><mo>,</mo><mi mathvariant="normal">…</mi><mo>,</mo><mi>C</mi></mrow><mo stretchy="false">}</mo></mrow></mrow><annotation encoding="application/x-tex">c\in\{1,\dots,C\}</annotation></semantics></math> (click, save, hide, etc.), trained with per-head binary cross-entropy.</p>
+</div></li>
+<li id="S3.I1.i3"><span>(3)</span>
+<div id="S3.I1.i3.p1">
+<p id="S3.I1.i3.p1.1"><span id="S3.I1.i3.p1.1.1">Data:</span> training examples must include impression negatives (items shown but not engaged with), not just positive engagements (detailed in Section <a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#S3.SS2"><span>3.2</span></a>).</p>
+</div></li>
+</ol>
+</div>
+<section id="S3.SS1.SSS1">
+<h4><span>3.1.1. </span>Masked Action Modeling</h4>
+<div id="S3.SS1.SSS1.p1">
+<p id="S3.SS1.SSS1.p1.1">The central question is how to formulate action prediction as a sequence learning problem so that the ranking objective can share the retrieval backbone.
+The HSTU (<a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-32">Zhai et al., 2024</a>) approach interleaves action tokens between items to ensure action predictions are candidate-aware, but this doubles context length and breaks input-format compatibility with retrieval.</p>
+</div>
+<div id="S3.SS1.SSS1.p2">
+<p id="S3.SS1.SSS1.p2.1">We propose <em id="S3.SS1.SSS1.p2.1.1">Masked Action Modeling</em> (MAM): actions are concatenated with each item embedding along the feature dimension and randomly masked during training, preserving causality (the model cannot see an action before predicting it) without inflating the sequence.
+A similar mask-and-predict idea appears in (<a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-16">Huang et al., 2025</a>) for feed impressions. To our knowledge, we are the first to apply action supervision directly to the user-sequence backbone used for retrieval. This achieves ranking within the same forward pass while simultaneously improving retrieval quality through denser per-position gradients.</p>
+</div>
+<div id="S3.SS1.SSS1.p3">
+<ol id="S3.I2">
+<li id="S3.I2.i1"><span>(1)</span>
+<div id="S3.I2.i1.p1">
+<p id="S3.I2.i1.p1.1"><span id="S3.I2.i1.p1.1.1">Input representation.</span>
+Rather than interleaving a dedicated action token after every item, we encode the action multi-hot vector <math alttext="a_{i}" class="ltx_Math" display="inline" id="S3.I2.i1.p1.m1" intent=":literal"><semantics><msub><mi>a</mi><mi>i</mi></msub><annotation encoding="application/x-tex">a_{i}</annotation></semantics></math> as a dense embedding via a linear layer and concatenate it with the item representation along the feature axis before the input projector.
+The projector maps the concatenated representation into the transformer hidden dimension.</p>
+</div></li>
+<li id="S3.I2.i2"><span>(2)</span>
+<div id="S3.I2.i2.p1">
+<p id="S3.I2.i2.p1.1"><span id="S3.I2.i2.p1.1.1">Masking schedule.</span>
+For positions in the user’s observed history (past), each action is independently masked with probability <math alttext="p_{\text{mask}}" class="ltx_Math" display="inline" id="S3.I2.i2.p1.m1" intent=":literal"><semantics><msub><mi>p</mi><mtext>mask</mtext></msub><annotation encoding="application/x-tex">p_{\text{mask}}</annotation></semantics></math>.
+For candidate (future) positions, actions are always masked (<math alttext="m_{j}=0" class="ltx_Math" display="inline" id="S3.I2.i2.p1.m2" intent=":literal"><semantics><mrow><msub><mi>m</mi><mi>j</mi></msub><mo>=</mo><mn>0</mn></mrow><annotation encoding="application/x-tex">m_{j}=0</annotation></semantics></math> for all <math alttext="j" class="ltx_Math" display="inline" id="S3.I2.i2.p1.m3" intent=":literal"><semantics><mi>j</mi><annotation encoding="application/x-tex">j</annotation></semantics></math>), since at inference time the actions on candidates are unknown.</p>
+</div>
+<div id="S3.I2.i2.p2">
+<p id="S3.I2.i2.p2.1">When a position is masked, its action-type input is replaced with a dedicated <span id="S3.I2.i2.p2.1.1">[MASK]</span> class (an additional one-hot dimension appended to the action vocabulary), so the model can distinguish “action unknown” from “no action taken.”</p>
+</div>
+<div id="S3.I2.i2.p3">
+<p id="S3.I2.i2.p3.1">This guarantees no information leakage. Input masking (<math alttext="m_{i}{=}0" class="ltx_Math" display="inline" id="S3.I2.i2.p3.m1" intent=":literal"><semantics><mrow><msub><mi>m</mi><mi>i</mi></msub><mo>=</mo><mn>0</mn></mrow><annotation encoding="application/x-tex">m_{i}{=}0</annotation></semantics></math>) replaces <math alttext="a_{i}" class="ltx_Math" display="inline" id="S3.I2.i2.p3.m2" intent=":literal"><semantics><msub><mi>a</mi><mi>i</mi></msub><annotation encoding="application/x-tex">a_{i}</annotation></semantics></math> with a <span id="S3.I2.i2.p3.1.1">[MASK]</span> token, and causal attention restricts position <math alttext="i" class="ltx_Math" display="inline" id="S3.I2.i2.p3.m3" intent=":literal"><semantics><mi>i</mi><annotation encoding="application/x-tex">i</annotation></semantics></math> to <math alttext="\{0,\ldots,i\}" class="ltx_Math" display="inline" id="S3.I2.i2.p3.m4" intent=":literal"><semantics><mrow><mo stretchy="false">{</mo><mn>0</mn><mo>,</mo><mi mathvariant="normal">…</mi><mo>,</mo><mi>i</mi><mo stretchy="false">}</mo></mrow><annotation encoding="application/x-tex">\{0,\ldots,i\}</annotation></semantics></math>, so the hidden state satisfies:</p>
+<p><math alttext="z_{i}=f_{\theta}\!\bigl(\,\tilde{\Phi}_{i},\;\{\tilde{\Phi}_{t}\}_{t&lt;i}\bigr),\quad\tilde{\Phi}_{i}\perp\!\!\!\perp a_{i}\;\text{ when }m_{i}=0," class="ltx_Math" display="block" id="S3.E2.m1" intent=":literal"><semantics><mrow><mrow><mrow><msub><mi>z</mi><mi>i</mi></msub><mo>=</mo><mrow><msub><mi>f</mi><mi>θ</mi></msub><mo lspace="0em" rspace="0em">​</mo><mrow><mo maxsize="1.200em" minsize="1.200em">(</mo><msub><mover accent="true"><mi mathvariant="normal">Φ</mi><mo>~</mo></mover><mi>i</mi></msub><mo>,</mo><msub><mrow><mo stretchy="false">{</mo><msub><mover accent="true"><mi mathvariant="normal">Φ</mi><mo>~</mo></mover><mi>t</mi></msub><mo stretchy="false">}</mo></mrow><mrow><mi>t</mi><mo>&lt;</mo><mi>i</mi></mrow></msub><mo maxsize="1.200em" minsize="1.200em">)</mo></mrow></mrow></mrow><mo rspace="1.167em">,</mo><mrow><msub><mover accent="true"><mi mathvariant="normal">Φ</mi><mo>~</mo></mover><mi>i</mi></msub><mpadded style="width:0.518em;" width="0.518em"><mo>⟂</mo></mpadded><mphantom></mphantom><mo>⟂</mo><mrow><msub><mi>a</mi><mi>i</mi></msub><mo lspace="0em" rspace="0em">​</mo><mtext> when </mtext><mo lspace="0em" rspace="0em">​</mo><msub><mi>m</mi><mi>i</mi></msub></mrow><mo>=</mo><mn>0</mn></mrow></mrow><mo>,</mo></mrow><annotation encoding="application/x-tex">z_{i}=f_{\theta}\!\bigl(\,\tilde{\Phi}_{i},\;\{\tilde{\Phi}_{t}\}_{t&lt;i}\bigr),\quad\tilde{\Phi}_{i}\perp\!\!\!\perp a_{i}\;\text{ when }m_{i}=0,</annotation></semantics></math> (2)</p>
+<p id="S3.I2.i2.p3.2">ensuring <math alttext="h_{\psi_{c}}(z_{i})" class="ltx_Math" display="inline" id="S3.I2.i2.p3.m5" intent=":literal"><semantics><mrow><msub><mi>h</mi><msub><mi>ψ</mi><mi>c</mi></msub></msub><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><msub><mi>z</mi><mi>i</mi></msub><mo stretchy="false">)</mo></mrow></mrow><annotation encoding="application/x-tex">h_{\psi_{c}}(z_{i})</annotation></semantics></math> depends only on <math alttext="\Phi_{i}" class="ltx_Math" display="inline" id="S3.I2.i2.p3.m6" intent=":literal"><semantics><msub><mi mathvariant="normal">Φ</mi><mi>i</mi></msub><annotation encoding="application/x-tex">\Phi_{i}</annotation></semantics></math> and <math alttext="\{(\Phi_{t},m_{t}\odot a_{t})\}_{t&lt;i}" class="ltx_Math" display="inline" id="S3.I2.i2.p3.m7" intent=":literal"><semantics><msub><mrow><mo stretchy="false">{</mo><mrow><mo stretchy="false">(</mo><msub><mi mathvariant="normal">Φ</mi><mi>t</mi></msub><mo>,</mo><mrow><msub><mi>m</mi><mi>t</mi></msub><mo lspace="0.222em" rspace="0.222em">⊙</mo><msub><mi>a</mi><mi>t</mi></msub></mrow><mo stretchy="false">)</mo></mrow><mo stretchy="false">}</mo></mrow><mrow><mi>t</mi><mo>&lt;</mo><mi>i</mi></mrow></msub><annotation encoding="application/x-tex">\{(\Phi_{t},m_{t}\odot a_{t})\}_{t&lt;i}</annotation></semantics></math>.</p>
+</div></li>
+<li id="S3.I2.i3"><span>(3)</span>
+<div id="S3.I2.i3.p1">
+<p id="S3.I2.i3.p1.1"><span id="S3.I2.i3.p1.1.1">Attention pattern.</span>
+The transformer processes the concatenated sequence <math alttext="[\tilde{\Phi}_{1},\ldots,\tilde{\Phi}_{n},||\tilde{\Phi}^{\prime}_{1},\ldots,\tilde{\Phi}^{\prime}_{k}]" class="ltx_math_unparsed" display="inline" id="S3.I2.i3.p1.m1" intent=":literal"><semantics><mrow><mo stretchy="false">[</mo><msub><mover accent="true"><mi mathvariant="normal">Φ</mi><mo>~</mo></mover><mn>1</mn></msub><mo>,</mo><mi mathvariant="normal">…</mi><mo>,</mo><msub><mover accent="true"><mi mathvariant="normal">Φ</mi><mo>~</mo></mover><mi>n</mi></msub><mo>,</mo><mo fence="false" rspace="0.167em" stretchy="false">|</mo><mo fence="false" rspace="0.167em" stretchy="false">|</mo><msubsup><mover accent="true"><mi mathvariant="normal">Φ</mi><mo>~</mo></mover><mn>1</mn><mo>′</mo></msubsup><mo>,</mo><mi mathvariant="normal">…</mi><mo>,</mo><msubsup><mover accent="true"><mi mathvariant="normal">Φ</mi><mo>~</mo></mover><mi>k</mi><mo>′</mo></msubsup><mo stretchy="false">]</mo></mrow><annotation encoding="application/x-tex">[\tilde{\Phi}_{1},\ldots,\tilde{\Phi}_{n},||\tilde{\Phi}^{\prime}_{1},\ldots,\tilde{\Phi}^{\prime}_{k}]</annotation></semantics></math> with a modified causal mask (Figure <a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#S3.F2"><span>2</span></a>, upper right) following the M-FALCON pattern in (<a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-32">Zhai et al., 2024</a>): past positions retain standard causal attention; each candidate position <math alttext="n+j" class="ltx_Math" display="inline" id="S3.I2.i3.p1.m2" intent=":literal"><semantics><mrow><mi>n</mi><mo>+</mo><mi>j</mi></mrow><annotation encoding="application/x-tex">n+j</annotation></semantics></math> attends to all past positions <math alttext="1,\ldots,n" class="ltx_Math" display="inline" id="S3.I2.i3.p1.m3" intent=":literal"><semantics><mrow><mn>1</mn><mo>,</mo><mi mathvariant="normal">…</mi><mo>,</mo><mi>n</mi></mrow><annotation encoding="application/x-tex">1,\ldots,n</annotation></semantics></math> but is blocked from attending to other candidates.
+All candidate positions share fixed position IDs, feedview types and timestamps to ensure unbiased scoring.
+Because candidates cannot attend to each other, the mask reduces attention cost from <math alttext="\mathcal{O}((n{+}k)^{2})" class="ltx_Math" display="inline" id="S3.I2.i3.p1.m4" intent=":literal"><semantics><mrow><mi class="ltx_font_mathcaligraphic">𝒪</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><msup><mrow><mo stretchy="false">(</mo><mrow><mi>n</mi><mo>+</mo><mi>k</mi></mrow><mo stretchy="false">)</mo></mrow><mn>2</mn></msup><mo stretchy="false">)</mo></mrow></mrow><annotation encoding="application/x-tex">\mathcal{O}((n{+}k)^{2})</annotation></semantics></math> to <math alttext="\mathcal{O}(n^{2}+nk)" class="ltx_Math" display="inline" id="S3.I2.i3.p1.m5" intent=":literal"><semantics><mrow><mi class="ltx_font_mathcaligraphic">𝒪</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mrow><msup><mi>n</mi><mn>2</mn></msup><mo>+</mo><mrow><mi>n</mi><mo lspace="0em" rspace="0em">​</mo><mi>k</mi></mrow></mrow><mo stretchy="false">)</mo></mrow></mrow><annotation encoding="application/x-tex">\mathcal{O}(n^{2}+nk)</annotation></semantics></math>; we materialise this sparsity via <em id="S3.I2.i3.p1.1.2">flex attention</em> (<a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-14">He et al., 2024</a>), which compiles the block-sparse pattern into fused CUDA kernels.
+This pattern also enables KV-cache sharing across stages (Section <a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#S3.SS3.SSS3"><span>3.3.3</span></a>): retrieval caches the <math alttext="\mathcal{O}(n^{2})" class="ltx_Math" display="inline" id="S3.I2.i3.p1.m6" intent=":literal"><semantics><mrow><mi class="ltx_font_mathcaligraphic">𝒪</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><msup><mi>n</mi><mn>2</mn></msup><mo stretchy="false">)</mo></mrow></mrow><annotation encoding="application/x-tex">\mathcal{O}(n^{2})</annotation></semantics></math> history computation, and ranking reuses it at a marginal cost of <math alttext="\mathcal{O}(nk)" class="ltx_Math" display="inline" id="S3.I2.i3.p1.m7" intent=":literal"><semantics><mrow><mi class="ltx_font_mathcaligraphic">𝒪</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mrow><mi>n</mi><mo lspace="0em" rspace="0em">​</mo><mi>k</mi></mrow><mo stretchy="false">)</mo></mrow></mrow><annotation encoding="application/x-tex">\mathcal{O}(nk)</annotation></semantics></math>.</p>
+</div></li>
+<li id="S3.I2.i4"><span>(4)</span>
+<div id="S3.I2.i4.p1">
+<p id="S3.I2.i4.p1.1"><span id="S3.I2.i4.p1.1.1">Training objective.</span>
+The past portion of the sequence <math alttext="\tilde{\Phi}_{1},\ldots,\tilde{\Phi}_{n}" class="ltx_Math" display="inline" id="S3.I2.i4.p1.m1" intent=":literal"><semantics><mrow><msub><mover accent="true"><mi mathvariant="normal">Φ</mi><mo>~</mo></mover><mn>1</mn></msub><mo>,</mo><mi mathvariant="normal">…</mi><mo>,</mo><msub><mover accent="true"><mi mathvariant="normal">Φ</mi><mo>~</mo></mover><mi>n</mi></msub></mrow><annotation encoding="application/x-tex">\tilde{\Phi}_{1},\ldots,\tilde{\Phi}_{n}</annotation></semantics></math> retains the same length and positional structure as the retrieval model’s input, and is in fact used for retrieval: the same next-item prediction objective is applied over these positions. The <math alttext="k" class="ltx_Math" display="inline" id="S3.I2.i4.p1.m2" intent=":literal"><semantics><mi>k</mi><annotation encoding="application/x-tex">k</annotation></semantics></math> candidate items <math alttext="\tilde{\Phi}^{\prime}_{1},\ldots,\tilde{\Phi}^{\prime}_{k}" class="ltx_Math" display="inline" id="S3.I2.i4.p1.m3" intent=":literal"><semantics><mrow><msubsup><mover accent="true"><mi mathvariant="normal">Φ</mi><mo>~</mo></mover><mn>1</mn><mo>′</mo></msubsup><mo>,</mo><mi mathvariant="normal">…</mi><mo>,</mo><msubsup><mover accent="true"><mi mathvariant="normal">Φ</mi><mo>~</mo></mover><mi>k</mi><mo>′</mo></msubsup></mrow><annotation encoding="application/x-tex">\tilde{\Phi}^{\prime}_{1},\ldots,\tilde{\Phi}^{\prime}_{k}</annotation></semantics></math> are appended after the past, and the full sequence is processed in a single forward pass. This enables full parameter sharing with the retrieval model. The model is trained with two jointly optimised losses:</p>
+<ol id="S3.I2.i4.I1">
+<li id="S3.I2.i4.I1.i1"><span>(a)</span>
+<div id="S3.I2.i4.I1.i1.p1">
+<p id="S3.I2.i4.I1.i1.p1.1"><span id="S3.I2.i4.I1.i1.p1.1.1">Next-item prediction loss</span> (retrieval objective): identical to the sampled-softmax loss in Section <a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#S3.SS0.SSS1"><span>3.0.1</span></a>, applied at every unmasked past position:</p>
+<p><math alttext="\mathcal{L}_{\text{item}}=\frac{1}{|H|}\sum_{t\in H}L_{s}\!\bigl(\hat{i}_{u,t},\;i_{u,t+1}\bigr)." class="ltx_Math" display="block" id="S3.E3.m1" intent=":literal"><semantics><mrow><mrow><msub><mi class="ltx_font_mathcaligraphic">ℒ</mi><mtext>item</mtext></msub><mo>=</mo><mrow><mfrac><mn>1</mn><mrow><mo stretchy="false">|</mo><mi>H</mi><mo stretchy="false">|</mo></mrow></mfrac><mo lspace="0em" rspace="0em">​</mo><mrow><munder><mo movablelimits="false">∑</mo><mrow><mi>t</mi><mo>∈</mo><mi>H</mi></mrow></munder><mrow><msub><mi>L</mi><mi>s</mi></msub><mo lspace="0em" rspace="0em">​</mo><mrow><mo maxsize="1.200em" minsize="1.200em">(</mo><msub><mover accent="true"><mi>i</mi><mo>^</mo></mover><mrow><mi>u</mi><mo>,</mo><mi>t</mi></mrow></msub><mo>,</mo><msub><mi>i</mi><mrow><mi>u</mi><mo>,</mo><mrow><mi>t</mi><mo>+</mo><mn>1</mn></mrow></mrow></msub><mo maxsize="1.200em" minsize="1.200em">)</mo></mrow></mrow></mrow></mrow></mrow><mo lspace="0em">.</mo></mrow><annotation encoding="application/x-tex">\mathcal{L}_{\text{item}}=\frac{1}{|H|}\sum_{t\in H}L_{s}\!\bigl(\hat{i}_{u,t},\;i_{u,t+1}\bigr).</annotation></semantics></math> (3)</p>
+</div></li>
+<li id="S3.I2.i4.I1.i2"><span>(b)</span>
+<div id="S3.I2.i4.I1.i2.p1">
+<p id="S3.I2.i4.I1.i2.p1.1"><span id="S3.I2.i4.I1.i2.p1.1.1">Action prediction loss</span> (ranking objective): at every position where the action was masked, the model must predict each action type independently. For each action type <math alttext="c\in\{1,\dots,C\}" class="ltx_Math" display="inline" id="S3.I2.i4.I1.i2.p1.m1" intent=":literal"><semantics><mrow><mi>c</mi><mo>∈</mo><mrow><mo stretchy="false">{</mo><mrow><mn>1</mn><mo>,</mo><mi mathvariant="normal">…</mi><mo>,</mo><mi>C</mi></mrow><mo stretchy="false">}</mo></mrow></mrow><annotation encoding="application/x-tex">c\in\{1,\dots,C\}</annotation></semantics></math>, a dedicated MLP head <math alttext="h_{\psi_{c}}" class="ltx_Math" display="inline" id="S3.I2.i4.I1.i2.p1.m2" intent=":literal"><semantics><msub><mi>h</mi><msub><mi>ψ</mi><mi>c</mi></msub></msub><annotation encoding="application/x-tex">h_{\psi_{c}}</annotation></semantics></math> produces a scalar logit, and a per-head weight <math alttext="w_{c}" class="ltx_Math" display="inline" id="S3.I2.i4.I1.i2.p1.m3" intent=":literal"><semantics><msub><mi>w</mi><mi>c</mi></msub><annotation encoding="application/x-tex">w_{c}</annotation></semantics></math> controls its contribution. Separate terms are applied to past (masked) and future (always masked) positions:</p>
+<p><math alttext="\begin{split}\mathcal{L}_{\text{action}}=\sum_{c=1}^{C}w_{c}\Bigl[\;&amp;\frac{1}{|\mathcal{M}_{\text{past}}|}\!\sum_{i\in\mathcal{M}_{\text{past}}}\ell_{\text{BCE}}\!\bigl(h_{\psi_{c}}(z_{i}),\,a_{i}^{(c)}\bigr)\\
+&amp;+\frac{1}{k}\sum_{j=1}^{k}\ell_{\text{BCE}}\!\bigl(h_{\psi_{c}}(z^{\prime}_{j}),\,a^{\prime(c)}_{j}\bigr)\Bigr],\end{split}" class="ltx_Math" display="block" id="S3.E4.m1" intent=":literal"><semantics><mtable columnspacing="0pt" displaystyle="true" rowspacing="0pt"><mtr><mtd class="ltx_align_right" columnalign="right"><mrow><mi class="ltx_font_mathcaligraphic">ℒ</mi><msub><mrow></mrow><mtext>action</mtext></msub><mo rspace="0.111em">=</mo><mo movablelimits="false">∑</mo><msub><mrow></mrow><mrow><mi>c</mi><mo>=</mo><mn>1</mn></mrow></msub><msup><mrow></mrow><mi>C</mi></msup><mi>w</mi><msub><mrow></mrow><mi>c</mi></msub><mo maxsize="1.600em" minsize="1.600em">[</mo></mrow></mtd><mtd class="ltx_align_left" columnalign="left"><mrow><mfrac><mn>1</mn><mrow><mo stretchy="false">|</mo><msub><mi class="ltx_font_mathcaligraphic">ℳ</mi><mtext>past</mtext></msub><mo stretchy="false">|</mo></mrow></mfrac><mo lspace="0em" rspace="0em">​</mo><mrow><munder><mo movablelimits="false">∑</mo><mrow><mi>i</mi><mo>∈</mo><msub><mi class="ltx_font_mathcaligraphic">ℳ</mi><mtext>past</mtext></msub></mrow></munder><mrow><msub><mpadded style="width:0.247em;" width="0.247em"><mi mathvariant="normal">ℓ</mi></mpadded><mtext>BCE</mtext></msub><mo lspace="0em" rspace="0em">​</mo><mrow><mo maxsize="1.200em" minsize="1.200em">(</mo><mrow><msub><mi>h</mi><msub><mi>ψ</mi><mi>c</mi></msub></msub><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><msub><mi>z</mi><mi>i</mi></msub><mo stretchy="false">)</mo></mrow></mrow><mo mathsize="1.200em" rspace="0.337em">,</mo><msubsup><mi>a</mi><mi>i</mi><mrow><mo stretchy="false">(</mo><mi>c</mi><mo stretchy="false">)</mo></mrow></msubsup><mo maxsize="1.200em" minsize="1.200em">)</mo></mrow></mrow></mrow></mrow></mtd></mtr><mtr><mtd></mtd><mtd class="ltx_align_left" columnalign="left"><mrow><mo>+</mo><mfrac><mn>1</mn><mi>k</mi></mfrac><mo movablelimits="false">∑</mo><msub><mrow></mrow><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow></msub><msup><mrow></mrow><mi>k</mi></msup><mpadded style="width:0.247em;" width="0.247em"><mi mathvariant="normal">ℓ</mi></mpadded><msub><mrow></mrow><mtext>BCE</mtext></msub><mo maxsize="1.200em" minsize="1.200em">(</mo><mi>h</mi><msub><mrow></mrow><msub><mi>ψ</mi><mi>c</mi></msub></msub><mo stretchy="false">(</mo><mi>z</mi><msup><mrow></mrow><mo>′</mo></msup><msub><mrow></mrow><mi>j</mi></msub><mo stretchy="false">)</mo><mo rspace="0.507em">,</mo><mi>a</mi><msup><mrow></mrow><mrow><mo rspace="0em">′</mo><mphantom></mphantom><mrow><mo stretchy="false">(</mo><mi>c</mi><mo stretchy="false">)</mo></mrow></mrow></msup><msub><mrow></mrow><mi>j</mi></msub><mo maxsize="1.200em" minsize="1.200em">)</mo><mo maxsize="1.600em" minsize="1.600em">]</mo><mo>,</mo></mrow></mtd></mtr></mtable><annotation encoding="application/x-tex">\begin{split}\mathcal{L}_{\text{action}}=\sum_{c=1}^{C}w_{c}\Bigl[\;&amp;\frac{1}{|\mathcal{M}_{\text{past}}|}\!\sum_{i\in\mathcal{M}_{\text{past}}}\ell_{\text{BCE}}\!\bigl(h_{\psi_{c}}(z_{i}),\,a_{i}^{(c)}\bigr)\\
+&amp;+\frac{1}{k}\sum_{j=1}^{k}\ell_{\text{BCE}}\!\bigl(h_{\psi_{c}}(z^{\prime}_{j}),\,a^{\prime(c)}_{j}\bigr)\Bigr],\end{split}</annotation></semantics></math> (4)</p>
+<p id="S3.I2.i4.I1.i2.p1.2">where <math alttext="C" class="ltx_Math" display="inline" id="S3.I2.i4.I1.i2.p1.m4" intent=":literal"><semantics><mi>C</mi><annotation encoding="application/x-tex">C</annotation></semantics></math> is the number of action types, <math alttext="z_{i}" class="ltx_Math" display="inline" id="S3.I2.i4.I1.i2.p1.m5" intent=":literal"><semantics><msub><mi>z</mi><mi>i</mi></msub><annotation encoding="application/x-tex">z_{i}</annotation></semantics></math> is the transformer hidden state at position <math alttext="i" class="ltx_Math" display="inline" id="S3.I2.i4.I1.i2.p1.m6" intent=":literal"><semantics><mi>i</mi><annotation encoding="application/x-tex">i</annotation></semantics></math>, <math alttext="h_{\psi_{c}}" class="ltx_Math" display="inline" id="S3.I2.i4.I1.i2.p1.m7" intent=":literal"><semantics><msub><mi>h</mi><msub><mi>ψ</mi><mi>c</mi></msub></msub><annotation encoding="application/x-tex">h_{\psi_{c}}</annotation></semantics></math> is the MLP head for action type <math alttext="c" class="ltx_Math" display="inline" id="S3.I2.i4.I1.i2.p1.m8" intent=":literal"><semantics><mi>c</mi><annotation encoding="application/x-tex">c</annotation></semantics></math>, <math alttext="a_{i}^{(c)}" class="ltx_Math" display="inline" id="S3.I2.i4.I1.i2.p1.m9" intent=":literal"><semantics><msubsup><mi>a</mi><mi>i</mi><mrow><mo stretchy="false">(</mo><mi>c</mi><mo stretchy="false">)</mo></mrow></msubsup><annotation encoding="application/x-tex">a_{i}^{(c)}</annotation></semantics></math> is the binary label for action <math alttext="c" class="ltx_Math" display="inline" id="S3.I2.i4.I1.i2.p1.m10" intent=":literal"><semantics><mi>c</mi><annotation encoding="application/x-tex">c</annotation></semantics></math> at position <math alttext="i" class="ltx_Math" display="inline" id="S3.I2.i4.I1.i2.p1.m11" intent=":literal"><semantics><mi>i</mi><annotation encoding="application/x-tex">i</annotation></semantics></math>, <math alttext="\mathcal{M}_{\text{past}}=\{i:m_{i}=0\}" class="ltx_Math" display="inline" id="S3.I2.i4.I1.i2.p1.m12" intent=":literal"><semantics><mrow><msub><mi class="ltx_font_mathcaligraphic">ℳ</mi><mtext>past</mtext></msub><mo>=</mo><mrow><mo stretchy="false">{</mo><mi>i</mi><mo lspace="0.278em" rspace="0.278em">:</mo><mrow><msub><mi>m</mi><mi>i</mi></msub><mo>=</mo><mn>0</mn></mrow><mo stretchy="false">}</mo></mrow></mrow><annotation encoding="application/x-tex">\mathcal{M}_{\text{past}}=\{i:m_{i}=0\}</annotation></semantics></math> is the set of masked past positions, and <math alttext="w_{c}" class="ltx_Math" display="inline" id="S3.I2.i4.I1.i2.p1.m13" intent=":literal"><semantics><msub><mi>w</mi><mi>c</mi></msub><annotation encoding="application/x-tex">w_{c}</annotation></semantics></math> are hyperparameter-tuned scalar weights that balance the contribution of each action type (e.g., save, click, hide) and against next-item prediction loss.</p>
+</div></li>
+</ol>
+</div>
+<div id="S3.I2.i4.p2">
+<p id="S3.I2.i4.p2.1">The total loss is:</p>
+<p><math alttext="\mathcal{L}=\mathcal{L}_{\text{item}}+\mathcal{L}_{\text{action}}." class="ltx_Math" display="block" id="S3.E5.m1" intent=":literal"><semantics><mrow><mrow><mi class="ltx_font_mathcaligraphic">ℒ</mi><mo>=</mo><mrow><msub><mi class="ltx_font_mathcaligraphic">ℒ</mi><mtext>item</mtext></msub><mo>+</mo><msub><mi class="ltx_font_mathcaligraphic">ℒ</mi><mtext>action</mtext></msub></mrow></mrow><mo lspace="0em">.</mo></mrow><annotation encoding="application/x-tex">\mathcal{L}=\mathcal{L}_{\text{item}}+\mathcal{L}_{\text{action}}.</annotation></semantics></math> (5)</p>
+</div>
+<figure id="S3.F3"><img alt="Figure 3. Co-serving topology for UniPinRec. Retrieval and ranking are independent Triton ensemble nodes; an ANN lookup against a CPU-hosted Faiss index sits between them. ANN returns both candidate Pin IDs and their reconstructed item embe" height="469" src="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/figure-4.jpg" width="1199"/><figcaption><span>Figure 3. </span>Co-serving topology for UniPinRec. Retrieval and ranking are independent Triton ensemble nodes; an ANN lookup against a CPU-hosted Faiss index sits between them. ANN returns both candidate Pin IDs and their reconstructed item embeddings, sparing the ranking stage a separate embedding fetch. The shared KV pool is reused by ranking.</figcaption></figure></li>
+<li id="S3.I2.i5"><span>(5)</span>
+<div id="S3.I2.i5.p1">
+<p id="S3.I2.i5.p1.1"><span id="S3.I2.i5.p1.1.1">Key advantages over interleaving.</span></p>
+<ol id="S3.I2.i5.I1">
+<li id="S3.I2.i5.I1.i1"><span>(a)</span>
+<div id="S3.I2.i5.I1.i1.p1">
+<p id="S3.I2.i5.I1.i1.p1.1">No context-length inflation: the sequence length stays identical to the retrieval model.</p>
+</div></li>
+<li id="S3.I2.i5.I1.i2"><span>(b)</span>
+<div id="S3.I2.i5.I1.i2.p1">
+<p id="S3.I2.i5.I1.i2.p1.1">Full weight sharing: the ranking model can be initialised directly from a retrieval checkpoint.</p>
+</div></li>
+<li id="S3.I2.i5.I1.i3"><span>(c)</span>
+<div id="S3.I2.i5.I1.i3.p1">
+<p id="S3.I2.i5.I1.i3.p1.1">Denoising regularisation: random masking encourages the model to rely on item content when actions are unavailable, improving generalisation at inference time.</p>
+</div></li>
+</ol>
+</div></li>
+</ol>
+</div>
+</section>
+</section>
+<section id="S3.SS2">
+<h3><span>3.2. </span>Data infrastructure</h3>
+<div id="S3.SS2.p1">
+<p id="S3.SS2.p1.1">Joint training introduces a data requirement absent from single-task models: each training example must contain both the user’s engagement history (for the retrieval objective) and the full impression slate with negative outcomes (for the action prediction objective).
+Neither existing retrieval nor ranking datasets satisfy both constraints simultaneously.
+Constructing this unified format at scale
+is a prerequisite for full-stack unification.
+We describe how we construct and serve these examples below.</p>
+</div>
+<section id="S3.SS2.SSS1">
+<h4><span>3.2.1. </span>Feedview-centric dataset construction</h4>
+<div id="S3.SS2.SSS1.p1">
+<p id="S3.SS2.SSS1.p1.1">A key data design choice distinguishes our work from prior sequential recommenders.
+Retrieval models typically train on action-only sequences (chronological engagements) (<a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-32">Zhai et al., 2024</a>; <a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-1">Agarwal et al., 2025</a>; <a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-10">Deng et al., 2025</a>), while ranking models train on impression logs (the full slate shown to a user, with both engaged and no-action outcomes) (<a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-15">Hertel et al., 2025</a>; <a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-9">Dai et al., 2025</a>).
+Prior work on unified models has not discussed how to construct training data that satisfies both objectives; joint training requires both: the retrieval objective needs positive action history to predict the next item, while the ranking objective needs the full impression slate to learn.</p>
+</div>
+<div id="S3.SS2.SSS1.p2">
+<p id="S3.SS2.SSS1.p2.1">We bridge this by constructing each training example with a <em id="S3.SS2.SSS1.p2.1.1">past</em> action sequence paired with a <em id="S3.SS2.SSS1.p2.1.2">future</em> feedview (the full impression slate from a subsequent request, with engagement labels).
+Concretely, each position in the sequence is a (Pin, surface, action, timestamp) tuple, where action spans the engagement vocabulary the model predicts (impression-only, click, save, share, hide, etc.).</p>
+</div>
+<div id="S3.SS2.SSS1.p3">
+<p id="S3.SS2.SSS1.p3.1">Because engagement events are naturally sparse relative to impressions, the training pipeline subsamples non-engaged feedviews (retaining <math alttext="10\%" class="ltx_Math" display="inline" id="S3.SS2.SSS1.p3.m1" intent=":literal"><semantics><mrow><mn>10</mn><mo>%</mo></mrow><annotation encoding="application/x-tex">10\%</annotation></semantics></math>) to amplify rare engagement classes. The evaluation pipeline applies no downsampling and uses a randomized replay dataset, preserving the natural unbiased distribution. This also benefits retrieval by reflecting the real traffic distribution.</p>
+</div>
+</section>
+<section id="S3.SS2.SSS2">
+<h4><span>3.2.2. </span>Ray in-trainer join</h4>
+<div id="S3.SS2.SSS2.p1">
+<p id="S3.SS2.SSS2.p1.1">We eliminate the user action history fanout introduced in offline join by performing an <em id="S3.SS2.SSS2.p1.1.1">in-trainer bucket join</em> using Ray (<a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-17">Moritz et al., 2018</a>) distributed dataloading layer. User action sequences and feedview records are maintained as separate Iceberg tables, each hash-bucketed by user ID, and joined in memory at training time.
+This avoids data duplication entirely and makes context length, sampling ratios, and filtering tweakable parameters at training time instead of data-generation time.</p>
+</div>
+</section>
+</section>
+<section id="S3.SS3">
+<h3><span>3.3. </span>Serving infrastructure</h3>
+<div id="S3.SS3.p1">
+<p id="S3.SS3.p1.1">Figure <a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#S3.F3"><span>3</span></a> shows the end-to-end co-serving topology described in this section.</p>
+</div>
+<div id="S3.SS3.p2">
+<p id="S3.SS3.p2.1">A unified model only delivers efficiency benefits if it can replace two separate models without doubling serving costs.
+Two properties of our model design/training protocol make this tractable.
+First, the non-interleaved architecture and unified co-training (Section <a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#S3.SS1.SSS1"><span>3.1.1</span></a>) guarantee the same model weights and produce candidate independent user representations that can be cached once and reused across stages.
+Second, both the retrieval and ranking stages share the same item embedding space, so there’s no need to maintain separate candidate representations.</p>
+</div>
+<section id="S3.SS3.SSS1">
+<h4><span>3.3.1. </span>Background:</h4>
+<div id="S3.SS3.SSS1.p1">
+<p id="S3.SS3.SSS1.p1.1">We build on the production PinRec (<a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-1">Agarwal et al., 2025</a>) serving stack, which uses a Triton ensemble to assemble user history, run autoregressive retrieval, and perform ANN lookup through a CPU-hosted Faiss index.</p>
+</div>
+</section>
+<section id="S3.SS3.SSS2">
+<h4><span>3.3.2. </span>Overall serving design</h4>
+<div id="S3.SS3.SSS2.p1">
+<p id="S3.SS3.SSS2.p1.1">UniPinRec retains most of this stack and attaches a new ranking node downstream of Faiss.
+The ranking node consumes the ANN’s candidate set along with a KV-cache slot identifier (detailed in Section <a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#S3.SS3.SSS3"><span>3.3.3</span></a> below).
+Rather than reprocessing the full user history, it runs an incremental forward pass: only the candidate tokens are processed, attending back to the KV cache history to produce per-candidate action probabilities.</p>
+</div>
+<div id="S3.SS3.SSS2.p2">
+<p id="S3.SS3.SSS2.p2.1">The ANN index already stores each Pin’s embedded vector (the output of the embedder MLP, computed at index-build time).
+We use <span id="S3.SS3.SSS2.p2.1.1">Faiss.search_and_reconstruct</span>, which returns both the candidate Pin IDs and their stored embeddings in a single call.
+These pre-embedded vectors serve directly as candidate tokens for the ranking pass.
+This eliminates additional embedder forward pass and feature fetches on the candidate side, and guarantees that the retrieval and ranking stages score against identical representations.</p>
+</div>
+</section>
+<section id="S3.SS3.SSS3">
+<h4><span>3.3.3. </span>KV-cache sharing across stages</h4>
+<div id="S3.SS3.SSS3.p1">
+<p id="S3.SS3.SSS3.p1.1">The dominant cost in our transformer is encoding the user’s action history (<math alttext="n" class="ltx_Math" display="inline" id="S3.SS3.SSS3.p1.m1" intent=":literal"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> tokens, <math alttext="\mathcal{O}(n^{2})" class="ltx_Math" display="inline" id="S3.SS3.SSS3.p1.m2" intent=":literal"><semantics><mrow><mi class="ltx_font_mathcaligraphic">𝒪</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><msup><mi>n</mi><mn>2</mn></msup><mo stretchy="false">)</mo></mrow></mrow><annotation encoding="application/x-tex">\mathcal{O}(n^{2})</annotation></semantics></math> self-attention); scoring <math alttext="k" class="ltx_Math" display="inline" id="S3.SS3.SSS3.p1.m3" intent=":literal"><semantics><mi>k</mi><annotation encoding="application/x-tex">k</annotation></semantics></math> candidates against that history is only <math alttext="\mathcal{O}(nk)" class="ltx_Math" display="inline" id="S3.SS3.SSS3.p1.m4" intent=":literal"><semantics><mrow><mi class="ltx_font_mathcaligraphic">𝒪</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mrow><mi>n</mi><mo lspace="0em" rspace="0em">​</mo><mi>k</mi></mrow><mo stretchy="false">)</mo></mrow></mrow><annotation encoding="application/x-tex">\mathcal{O}(nk)</annotation></semantics></math>.
+We avoid the <math alttext="\mathcal{O}(n^{2})" class="ltx_Math" display="inline" id="S3.SS3.SSS3.p1.m5" intent=":literal"><semantics><mrow><mi class="ltx_font_mathcaligraphic">𝒪</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><msup><mi>n</mi><mn>2</mn></msup><mo stretchy="false">)</mo></mrow></mrow><annotation encoding="application/x-tex">\mathcal{O}(n^{2})</annotation></semantics></math> cost entirely during ranking by extending PinRec’s per-request KV cache (Section <a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#S3.SS3.SSS1"><span>3.3.1</span></a>) across stages and across processes: ranking attends directly to the cached history KV without re-encoding it.
+We further prevent candidates from attending to each other, following the M-FALCON (<a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-15">Hertel et al., 2025</a>) identity-mask design, so each candidate’s score is independent of the batch composition.
+The net ranking cost is <math alttext="\mathcal{O}(nk)" class="ltx_Math" display="inline" id="S3.SS3.SSS3.p1.m6" intent=":literal"><semantics><mrow><mi class="ltx_font_mathcaligraphic">𝒪</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mrow><mi>n</mi><mo lspace="0em" rspace="0em">​</mo><mi>k</mi></mrow><mo stretchy="false">)</mo></mrow></mrow><annotation encoding="application/x-tex">\mathcal{O}(nk)</annotation></semantics></math>.</p>
+</div>
+<div id="S3.SS3.SSS3.p2">
+<p id="S3.SS3.SSS3.p2.1">Retrieval and ranking run as separate OS processes with separate CUDA contexts, as is typical in microservice-based serving stacks.
+Naive serialization of KV tensors across processes incurs GPU-host-GPU roundtrips that dominate latency.
+We instead pre-allocate a GPU memory pool that both processes map into their address spaces, so the ranking process reads the KV state written by retrieval without CPU to GPU data transfer.</p>
+</div>
+<div id="S3.SS3.SSS3.p3">
+<p id="S3.SS3.SSS3.p3.1">Each retrieval replica therefore allocates a pre-sized GPU pool of shape <math alttext="[L,S,H,n,D]" class="ltx_Math" display="inline" id="S3.SS3.SSS3.p3.m1" intent=":literal"><semantics><mrow><mo stretchy="false">[</mo><mrow><mi>L</mi><mo>,</mo><mi>S</mi><mo>,</mo><mi>H</mi><mo>,</mo><mi>n</mi><mo>,</mo><mi>D</mi></mrow><mo stretchy="false">]</mo></mrow><annotation encoding="application/x-tex">[L,S,H,n,D]</annotation></semantics></math> (layers, slots, KV heads, past sequence length, head dim), exports CUDA IPC handles for its storage to a per-instance file at boot time, and the ranking process opens those handles and maps the same physical GPU allocation into its own address space.</p>
+</div>
+<div id="S3.SS3.SSS3.p4">
+<p id="S3.SS3.SSS3.p4.1">Slots are reused round-robin,
+each ranking consumer copies each request’s past KV from its slot in the mapped pool into its own decode cache during the forward pass.</p>
+</div>
+</section>
+<section id="S3.SS3.SSS4">
+<h4><span>3.3.4. </span>FP8 quantization</h4>
+<div id="S3.SS3.SSS4.p1">
+<p id="S3.SS3.SSS4.p1.1">To further improve serving efficiency, we use mixed-precision FP8 training and inference. We use fused modules that combine layer normalization, linear projection, and activation into single kernels from the Transformer Engine library, avoiding intermediate full-precision materialization. Training uses a hybrid FP8 format with E4M3 during the forward pass and E5M2 for backward computation so that forward activations and backward gradients retain an appropriate balance between precision and dynamic range. Quantization comes at a cost of a 0.5% drop in offline metrics, which we accepted as a reasonable tradeoff for the efficiency gains.</p>
+</div>
+</section>
+</section>
+</section>
+<section id="S4">
+<h2><span>4. </span>Results</h2>
+<div id="S4.p1">
+<p id="S4.p1.1">We structure our results around three research questions:</p>
+<ul id="S4.I1">
+<li id="S4.I1.i1"><span>•</span>
+<div id="S4.I1.i1.p1">
+<p id="S4.I1.i1.p1.1"><span id="S4.I1.i1.p1.1.1">RQ1</span>: Can we train a unified model that is capable of both retrieval and ranking tasks?</p>
+</div></li>
+<li id="S4.I1.i2"><span>•</span>
+<div id="S4.I1.i2.p1">
+<p id="S4.I1.i2.p1.1"><span id="S4.I1.i2.p1.1.1">RQ2</span>: Can we co-serve a retrieval and ranking model to achieve minimal compute redundancy?</p>
+</div></li>
+<li id="S4.I1.i3"><span>•</span>
+<div id="S4.I1.i3.p1">
+<p id="S4.I1.i3.p1.1"><span id="S4.I1.i3.p1.1.1">RQ3</span>: Can we make this unified model an easy extension to existing production level recommendation system?</p>
+</div></li>
+</ul>
+</div>
+<section id="S4.SS1">
+<h3><span>4.1. </span>Train a Unified Retrieval and Ranking (RQ1)</h3>
+<div id="S4.SS1.p1">
+<p id="S4.SS1.p1.1">We demonstrate the generative recommendation paradigm can be extended to ranking model. This requires (1) architectural compatibility across stages to enable parameter sharing, and (2) joint training with both retrieval and ranking objectives to allow signal sharing between tasks.</p>
+</div>
+<section id="S4.SS1.SSS0.Px1">
+<h5>Baselines and training strategies.</h5>
+<div id="S4.SS1.SSS0.Px1.p1">
+<p id="S4.SS1.SSS0.Px1.p1.1">We compare UniPinRec against multiple baselines and training approaches:</p>
+</div>
+<div id="S4.SS1.SSS0.Px1.p2">
+<p id="S4.SS1.SSS0.Px1.p2.1"><span id="S4.SS1.SSS0.Px1.p2.1.1">TransAct V2 + DCNv2</span> (<a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-24">Xia et al., 2025</a>): The production ranking model contemporarily trained, a transformer based model with long user sequence and other feature crossing modules.</p>
+</div>
+<div id="S4.SS1.SSS0.Px1.p3">
+<p id="S4.SS1.SSS0.Px1.p3.1"><span id="S4.SS1.SSS0.Px1.p3.1.1">HSTU</span> (<a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-32">Zhai et al., 2024</a>): State-of-the-art unified retrieval and ranking model with action and item interleaving (<a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-34">Zhang et al., 2025b</a>).
+We evaluate HSTU on both retrieval and ranking tasks with unified interleaved paradigm with matching effective sequence length.</p>
+</div>
+<div id="S4.SS1.SSS0.Px1.p4">
+<p id="S4.SS1.SSS0.Px1.p4.1"><span id="S4.SS1.SSS0.Px1.p4.1.1">PinRec</span> (<a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-1">Agarwal et al., 2025</a>): The production retrieval model, a 12-layer transformer trained with next-item prediction (sampled softmax). Serves only retrieval; no ranking capability.</p>
+</div>
+<div id="S4.SS1.SSS0.Px1.p5">
+<p id="S4.SS1.SSS0.Px1.p5.1"><span id="S4.SS1.SSS0.Px1.p5.1.1">PinRec finetuned</span>: Sequential training approach where we take the snapshot above (PinRec), then finetune for ranking by adding action prediction objectives. Critically, the item embedder must remain frozen during finetuning to maintain compatibility with the pre-trained retrieval model’s Faiss index for deployment.</p>
+</div>
+<div id="S4.SS1.SSS0.Px1.p6">
+<p id="S4.SS1.SSS0.Px1.p6.1"><span id="S4.SS1.SSS0.Px1.p6.1.1">UniPinRec w/o item loss</span>: A ranking-only variant trained exclusively with action prediction loss, using the same MAM architecture as the unified model. This ablation isolates the effect of joint training by removing the retrieval objective.</p>
+</div>
+<div id="S4.SS1.SSS0.Px1.p7">
+<p id="S4.SS1.SSS0.Px1.p7.1"><span id="S4.SS1.SSS0.Px1.p7.1.1">UniPinRec (ours)</span>: The unified model with Masked Action Modeling, using the same non-interleaved sequence format for both retrieval and ranking. Trained jointly with both next-item prediction (retrieval) and action prediction (ranking) losses. The item embedder is trainable and benefits from both objectives.</p>
+</div>
+</section>
+<section id="S4.SS1.SSS0.Px2">
+<h5>Results.</h5>
+<div id="S4.SS1.SSS0.Px2.p1">
+<p id="S4.SS1.SSS0.Px2.p1.1">Table <a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#S4.T1"><span>1</span></a> shows that UniPinRec achieves competitive performance on both retrieval (Recall@10, interacted targets in the future feedview that are correctly retrieved in the top 10 from any autoregressively generated query embeddings) and ranking ("save" Hit@3, ranked by save head score) compared to specialized baselines. We use "Board More Ideas" feed data to train and evaluate. More online results will be discussed in Section <a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#S5.SS2"><span>5.2</span></a></p>
+</div>
+<figure id="S4.T1"><img alt="Table 1. Unified joint training vs. detached pre-train / fine-tune. Both approaches use the same 12-layer MAM backbone. Two columns are on different evaluation datasets. Hit@3 measures ranking performance and Recall@10 measures retrieval pe" height="377" src="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/table-1.jpg" width="1012"/><figcaption><span>Table 1. </span>Unified joint training vs. detached pre-train / fine-tune. Both approaches use the same 12-layer MAM backbone. Two columns are on different evaluation datasets. Hit@3 measures ranking performance and Recall@10 measures retrieval performance. Best result in <span id="S4.T1.3">bold</span>.</figcaption></figure>
+<div id="S4.SS1.SSS0.Px2.p2">
+<p id="S4.SS1.SSS0.Px2.p2.1">On retrieval, UniPinRec matches PinRec’s Recall@10, with <span id="S4.SS1.SSS0.Px2.p2.1.1">+0.2%</span> marginal improvement, demonstrating that joint training with ranking objectives does not degrade retrieval quality. This is critical for deployment: the unified model can serve as a drop-in replacement for the production retrieval system.</p>
+</div>
+<div id="S4.SS1.SSS0.Px2.p3">
+<p id="S4.SS1.SSS0.Px2.p3.1">On ranking, UniPinRec surpasses TransActV2+DCNv2, the contemporary production ranking model by <span id="S4.SS1.SSS0.Px2.p3.1.1">14.7%</span> with dedicated feature crossing modules, despite handling both retrieval and ranking in a single model. UniPinRec also outperforms HSTU at the same context length budget. Importantly, UniPinRec outperforms the ranking-only variant (UniPinRec w/o item loss), showing that the joint retrieval objective further improves ranking quality. The PinRec fine-tuned approach underperforms joint training despite starting from a strong retrieval model. The frozen embedder constraint prevents the model from adapting item representations for ranking, while joint training allows the embedder to learn from both tasks simultaneously. This gap demonstrates that architectural compatibility alone is insufficient, joint optimization is necessary to fully leverage unified training.</p>
+</div>
+</section>
+</section>
+<section id="S4.SS2">
+<h3><span>4.2. </span>Co-serve a Retrieval and Ranking Model (RQ2)</h3>
+<div id="S4.SS2.p1">
+<p id="S4.SS2.p1.1">A unified backbone can only claim efficiency win if it does not serve as two disjoint models.
+The dominant compute in a ranking forward pass is the self-attention over the user’s history; when retrieval and ranking are served separately, this cost is paid twice per request.
+Our unified design encodes the history once during retrieval and reuses the resulting keys and values as the KV cache for the subsequent ranking pass, turning ranking into a <em id="S4.SS2.p1.1.1">decode</em> step that attends from candidates into a frozen history rather than a full <em id="S4.SS2.p1.1.2">prefill</em>.</p>
+</div>
+<div id="S4.SS2.p2">
+<p id="S4.SS2.p2.1">We measure the impact of this reuse in Table <a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#S4.T2"><span>2</span></a>, on NVIDIA L40S (<math alttext="B{=}8" class="ltx_Math" display="inline" id="S4.SS2.p2.m1" intent=":literal"><semantics><mrow><mi>B</mi><mo>=</mo><mn>8</mn></mrow><annotation encoding="application/x-tex">B{=}8</annotation></semantics></math>, <math alttext="n{=}992" class="ltx_Math" display="inline" id="S4.SS2.p2.m2" intent=":literal"><semantics><mrow><mi>n</mi><mo>=</mo><mn>992</mn></mrow><annotation encoding="application/x-tex">n{=}992</annotation></semantics></math>, <math alttext="k{=}656" class="ltx_Math" display="inline" id="S4.SS2.p2.m3" intent=":literal"><semantics><mrow><mi>k</mi><mo>=</mo><mn>656</mn></mrow><annotation encoding="application/x-tex">k{=}656</annotation></semantics></math>, <math alttext="L{=}12" class="ltx_Math" display="inline" id="S4.SS2.p2.m4" intent=":literal"><semantics><mrow><mi>L</mi><mo>=</mo><mn>12</mn></mrow><annotation encoding="application/x-tex">L{=}12</annotation></semantics></math>), varying three orthogonal levers in addition to the path: the activation dtype (bf16 vs. fp8 with Transformer Engine fused matmuls), the attention implementation (SDPA vs. auto-tuned flex attention), and the runtime (eager Python dispatch, <span id="S4.SS2.p2.1.1">torch.compile</span>, or CUDA graph capture)
+:</p>
+<ul id="S4.I2">
+<li id="S4.I2.i1"><span>•</span>
+<div id="S4.I2.i1.p1">
+<p id="S4.I2.i1.p1.1">KV-cache reuse (prefill<math alttext="\to" class="ltx_Math" display="inline" id="S4.I2.i1.p1.m1" intent=":literal"><semantics><mo stretchy="false">→</mo><annotation encoding="application/x-tex">\to</annotation></semantics></math>decode) roughly <math alttext="\sim" class="ltx_Math" display="inline" id="S4.I2.i1.p1.m2" intent=":literal"><semantics><mo>∼</mo><annotation encoding="application/x-tex">\sim</annotation></semantics></math><math alttext="2.4\times" class="ltx_math_unparsed" display="inline" id="S4.I2.i1.p1.m3" intent=":literal"><semantics><mrow><mn>2.4</mn><mo lspace="0.222em">×</mo></mrow><annotation encoding="application/x-tex">2.4\times</annotation></semantics></math> .</p>
+</div></li>
+<li id="S4.I2.i2"><span>•</span>
+<div id="S4.I2.i2.p1">
+<p id="S4.I2.i2.p1.1">fp8 with Transformer Engine matmuls and CUDA graph capture gives a <math alttext="\sim" class="ltx_Math" display="inline" id="S4.I2.i2.p1.m1" intent=":literal"><semantics><mo>∼</mo><annotation encoding="application/x-tex">\sim</annotation></semantics></math><math alttext="1.25\times" class="ltx_math_unparsed" display="inline" id="S4.I2.i2.p1.m2" intent=":literal"><semantics><mrow><mn>1.25</mn><mo lspace="0.222em">×</mo></mrow><annotation encoding="application/x-tex">1.25\times</annotation></semantics></math> over bf16+compile.</p>
+</div></li>
+<li id="S4.I2.i3"><span>•</span>
+<div id="S4.I2.i3.p1">
+<p id="S4.I2.i3.p1.1">Flex attention contributes to a steady <math alttext="\sim" class="ltx_Math" display="inline" id="S4.I2.i3.p1.m1" intent=":literal"><semantics><mo>∼</mo><annotation encoding="application/x-tex">\sim</annotation></semantics></math><math alttext="1.3\times" class="ltx_math_unparsed" display="inline" id="S4.I2.i3.p1.m2" intent=":literal"><semantics><mrow><mn>1.3</mn><mo lspace="0.222em">×</mo></mrow><annotation encoding="application/x-tex">1.3\times</annotation></semantics></math> on top of any dtype.</p>
+</div></li>
+</ul>
+<p id="S4.SS2.p2.2">The three levers are largely orthogonal, so stacking them yields the maximum end-to-end <math alttext="\mathbf{3.92\times}" class="ltx_math_unparsed" display="inline" id="S4.SS2.p2.m5" intent=":literal"><semantics><mrow><mn class="ltx_mathvariant_bold" mathvariant="bold">3.92</mn><mo lspace="0.222em">×</mo></mrow><annotation encoding="application/x-tex">\mathbf{3.92\times}</annotation></semantics></math> in the bottom-right cell of Table <a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#S4.T2"><span>2</span></a>.</p>
+</div>
+<figure id="S4.T2"><img alt="Table 2. Eval-time forward latency for a single ranking pass Speedups are relative to the bf16 / SDPA / compile prefill row. “Runtime” controls how the forward is dispatched: eager, torch.compile or cuda graph capture. We use graph for fp8 " height="571" src="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/table-2.jpg" width="1011"/><figcaption><span>Table 2. </span>Eval-time forward latency for a single ranking pass
+Speedups are relative to the bf16 / SDPA / compile prefill row. “Runtime” controls how the forward is dispatched: eager, torch.compile or cuda graph capture. We use graph for fp8 decode because torch.compile fusion regresses Transformer Engine kernels. Best result in <span id="S4.T2.3">bold</span>, *used in online experiments</figcaption></figure>
+<figure id="S4.T3"><img alt="Table 3. Online serving wins at controlled GPU activity/budget. Baseline uses (bf16, SDPA, torch.compile) for both retrieval and ranking, and all numbers are percentage changes relative to this joint baseline. *used in online experiments in" height="245" src="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/table-3.jpg" width="1011"/><figcaption><span>Table 3. </span>Online serving wins at controlled GPU activity/budget. Baseline uses (bf16, SDPA, torch.compile) for both retrieval and ranking, and all numbers are percentage changes relative to this joint baseline. *used in online experiments in Section <a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#S5"><span>5</span></a></figcaption></figure>
+<div id="S4.SS2.p3">
+<p id="S4.SS2.p3.1">We further benchmark the best groups of bf16 and fp8 in online conditions Table <a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#S4.T3"><span>3</span></a>.
+One major trade-off we observed with fp8 kernels is the necessity to wait and accumulate requests to form larger batch size to meet the shape constraints of Transformer Engine where the flattened leading dimension <math alttext="[B*S,D]" class="ltx_Math" display="inline" id="S4.SS2.p3.m1" intent=":literal"><semantics><mrow><mo stretchy="false">[</mo><mrow><mi>B</mi><mo lspace="0.222em" rspace="0.222em">∗</mo><mi>S</mi></mrow><mo>,</mo><mi>D</mi><mo stretchy="false">]</mo></mrow><annotation encoding="application/x-tex">[B*S,D]</annotation></semantics></math> must be a multiple of 8, this mostly constrains the autoregressive steps of the retrieval forward pass where <math alttext="S=1" class="ltx_Math" display="inline" id="S4.SS2.p3.m2" intent=":literal"><semantics><mrow><mi>S</mi><mo>=</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">S=1</annotation></semantics></math>. Resulting in increased QPS but at larger latency. For the online experiments reported, we used bf16, but plan to proceed with fp8 as next steps.</p>
+</div>
+</section>
+<section id="S4.SS3">
+<h3><span>4.3. </span>Ablations</h3>
+<section id="S4.SS3.SSS1">
+<h4><span>4.3.1. </span>Effect of Masking Ratio in MAM</h4>
+<div id="S4.SS3.SSS1.p1">
+<p id="S4.SS3.SSS1.p1.1">A core design choice in Masked Action Modeling (MAM) is the masking probability <math alttext="p_{\text{mask}}" class="ltx_Math" display="inline" id="S4.SS3.SSS1.p1.m1" intent=":literal"><semantics><msub><mi>p</mi><mtext>mask</mtext></msub><annotation encoding="application/x-tex">p_{\text{mask}}</annotation></semantics></math>, which controls how often historical actions in the user sequence are randomly masked during training. We ablate this choice by training variants with <math alttext="p_{\text{mask}}\in\{0.0,0.1,0.2,0.3\}" class="ltx_Math" display="inline" id="S4.SS3.SSS1.p1.m2" intent=":literal"><semantics><mrow><msub><mi>p</mi><mtext>mask</mtext></msub><mo>∈</mo><mrow><mo stretchy="false">{</mo><mrow><mn>0.0</mn><mo>,</mo><mn>0.1</mn><mo>,</mo><mn>0.2</mn><mo>,</mo><mn>0.3</mn></mrow><mo stretchy="false">}</mo></mrow></mrow><annotation encoding="application/x-tex">p_{\text{mask}}\in\{0.0,0.1,0.2,0.3\}</annotation></semantics></math> on identical data and hyperparameters, holding all other architectural decisions constant.</p>
+</div>
+<section id="S4.SS3.SSS1.Px1">
+<h5>Results.</h5>
+<div id="S4.SS3.SSS1.Px1.p1">
+<p id="S4.SS3.SSS1.Px1.p1.1">Table <a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#S4.T4"><span>4</span></a> shows that <em id="S4.SS3.SSS1.Px1.p1.1.1">any</em> masking improves over no masking (<math alttext="p_{\text{mask}}=0" class="ltx_Math" display="inline" id="S4.SS3.SSS1.Px1.p1.m1" intent=":literal"><semantics><mrow><msub><mi>p</mi><mtext>mask</mtext></msub><mo>=</mo><mn>0</mn></mrow><annotation encoding="application/x-tex">p_{\text{mask}}=0</annotation></semantics></math>). The zero-masking baseline achieves the lowest Hit@3, confirming that additional action prediction signal and regularization both contribute to better ranking quality.
+with <math alttext="p_{\text{mask}}=0.2" class="ltx_Math" display="inline" id="S4.SS3.SSS1.Px1.p1.m2" intent=":literal"><semantics><mrow><msub><mi>p</mi><mtext>mask</mtext></msub><mo>=</mo><mn>0.2</mn></mrow><annotation encoding="application/x-tex">p_{\text{mask}}=0.2</annotation></semantics></math> yielding the best overall performance. Higher masking (<math alttext="p_{\text{mask}}=0.3" class="ltx_Math" display="inline" id="S4.SS3.SSS1.Px1.p1.m3" intent=":literal"><semantics><mrow><msub><mi>p</mi><mtext>mask</mtext></msub><mo>=</mo><mn>0.3</mn></mrow><annotation encoding="application/x-tex">p_{\text{mask}}=0.3</annotation></semantics></math>) shows diminishing returns, likely because overly aggressive masking removes too much signal from the user history.</p>
+</div>
+<figure id="S4.T4"><img alt="Table 4. Effect of action masking ratio p mask p_{\text{mask}} in MAM. Best result in bold ." height="1042" src="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/table-4.jpg" width="1011"/><figcaption><span>Table 4. </span>Effect of action masking ratio <math alttext="p_{\text{mask}}" class="ltx_Math" display="inline" id="S4.T4.m2" intent=":literal"><semantics><msub><mi>p</mi><mtext>mask</mtext></msub><annotation encoding="application/x-tex">p_{\text{mask}}</annotation></semantics></math> in MAM. Best result in <span id="S4.T4.3">bold</span>.</figcaption></figure>
+</section>
+</section>
+<section id="S4.SS3.SSS2">
+<h4><span>4.3.2. </span>Effect of Model Scaling</h4>
+<figure id="S4.F4"><img alt="Figure 4. Hit@3 vs. relative FLOPs for depth and sequence length scaling. FLOPs are normalized to the smallest model ( L = 2 L{=}2 , S = 1024 S{=}1024 ). Both series use MAM with p mask = 0.2 p_{\text{mask}}=0.2 ." height="520" src="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/figure-1.jpg" width="995"/><figcaption><span>Figure 4. </span>Hit@3 vs. relative FLOPs for depth and sequence length scaling. FLOPs are normalized to the smallest model (<math alttext="L{=}2" class="ltx_Math" display="inline" id="S4.F4.m4" intent=":literal"><semantics><mrow><mi>L</mi><mo>=</mo><mn>2</mn></mrow><annotation encoding="application/x-tex">L{=}2</annotation></semantics></math>, <math alttext="S{=}1024" class="ltx_Math" display="inline" id="S4.F4.m5" intent=":literal"><semantics><mrow><mi>S</mi><mo>=</mo><mn>1024</mn></mrow><annotation encoding="application/x-tex">S{=}1024</annotation></semantics></math>). Both series use MAM with <math alttext="p_{\text{mask}}=0.2" class="ltx_Math" display="inline" id="S4.F4.m6" intent=":literal"><semantics><mrow><msub><mi>p</mi><mtext>mask</mtext></msub><mo>=</mo><mn>0.2</mn></mrow><annotation encoding="application/x-tex">p_{\text{mask}}=0.2</annotation></semantics></math> .</figcaption></figure>
+<div id="S4.SS3.SSS2.p1">
+<p id="S4.SS3.SSS2.p1.1">We study how model capacity affects ranking performance across two dimensions: transformer depth and sequence length.
+Understanding these tradeoffs is critical for deployment, as both dimensions impact model quality, training cost, and serving latency.</p>
+</div>
+<section id="S4.SS3.SSS2.Px1">
+<h5>Results.</h5>
+<div id="S4.SS3.SSS2.Px1.p1">
+<p id="S4.SS3.SSS2.Px1.p1.1">We train models with varying depth (2, 4, 8, 12, 24 layers) holding sequence length fixed at 1024 tokens, and varying sequence length (256, 512, 1024, 2048 tokens) with a fixed 12-layer model. Both dimensions use MAM with <math alttext="p_{\text{mask}}=0.2" class="ltx_Math" display="inline" id="S4.SS3.SSS2.Px1.p1.m1" intent=":literal"><semantics><mrow><msub><mi>p</mi><mtext>mask</mtext></msub><mo>=</mo><mn>0.2</mn></mrow><annotation encoding="application/x-tex">p_{\text{mask}}=0.2</annotation></semantics></math>. Figure <a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#S4.F4"><span>4</span></a> shows that performance improves consistently across both scaling axes, demonstrating that the unified model has not saturated in capacity. However, the cost implications differ significantly: depth scales linearly with compute, while sequence length incurs quadratic costs for attention. This makes sequence length a more severe bottleneck for latency-sensitive applications despite both dimensions showing continued quality improvements.
+The strong gains from longer sequences suggest that sequence compression techniques are a promising direction for capturing the quality benefits of longer context at reduced cost.</p>
+</div>
+</section>
+</section>
+</section>
+</section>
+<section id="S5">
+<h2><span>5. </span>Online A/B Experiments (RQ3)</h2>
+<div id="S5.p1">
+<p id="S5.p1.1">We evaluate UniPinRec in production through controlled A/B experiments, comparing the unified model against PinRec (<a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-1">Agarwal et al., 2025</a>), the production retrieval baseline. This validates whether full-stack unification can deliver engagement improvements in real-world traffic while maintaining practical serving efficiency, and addresses the third RQ, whether we could make this highly modularized extension to existing production recommendation systems.</p>
+</div>
+<section id="S5.SS1">
+<h3><span>5.1. </span>Experimental Setup</h3>
+<section id="S5.SS1.SSS0.Px1">
+<h5>Deployment configurations.</h5>
+<div id="S5.SS1.SSS0.Px1.p1">
+<p id="S5.SS1.SSS0.Px1.p1.1">We compare two setups for candidate generator, both returning K(&lt;3000) candidates to downstream stages:</p>
+</div>
+<div id="S5.SS1.SSS0.Px1.p2">
+<p id="S5.SS1.SSS0.Px1.p2.1"><span id="S5.SS1.SSS0.Px1.p2.1.1">Baseline (PinRec):</span> The production retrieval model generates K candidates via ANN search, which are passed directly to downstream ranking stages.</p>
+</div>
+<div id="S5.SS1.SSS0.Px1.p3">
+<p id="S5.SS1.SSS0.Px1.p3.1"><span id="S5.SS1.SSS0.Px1.p3.1.1">UniPinRec:</span> The unified model first overfetches candidates via ANN search (L0), then immediately ranks them using the ranking head (L1) with action prediction, and returns the top K ranked candidates(based on head utility functions) to downstream stages.</p>
+</div>
+<div id="S5.SS1.SSS0.Px1.p4">
+<p id="S5.SS1.SSS0.Px1.p4.1">It is worth noting that for the online experiments, we replace retrieval stage with a unified L0 + L1 scoring server and still send the refined candidates to a downstream production ranker based on TransAct V2 (<a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#reference-24">Xia et al., 2025</a>) to rigidly validate the metric improvements. This also means the offline lifts will be attenuated and diluted.</p>
+</div>
+<div id="S5.SS1.SSS0.Px1.p5">
+<p id="S5.SS1.SSS0.Px1.p5.1">We run A/B experiments on two production surfaces: Board More Ideas (L0 overfetch ratio ~2x) and Notification (L0 overfetch ratio ~3x). Both surfaces serve millions of users daily.</p>
+</div>
+</section>
+</section>
+<section id="S5.SS2">
+<h3><span>5.2. </span>Board More Ideas</h3>
+<div id="S5.SS2.p1">
+<p id="S5.SS2.p1.1">Board More Ideas (BMI) recommends Pins anchored to a user’s board.
+To enable this, we extend UniPinRec to support “Board” as a new sequence modality beyond Pins and search queries.</p>
+</div>
+<section id="S5.SS2.SSS0.Px1">
+<h5>Results.</h5>
+<div id="S5.SS2.SSS0.Px1.p1">
+<p id="S5.SS2.SSS0.Px1.p1.1">Table <a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#S5.T5"><span>5</span></a> shows that UniPinRec provides strong engagement lifts over the PinRec baseline with <span id="S5.SS2.SSS0.Px1.p1.1.1">+0.95%</span> surface save lift, demonstrating that the unified retrieval and ranking approach significantly improves candidate quality over retrieval alone, also driving <span id="S5.SS2.SSS0.Px1.p1.1.2">+0.08%</span> site-wide lift, confirming that better BMI recommendations positively impact overall platform engagement.</p>
+</div>
+<figure id="S5.T5"><img alt="Table 5. Online A/B results on Board More Ideas. Lifts show UniPinRec L0+L1 vs PinRec baseline." height="201" src="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/table-5.jpg" width="1010"/><figcaption><span>Table 5. </span>Online A/B results on Board More Ideas. Lifts show UniPinRec L0+L1 vs PinRec baseline.</figcaption></figure>
+</section>
+</section>
+<section id="S5.SS3">
+<h3><span>5.3. </span>Notifications</h3>
+<div id="S5.SS3.p1">
+<p id="S5.SS3.p1.1">Pinterest uses email and push notifications to deliver relevant content to users. These notifications are an important lever for user reactivation and long-term retention.</p>
+</div>
+<section id="S5.SS3.SSS0.Px1">
+<h5>Results.</h5>
+<div id="S5.SS3.SSS0.Px1.p1">
+<p id="S5.SS3.SSS0.Px1.p1.1">Table <a href="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/#S5.T6"><span>6</span></a> shows that replacing the PinRec retrieval-only baseline with the UniPinRec ranker delivers consistent gains across notification engagement metrics, with the largest lift on notification-surface saves. The dormant-user push-open lift of <span id="S5.SS3.SSS0.Px1.p1.1.1">+1.72%</span> is roughly twice the all-user lift, suggesting that more personalized notification recommendations are particularly effective at bringing lapsed users back and noticeably improving WAU by <span id="S5.SS3.SSS0.Px1.p1.1.2">0.09%</span>.</p>
+</div>
+<figure id="S5.T6"><img alt="Table 6. Online A/B results on notifications. Lifts show UniPinRec vs PinRec baseline, measured on a unique-user basis." height="333" src="https://theopinard.github.io/vrac/articles/unipinrec-unifying-generative-retrieval-and-ranking-at-pinterest-scale/table-6.jpg" width="1011"/><figcaption><span>Table 6. </span>Online A/B results on notifications. Lifts show UniPinRec vs PinRec baseline, measured on a unique-user basis.</figcaption></figure>
+</section>
+</section>
+</section>
+<section id="S6">
+<h2><span>6. </span>Conclusion</h2>
+<div id="S6.p1">
+<p id="S6.p1.1">We presented UniPinRec, the first full-stack unification of retrieval and ranking deployed in a production recommendation system.
+Empirically, the unified model matches production retrieval recall, holds ranking quality exceeding dedicated ranker, and cuts e2e latency while lifting QPS, surfacing candidates the previous funnel missed and translating into a net engagement win online.</p>
+</div>
+<div id="S6.p2">
+<p id="S6.p2.1">UniPinRec currently unifies retrieval with upper-funnel ranking, where backbone redundancy is most severe.
+It does not yet replace the L2 ranker, which has additional infrastructure dependencies in score calibration, training data logging, and operational tooling beyond the immediate scope of this work. We take an incremental rollout approach and plan to extend the unification effort in L2 stage and horizontally to additional surfaces (Search, Ads) as next steps.</p>
+</div>
+<div id="S6.p3">
+<p id="S6.p3.1">Architecturally, UniPinRec mirrors retrieval-augmented generation: the backbone formulates a query, an ANN index serves as non-parametric memory, and the ranker generates action probabilities through the same cached context.
+This parallel suggests borrowing from the RAG literature, such as iterative retrieval and learned retrieval-depth control, as future directions.</p>
+</div>
+<div id="S6.p4">
+<p id="S6.p4.1">Prior unified models have demonstrated that retrieval and ranking can share an architecture.
+UniPinRec shows that the harder problem, unifying input format, training, and serving infrastructure, is also solvable in production today.</p>
+</div>
+<div id="S6.acknowledgements1">
+<h6>Acknowledgements.</h6>
+We thank collaborators such as Kyle Soares, Pihui Wei, Anirudhan Badrinath, Edoardo Botta, Devin Kreuzer, Josie Zeng, Chi Zhang, Chen Yang, Po-Wei Wang, David Woo, Lei Wang, Lin Zhu, Kritarth Anand, Bowen Deng, Matt Chun, Zisis Petrou, Dimitra Tsiaousi, Dylan Wang for their helpful support, valuable feedbacks and insightful discussions throughout the development of this work.
+
+</div>
+</section>
+<div><h2 id="works-cited">References</h2><p id="reference-1">[1]
+<span>
+Prabhat Agarwal, Anirudhan
+Badrinath, Laksh Bhasin, Jaewon Yang,
+Edoardo Botta, Jiajing Xu, and
+Charles Rosenberg. 2025.
+
+</span>
+<span>PinRec: Outcome-Conditioned, Multi-Token
+Generative Retrieval for Industry-Scale Recommendation Systems.
+
+</span>
+<span><em id="bib.bib2.3">arXiv preprint arXiv:2504.10507</em>
+(2025).
+
+</span>
+<span>
+</span></p><p id="reference-2">[2]
+<span>
+Prabhat Agarwal,
+Minhazul Islam SK, Nikil Pancha,
+Kurchi Subhra Hazra, Jiajing Xu, and
+Chuck Rosenberg. 2024.
+
+</span>
+<span>OmniSearchSage: Multi-Task Multi-Entity Embeddings
+for Pinterest Search. In <em id="bib.bib3.3">Companion Proceedings of
+the ACM Web Conference 2024</em> <em id="bib.bib3.4">(WWW ’24)</em>.
+ACM, 121–130.
+
+</span>
+<span><a href="https://doi.org/10.1145/3589335.3648309">doi:<span>10.1145/3589335.3648309</span></a>
+</span></p><p id="reference-3">[3]
+<span>
+Anirudhan Badrinath, Alex
+Yang, Kousik Rajesh, Prabhat Agarwal,
+Jaewon Yang, Haoyu Chen,
+Jiajing Xu, and Charles Rosenberg.
+2025.
+
+</span>
+<span>OmniSage: Large Scale, Multi-Entity Heterogeneous
+Graph Representation Learning. In <em id="bib.bib4.3">Proceedings of
+the 31st ACM SIGKDD Conference on Knowledge Discovery and Data Mining V.2</em>
+(Toronto ON, Canada) <em id="bib.bib4.4">(KDD ’25)</em>.
+Association for Computing Machinery,
+New York, NY, USA, 4261–4272.
+
+</span>
+<span>
+<a href="https://doi.org/10.1145/3711896.3737253">doi:<span>10.1145/3711896.3737253</span></a>
+</span></p><p id="reference-4">[4]
+<span>
+Josh Beal, Eric Kim,
+Jinfeng Rao, Rex Wu,
+Dmitry Kislyuk, and Charles Rosenberg.
+2026.
+
+</span>
+<span>PinCLIP: Large-scale Foundational Multimodal
+Representation at Pinterest.
+
+</span>
+<span>arXiv:2603.03544 [cs.CV]
+
+<a href="https://arxiv.org/abs/2603.03544">https://arxiv.org/abs/2603.03544</a>
+</span></p><p id="reference-5">[5]
+<span>
+Yang Cao, Changhao Zhang,
+Xiaoshuang Chen, Kaiqiao Zhan, and
+Ben Wang. 2025.
+
+</span>
+<span>xMTF: A Formula-Free Model for
+Reinforcement-Learning-Based Multi-Task Fusion in Recommender Systems. In
+<em id="bib.bib6.3">Proceedings of the ACM Web Conference 2025 (WWW)</em>.
+
+</span>
+<span>
+</span></p><p id="reference-6">[6]
+<span>
+Jiahui Chen, Xiaoze
+Jiang, Zhibo Wang, Quanzhi Zhu,
+Junyao Zhao, Feng Hu,
+Kang Pan, Ao Xie, Maohua
+Pei, Zhiheng Qin, Hongjing Zhang,
+Zhixin Zhai, Xiaobo Guo,
+Runbin Zhou, Kefeng Wang,
+Mingyang Geng, Cheng Chen,
+Jingshan Lv, Yupeng Huang,
+Xiao Liang, and Han Li.
+2025a.
+
+</span>
+<span>UniSearch: Rethinking Search System with a Unified
+Generative Architecture.
+
+</span>
+<span><em id="bib.bib7.3">arXiv preprint arXiv:2509.06887</em>
+(2025).
+
+</span>
+<span>
+</span></p><p id="reference-7">[7]
+<span>
+Xiangyi Chen, Kousik
+Rajesh, Matthew Lawhon, Zelun Wang,
+Hanyu Li, Haomiao Li,
+Saurabh Vishwas Joshi, Pong Eksombatchai,
+Jaewon Yang, Yi-Ping Hsu,
+Jiajing Xu, and Charles Rosenberg.
+2025b.
+
+</span>
+<span>PinFM: Foundation Model for User Activity
+Sequences at a Billion-scale Visual Discovery Platform. In
+<em id="bib.bib8.3">Proceedings of the 19th ACM Conference on
+Recommender Systems (RecSys)</em>. 381–390.
+
+</span>
+<span><a href="https://doi.org/10.1145/3705328.3748050">doi:<span>10.1145/3705328.3748050</span></a>
+</span></p><p id="reference-8">[8]
+<span>
+Zhimin Chen, Chenyu Zhao,
+Ka Chun Mo, Yunjiang Jiang,
+Jane H. Lee, Khushhall Chandra Mahajan,
+Ning Jiang, Kai Ren,
+Jinhui Li, and Wen-Yun Yang.
+2026.
+
+</span>
+<span>Massive Memorization with Hundreds of Trillions of
+Parameters for Sequential Transducer Generative Recommenders. In
+<em id="bib.bib9.3">Proceedings of the International Conference on
+Learning Representations (ICLR)</em>.
+
+</span>
+<span>
+</span></p><p id="reference-9">[9]
+<span>
+Sunhao Dai, Jiakai Tang,
+Jiahua Wu, Kun Wang,
+Yuxuan Zhu, Bingjun Chen,
+Bangyang Hong, Yu Zhao,
+Cong Fu, Kangle Wu, Yabo
+Ni, Anxiang Zeng, Wenjie Wang,
+Xu Chen, Jun Xu, and
+See-Kiong Ng. 2025.
+
+</span>
+<span>OnePiece: Bringing Context Engineering and
+Reasoning to Industrial Cascade Ranking System.
+
+</span>
+<span><em id="bib.bib10.3">arXiv preprint arXiv:2509.18091</em>
+(2025).
+
+</span>
+<span>
+</span></p><p id="reference-10">[10]
+<span>
+Jiaxin Deng, Shiyao Wang,
+Kuo Cai, Lejian Ren,
+Qigen Hu, Weifeng Ding,
+Qiang Luo, and Guorui Zhou.
+2025.
+
+</span>
+<span>OneRec: Unifying Retrieve and Rank with Generative
+Recommender and Iterative Preference Alignment.
+
+</span>
+<span><em id="bib.bib11.3">arXiv preprint arXiv:2502.18965</em>
+(2025).
+
+</span>
+<span>
+</span></p><p id="reference-11">[11]
+<span>
+Yijie Ding, Zitian Guo,
+Jiacheng Li, Letian Peng,
+Shuai Shao, Wei Shao,
+Xiaoqiang Luo, Luke Simon,
+Jingbo Shang, Julian McAuley, and
+Yupeng Hou. 2026.
+
+</span>
+<span>How Well Does Generative Recommendation Generalize?
+
+</span>
+<span>arXiv:2603.19809 [cs.IR]
+
+<a href="https://arxiv.org/abs/2603.19809">https://arxiv.org/abs/2603.19809</a>
+</span></p><p id="reference-12">[12]
+<span>
+Vianne R. Gao, Chen Xue,
+Marc Versage, Xie Zhou,
+Zhongruo Wang, Chao Li,
+Yeon Seonwoo, Nan Chen,
+Zhen Ge, Gourab Kundu,
+Weiqi Zhang, Tian Wang,
+Qingjun Cui, and Trishul Chilimbi.
+2025.
+
+</span>
+<span>SynerGen: Contextualized Generative Recommender for
+Unified Search and Recommendation.
+
+</span>
+<span><em id="bib.bib13.3">arXiv preprint arXiv:2509.21777</em>
+(2025).
+
+</span>
+<span>
+</span></p><p id="reference-13">[13]
+<span>
+Ruidong Han, Bin Yin,
+Shangyu Chen, He Jiang,
+Fei Jiang, Xiang Li, Chi
+Ma, Mincong Huang, Xiaoguang Li,
+Chunzhen Jing, Yueming Han,
+Menglei Zhou, Lei Yu,
+Chuan Liu, and Wei Lin.
+2025.
+
+</span>
+<span>MTGR: Industrial-Scale Generative Recommendation
+Framework in Meituan. In <em id="bib.bib14.3">Proceedings of the 34th
+ACM International Conference on Information and Knowledge Management
+(CIKM)</em>. 5731–5738.
+
+</span>
+<span><a href="https://doi.org/10.1145/3746252.3761565">doi:<span>10.1145/3746252.3761565</span></a>
+</span></p><p id="reference-14">[14]
+<span>
+Horace He et al<span id="bib.bib15.3">.</span>
+2024.
+
+</span>
+<span>Flex Attention: A Programming Model for Generating
+Optimized Attention Kernels.
+
+</span>
+<span><em id="bib.bib15.4">arXiv preprint arXiv:2412.05496</em>
+(2024).
+
+</span>
+<span>
+<a href="https://arxiv.org/abs/2412.05496">https://arxiv.org/abs/2412.05496</a>
+</span></p><p id="reference-15">[15]
+<span>
+Lars Hertel, Neil
+Daftary, Fedor Borisyuk, Aman Gupta,
+and Rahul Mazumder. 2025.
+
+</span>
+<span>Efficient User History Modeling with Amortized
+Inference for Deep Learning Recommendation Models. In
+<em id="bib.bib16.3">Companion Proceedings of the ACM Web Conference
+2025 (WWW)</em>.
+
+</span>
+<span>
+</span></p><p id="reference-16">[16]
+<span>
+Yanhua Huang, Yuqi Chen,
+Xiong Cao, Rui Yang,
+Mingliang Qi, Yinghao Zhu,
+Qingchang Han, Yaowei Liu,
+Zhaoyu Liu, Xuefeng Yao,
+Yuting Jia, Leilei Ma,
+Yinqi Zhang, Taoyu Zhu,
+Liujie Zhang, Lei Chen,
+Weihang Chen, Min Zhu,
+Ruiwen Xu, and Lei Zhang.
+2025.
+
+</span>
+<span>Towards Large-scale Generative Ranking.
+
+</span>
+<span><em id="bib.bib17.3">CoRR</em> abs/2505.04180
+(2025).
+
+</span>
+<span><a href="https://doi.org/10.48550/ARXIV.2505.04180">doi:<span>10.48550/ARXIV.2505.04180</span></a>
+arXiv:2505.04180
+
+</span></p><p id="reference-17">[17]
+<span>
+Philipp Moritz, Robert
+Nishihara, Stephanie Wang, Alexey
+Tumanov, Richard Liaw, Eric Liang,
+Melih Elibol, Zongheng Yang,
+William Paul, Michael I. Jordan, and
+Ion Stoica. 2018.
+
+</span>
+<span>Ray: A Distributed Framework for Emerging AI
+Applications. In <em id="bib.bib18.3">13th USENIX Symposium on
+Operating Systems Design and Implementation (OSDI 18)</em>.
+561–577.
+
+</span>
+<span>
+</span></p><p id="reference-18">[18]
+<span>
+David Pardoe, Neil
+Daftary, Miro Furtado, Aditya Aiyer,
+Yu Wang, Liuqing Li, Tao
+Song, Lars Hertel, Young Jin Yun,
+Senthil Radhakrishnan, Zhiwei Wang,
+Tommy Li, Khai Tran,
+Ananth Nagarajan, Ali Naqvi,
+Yue Zhang, Renpeng Fang,
+Avi Romascanu, Arjun Kulothungun,
+Deepak Kumar, Praneeth Boda,
+Fedor Borisyuk, and Ruoyan Wang.
+2026.
+
+</span>
+<span>CADET: Context-Conditioned Ads CTR Prediction
+With a Decoder-Only Transformer.
+
+</span>
+<span><em id="bib.bib19.3">arXiv preprint arXiv:2602.11410</em>
+(2026).
+
+</span>
+<span>
+</span></p><p id="reference-19">[19]
+<span>
+Zhengyang Su, Isay
+Katsman, Yueqi Wang, Ruining He,
+Lukasz Heldt, Raghunandan Keshavan,
+Shao-Chuan Wang, Xinyang Yi,
+Mingyan Gao, Onkar Dalal,
+Lichan Hong, Ed Chi, and
+Ningren Han. 2026.
+
+</span>
+<span>STATIC: Vectorizing the Trie: Efficient
+Constrained Decoding for LLM-based Generative Retrieval on Accelerators.
+
+</span>
+<span><em id="bib.bib20.3">arXiv preprint arXiv:2602.22647</em>
+(2026).
+
+</span>
+<span>
+</span></p><p id="reference-20">[20]
+<span>
+Dekai Sun, Yiming Liu,
+Jiafan Zhou, Xun Liu,
+Chenchen Yu, Yi Li, Jun
+Zhang, Huan Yu, and Jie Jiang.
+2026b.
+
+</span>
+<span>OneRanker: Unified Generation and Ranking with One
+Model in Industrial Advertising Recommendation.
+
+</span>
+<span><em id="bib.bib21.3">arXiv preprint arXiv:2603.02999</em>
+(2026).
+
+</span>
+<span>
+</span></p><p id="reference-21">[21]
+<span>
+Yijia Sun, Shanshan
+Huang, Zhiyuan Guan, Qiang Luo,
+Ruiming Tang, Kun Gai, and
+Guorui Zhou. 2026a.
+
+</span>
+<span>GRank: Towards Target-Aware and Streamlined
+Industrial Retrieval with a Generate-Rank Framework. In
+<em id="bib.bib22.3">Proceedings of the ACM Web Conference 2026 (WWW)</em>.
+
+</span>
+<span>
+</span></p><p id="reference-22">[22]
+<span>
+Jiarui Wang, Huichao
+Chai, Yuanhang Zhang, Zongjin Zhou,
+Wei Guo, Xingkun Yang,
+Qiang Tang, Bo Pan,
+Jiawei Zhu, Ke Cheng,
+Yuting Yan, Shulan Wang,
+Yingjie Zhu, Zhengfan Yuan,
+Jiaqi Huang, Yuhan Zhang,
+Xiaosong Sun, Zhinan Zhang,
+Hong Zhu, Yongsheng Zhang,
+Tiantian Dong, Zhong Xiao,
+Deliang Liu, Chengzhou Lu,
+Yuan Sun, Zhiyuan Chen,
+Xinming Han, Zaizhu Liu,
+Yaoyuan Wang, Ziyang Zhang,
+Yong Liu, Jinxin Xu,
+Yajing Sun, Zhoujun Yu,
+Wenting Zhou, Qidong Zhang,
+Zhengyong Zhang, Zhonghai Gu,
+Yibo Jin, Yongxiang Feng, and
+Pengfei Zuo. 2026.
+
+</span>
+<span>RelayGR: Scaling Long-Sequence Generative
+Recommendation via Cross-Stage Relay-Race Inference.
+
+</span>
+<span><em id="bib.bib23.3">arXiv preprint arXiv:2601.01712</em>
+(2026).
+
+</span>
+<span>
+</span></p><p id="reference-23">[23]
+<span>
+Xue Xia, Pong
+Eksombatchai, Nikil Pancha, Dhruvil Deven
+Badani, Po-Wei Wang, Neng Gu,
+Saurabh Vishwas Joshi, Nazanin Farahpour,
+Zhiyuan Zhang, and Andrew Zhai.
+2023.
+
+</span>
+<span>TransAct: Transformer-based Realtime User Action
+Model for Recommendation at Pinterest. In
+<em id="bib.bib24.3">Proceedings of the 29th ACM SIGKDD Conference
+on Knowledge Discovery and Data Mining, KDD 2023, Long Beach, CA, USA,
+August 6-10, 2023</em>, Ambuj K. Singh,
+Yizhou Sun, Leman Akoglu,
+Dimitrios Gunopulos, Xifeng Yan,
+Ravi Kumar, Fatma Ozcan, and
+Jieping Ye (Eds.). ACM,
+5249–5259.
+
+</span>
+<span><a href="https://doi.org/10.1145/3580305.3599918">doi:<span>10.1145/3580305.3599918</span></a>
+</span></p><p id="reference-24">[24]
+<span>
+Xue Xia, Saurabh Joshi,
+Kousik Rajesh, Kangnan Li,
+Yangyi Lu, Nikil Pancha,
+Dhruvil Badani, Jiajing Xu, and
+Pong Eksombatchai. 2025.
+
+</span>
+<span>TransAct V2: Lifelong User Action Sequence Modeling
+on Pinterest Recommendation. In <em id="bib.bib25.3">Proceedings of the
+34th ACM International Conference on Information and Knowledge Management</em>
+(Seoul, Republic of Korea) <em id="bib.bib25.4">(CIKM ’25)</em>.
+Association for Computing Machinery,
+New York, NY, USA, 6881–6882.
+
+</span>
+<span>
+<a href="https://doi.org/10.1145/3746252.3761433">doi:<span>10.1145/3746252.3761433</span></a>
+</span></p><p id="reference-25">[25]
+<span>
+Bencheng Yan, Shilei Liu,
+Zhiyuan Zeng, Zihao Wang,
+Yizhen Zhang, Yujin Yuan,
+Langming Liu, Jiaqi Liu,
+Di Wang, Wenbo Su,
+Pengjie Wang, Jian Xu, and
+Bo Zheng. 2026.
+
+</span>
+<span>Unlocking Scaling Law in Industrial Recommendation
+Systems with a Three-step Paradigm based Large User Model. In
+<em id="bib.bib26.3">Proceedings of the 19th ACM International
+Conference on Web Search and Data Mining (WSDM)</em>.
+
+</span>
+<span>
+</span></p><p id="reference-26">[26]
+<span>
+Huimin Yan, Longfei Xu,
+Junjie Sun, Ni Ou, Wei
+Luo, Xing Tan, Ran Cheng,
+Kaikui Liu, and Xiangxiang Chu.
+2025.
+
+</span>
+<span>IntSR: An Integrated Generative Framework for
+Search and Recommendation.
+
+</span>
+<span><em id="bib.bib27.3">arXiv preprint arXiv:2509.21179</em>
+(2025).
+
+</span>
+<span>
+</span></p><p id="reference-27">[27]
+<span>
+Liu Yang, Fabian
+Paischer, Kaveh Hassani, Jiacheng Li,
+Shuai Shao, Zhang Gabriel Li,
+Yun He, Xue Feng, Nima
+Noorshams, Sem Park, Bo Long,
+Robert D. Nowak, Xiaoli Gao, and
+Hamid Eghbalzadeh. 2024.
+
+</span>
+<span>Unifying Generative and Dense Retrieval for
+Sequential Recommendation.
+
+</span>
+<span><em id="bib.bib28.3">arXiv preprint arXiv:2411.18814</em>
+(2024).
+
+</span>
+<span>
+</span></p><p id="reference-28">[28]
+<span>
+Xiao Yang, Peifeng Yin,
+Abe Engle, Jinfeng Zhuang, and
+Ling Leng. 2025.
+
+</span>
+<span>MTMD: A Multi-Task Multi-Domain Framework for
+Unified Ad Lightweight Ranking at Pinterest. In
+<em id="bib.bib29.3">Proceedings of the AdKDD Workshop at the 31st ACM
+SIGKDD Conference on Knowledge Discovery and Data Mining</em>.
+
+</span>
+<span>
+</span></p><p id="reference-29">[29]
+<span>
+Yufei Ye, Wei Guo,
+Jin Yao Chin, Hao Wang,
+Hong Zhu, Xi Lin, Yuyang
+Ye, Yong Liu, Ruiming Tang,
+Defu Lian, and Enhong Chen.
+2025a.
+
+</span>
+<span>FuXi-<math alttext="\alpha" class="ltx_Math" display="inline" id="bib.bib30.m1" intent=":literal"><semantics><mi>α</mi><annotation encoding="application/x-tex">\alpha</annotation></semantics></math>: Scaling Recommendation Model with
+Feature Interaction Enhanced Transformer. In
+<em id="bib.bib30.3">Proceedings of the ACM Web Conference 2025 (WWW)</em>.
+
+</span>
+<span>
+</span></p><p id="reference-30">[30]
+<span>
+Yufei Ye, Wei Guo,
+Hao Wang, Hong Zhu,
+Yuyang Ye, Yong Liu,
+Huifeng Guo, Ruiming Tang,
+Defu Lian, and Enhong Chen.
+2025b.
+
+</span>
+<span>FuXi-<math alttext="\beta" class="ltx_Math" display="inline" id="bib.bib31.m1" intent=":literal"><semantics><mi>β</mi><annotation encoding="application/x-tex">\beta</annotation></semantics></math>: Towards a Lightweight and Fast
+Large-Scale Generative Recommendation Model.
+
+</span>
+<span><em id="bib.bib31.3">arXiv preprint arXiv:2508.10615</em>
+(2025).
+
+</span>
+<span>
+</span></p><p id="reference-31">[31]
+<span>
+Jun Yuan, Guohao Cai,
+and Zhenhua Dong. 2024.
+
+</span>
+<span>A Parameter Update Balancing Algorithm for
+Multi-task Ranking Models in Recommendation Systems. In
+<em id="bib.bib32.3">Proceedings of the 2024 IEEE International
+Conference on Data Mining (ICDM)</em>.
+
+</span>
+<span>
+</span></p><p id="reference-32">[32]
+<span>
+Jiaqi Zhai, Lucy Liao,
+Xing Liu, Yueming Wang,
+Rui Li, Xuan Cao, Leon
+Gao, Zhaojie Gong, Fangda Gu,
+Michael He, Yinghai Lu, and
+Yu Shi. 2024.
+
+</span>
+<span>Actions Speak Louder than Words: Trillion-Parameter
+Sequential Transducers for Generative Recommendations. In
+<em id="bib.bib33.3">Proceedings of the 41st International Conference on
+Machine Learning (ICML)</em>.
+
+</span>
+<span>
+</span></p><p id="reference-33">[33]
+<span>
+Jun Zhang, Yi Li,
+Yue Liu, Changping Wang,
+Yuan Wang, Yuling Xiong,
+Xun Liu, Haiyang Wu,
+Qian Li, Enming Zhang,
+Jiawei Sun, Xin Xu,
+Zishuai Zhang, Ruoran Liu,
+Suyuan Huang, Zhaoxin Zhang,
+Zhengkai Guo, Shuojin Yang,
+Meng-Hao Guo, Huan Yu,
+Jie Jiang, and Shi-Min Hu.
+2025a.
+
+</span>
+<span>GPR: Towards a Generative Pre-trained One-Model
+Paradigm for Large-Scale Advertising Recommendation.
+
+</span>
+<span><em id="bib.bib34.3">arXiv preprint arXiv:2511.10138</em>
+(2025).
+
+</span>
+<span>
+</span></p><p id="reference-34">[34]
+<span>
+Luankang Zhang, Kenan
+Song, Yi Quan Lee, Wei Guo,
+Hao Wang, Yawen Li,
+Huifeng Guo, Yong Liu,
+Defu Lian, and Enhong Chen.
+2025b.
+
+</span>
+<span>Killing Two Birds with One Stone: Unifying
+Retrieval and Ranking with a Single Generative Recommendation Model. In
+<em id="bib.bib35.3">Proceedings of the 48th International ACM SIGIR
+Conference on Research and Development in Information Retrieval</em> (Padua,
+Italy) <em id="bib.bib35.4">(SIGIR ’25)</em>. Association
+for Computing Machinery, New York, NY, USA,
+2224–2234.
+
+</span>
+<span>
+<a href="https://doi.org/10.1145/3726302.3730017">doi:<span>10.1145/3726302.3730017</span></a>
+</span></p><p id="reference-35">[35]
+<span>
+Yukun Zhang, Si Dong,
+Xu Wang, Bo Chen,
+Qinglin Jia, Shengzhe Wang,
+Jinlong Jiao, Runhan Li,
+Jiaqing Liu, Chaoyi Ma,
+Ruiming Tang, Guorui Zhou,
+Han Li, and Kun Gai.
+2026.
+
+</span>
+<span>SMES: Towards Scalable Multi-Task Recommendation
+via Expert Sparsity.
+
+</span>
+<span><em id="bib.bib36.3">arXiv preprint arXiv:2602.09386</em>
+(2026).
+
+</span>
+<span>
+</span></p><p id="reference-36">[36]
+<span>
+Yanyan Zou, Junbo Qi,
+Lunsong Huang, Yu Li,
+Kewei Xu, Jiabao Gao,
+Binglei Zhao, Xuanhua Yang,
+Sulong Xu, and Shengjie Li.
+2026.
+
+</span>
+<span>GenRec: A Preference-Oriented Generative Framework
+for Large-Scale Recommendation. In <em id="bib.bib37.3">Proceedings of
+the 49th International ACM SIGIR Conference on Research and Development in
+Information Retrieval (SIGIR)</em>.
+
+</span>
+<span>
+</span></p></div>
+</article></body></html>

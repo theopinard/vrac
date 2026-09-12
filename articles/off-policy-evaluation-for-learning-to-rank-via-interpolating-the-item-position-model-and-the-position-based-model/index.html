@@ -1,0 +1,487 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1" name="viewport"/><title>Off-policy evaluation for learning-to-rank via interpolating the item-position model and the position-based model</title><style>body {
+  max-width: 760px;
+  margin: 2rem auto;
+  padding: 0 1rem;
+  color: #202020;
+  background: #fff;
+  font-family: Georgia, serif;
+  line-height: 1.55;
+}
+a { color: #315f8c; }
+.library-link { margin-bottom: 2rem; }
+img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 1.5rem auto;
+}
+figure { margin: 2rem 0; }
+figcaption, .article-meta { font-size: 0.9em; }
+pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+blockquote {
+  margin-left: 0;
+  padding-left: 1rem;
+  border-left: 3px solid #999;
+}
+math[display="block"] { margin: 1rem auto; overflow-x: auto; }</style><meta content="off-policy-evaluation-for-learning-to-rank-via-interpolating-the-item-position-model-and-the-position-based-model" name="vrac-slug"/><meta content="arxiv" name="vrac-source-type"/><meta content="https://arxiv.org/abs/2210.09512" name="vrac-source-url"/><meta content="Off-policy evaluation for learning-to-rank via interpolating the item-position model and the position-based model" name="vrac-title"/><meta content="Alexander Buchholz, Ben London, Giuseppe Di Benedetto, Thorsten Joachims" name="vrac-author"/><meta content="arXiv:2210.09512v1" name="vrac-publication"/><meta content="15 Oct 2022" name="vrac-published"/><meta content="6b4fa6aaeb3c26dea5106ad7410506200e882ed8da42419899370318ac2c274d" name="vrac-content-sha256"/></head><body><p class="library-link"><a href="https://theopinard.github.io/vrac/">All articles</a></p><article><h1>Off-policy evaluation for learning-to-rank via interpolating the item-position model and the position-based model</h1><p class="article-meta">Alexander Buchholz, Ben London, Giuseppe Di Benedetto, Thorsten Joachims · arXiv:2210.09512v1 · 15 Oct 2022</p><p class="article-meta">Original: <a href="https://arxiv.org/html/2210.09512v1">arXiv HTML</a> · <a href="https://arxiv.org/pdf/2210.09512v1">PDF</a></p>
+<span><span><span><span>DOI: </span><a href="https://doi.org/XXXXXXX.XXXXXXX">XXXXXXX.XXXXXXX</a></span><span><span>Conference: </span>CONSEQUENCES - RecSys 2022; September 18–23,
+2022; Seattle, Washington</span><span><span>Price: </span>15.00</span><span><span>ISBN: </span>978-1-4503-XXXX-X/18/06</span></span></span>
+<div id="abstract1"><h2>Abstract</h2>
+<p id="abstract1.1">A critical need for industrial recommender systems is the ability to evaluate recommendation policies offline, before deploying them to production.
+Unfortunately, widely used off-policy evaluation methods either make strong assumptions about how users behave that can lead to excessive bias, or they make fewer assumptions and suffer from large variance.
+We tackle this problem by developing a new estimator that mitigates the problems of the two most popular off-policy estimators for rankings, namely the position-based model and the
+item-position model.
+In particular, the new estimator, called INTERPOL, addresses the bias of a potentially misspecified position-based model, while providing an adaptable bias-variance trade-off compared to the item-position model.
+We provide theoretical arguments as well as empirical
+results that highlight the performance of our novel estimation approach.</p>
+</div>
+<div>
+<h6>Keywords: </h6>Off-policy evaluation, Learning-to-rank, Position bias, Position-based model, Item-position model
+</div>
+<section id="S1">
+<h2><span>1. </span>Introduction</h2>
+<div id="S1.p1">
+<p id="S1.p1.1">Online media streaming platforms rely on highly personalized content recommendation that allows users to navigate large content pools (<a href="https://theopinard.github.io/vrac/articles/off-policy-evaluation-for-learning-to-rank-via-interpolating-the-item-position-model-and-the-position-based-model/#reference-12">McInerney et al., 2018</a>; <a href="https://theopinard.github.io/vrac/articles/off-policy-evaluation-for-learning-to-rank-via-interpolating-the-item-position-model-and-the-position-based-model/#reference-3">Bendada
+et al., 2020</a>). As the underlying ranking policies constantly evolve, recommendation providers need to experiment offline with new approaches for ranking content before actually deploying and exposing them to the users (<a href="https://theopinard.github.io/vrac/articles/off-policy-evaluation-for-learning-to-rank-via-interpolating-the-item-position-model-and-the-position-based-model/#reference-5">Gilotte et al., 2018</a>; <a href="https://theopinard.github.io/vrac/articles/off-policy-evaluation-for-learning-to-rank-via-interpolating-the-item-position-model-and-the-position-based-model/#reference-6">Jagerman
+et al., 2019</a>). This serves the purpose of deploying only policies that have a large chance of improving the user experience.
+Deployed ranking policies provide a plethora of interaction logs that can be repurposed to learn and evaluate potentially better policies offline. These logs come in the form of implicit feedback, i.e., records of past interaction behavior, linked to information about the user, the context and the items to recommend.
+Off-policy evaluation of new policies on historic data requires adequate strategies to deal with biases coming from (i) the nature of user interaction and (ii) the logging policy. A prominent example of these biases is position bias (<a href="https://theopinard.github.io/vrac/articles/off-policy-evaluation-for-learning-to-rank-via-interpolating-the-item-position-model-and-the-position-based-model/#reference-7">Joachims et al., 2017a</a>) (content that is not ranked in the most visible positions is less likely to be seen).
+We focus on two popular classes of estimators that take different approaches to correcting for presentation bias.
+The first class, in the case of full visibility of all items, does not rely on explicit randomization, but models the randomness in user behavior. The most common model is the position-based model (PBM), which assumes that observed clicks on content factorize into relevance (depending on the item only) and the visibility of the content (depending on the position only). The PBM has been successfully used in practice and various methods have been developed for estimating position bias curves (<a href="https://theopinard.github.io/vrac/articles/off-policy-evaluation-for-learning-to-rank-via-interpolating-the-item-position-model-and-the-position-based-model/#reference-1">Agarwal et al., 2019</a>; <a href="https://theopinard.github.io/vrac/articles/off-policy-evaluation-for-learning-to-rank-via-interpolating-the-item-position-model-and-the-position-based-model/#reference-2">Ai
+et al., 2018</a>; <a href="https://theopinard.github.io/vrac/articles/off-policy-evaluation-for-learning-to-rank-via-interpolating-the-item-position-model-and-the-position-based-model/#reference-9">Joachims
+et al., 2017b</a>; <a href="https://theopinard.github.io/vrac/articles/off-policy-evaluation-for-learning-to-rank-via-interpolating-the-item-position-model-and-the-position-based-model/#reference-18">Wang et al., 2018</a>; <a href="https://theopinard.github.io/vrac/articles/off-policy-evaluation-for-learning-to-rank-via-interpolating-the-item-position-model-and-the-position-based-model/#reference-14">Ruffini et al., 2022</a>). In realistic scenarios, the position bias curve (i.e., examination probabilities) must be estimated and so will almost always be approximate, which can lead to a bias in the evaluation (even if true user behavior factors as assumed by the PBM).
+The other class of estimators requires explicit randomization during data collection. The most popular estimator in this class is the item-position model (IPM) (<a href="https://theopinard.github.io/vrac/articles/off-policy-evaluation-for-learning-to-rank-via-interpolating-the-item-position-model-and-the-position-based-model/#reference-11">Li et al., 2018</a>). Unlike the PBM, the IPM allows clicks to be a function of interactions between the recommended content and its display position and does not require the estimation of a position bias curve.
+Since it uses explicit randomization, its bias is typically lower but at the expense of increased estimator variance.</p>
+</div>
+<div id="S1.p2">
+<p id="S1.p2.1">To obtain a better balance of bias and variance under realistic conditions, we propose a new estimator that interpolates between the PBM and the IPM in the full visibility setting.
+We show that this estimator is always unbiased for a correctly specified PBM, but can have better variance than both the PBM and the IPM. More importantly, for a misspecified PBM,
+our new estimator is based on the idea that the position-based model might provide a good approximation to local behavior, i.e., small differences in ranking position are properly modeled, but large jumps from the top to the bottom of a list lead to unreliable examination probabilities.
+The IPM calibrates the PBM by computing probabilities that an item is within the range (i.e., window size) of another one, if the PBM is correctly specified. The window size serves as a tuning parameter that allows to trade off potentially high variance IPM estimation with a potentially more biased PBM. We show empirically that this leads to reduced error and hence provides a more precise estimation strategy.</p>
+</div>
+</section>
+<section id="S2">
+<h2><span>2. </span>Related work</h2>
+<div id="S2.p1">
+<p id="S2.p1.1">Our work provides a solution to off-policy evaluation of ranking models using implicit feedback (<a href="https://theopinard.github.io/vrac/articles/off-policy-evaluation-for-learning-to-rank-via-interpolating-the-item-position-model-and-the-position-based-model/#reference-16">Swaminathan et al., 2017</a>; <a href="https://theopinard.github.io/vrac/articles/off-policy-evaluation-for-learning-to-rank-via-interpolating-the-item-position-model-and-the-position-based-model/#reference-17">Wang
+et al., 2016</a>; <a href="https://theopinard.github.io/vrac/articles/off-policy-evaluation-for-learning-to-rank-via-interpolating-the-item-position-model-and-the-position-based-model/#reference-10">Joachims
+et al., 2017c</a>), that rely on some form of click model (<a href="https://theopinard.github.io/vrac/articles/off-policy-evaluation-for-learning-to-rank-via-interpolating-the-item-position-model-and-the-position-based-model/#reference-4">Chuklin
+et al., 2015</a>) to achieve unbiased offline evaluation. The arising bias comes from user behavior such as
+position bias, trust bias, and selection bias, see for instance (<a href="https://theopinard.github.io/vrac/articles/off-policy-evaluation-for-learning-to-rank-via-interpolating-the-item-position-model-and-the-position-based-model/#reference-7">Joachims et al., 2017a</a>; <a href="https://theopinard.github.io/vrac/articles/off-policy-evaluation-for-learning-to-rank-via-interpolating-the-item-position-model-and-the-position-based-model/#reference-8">Joachims et al., 2007</a>).
+A popular click model is the position-based model, that needs an estimated position bias curve (<a href="https://theopinard.github.io/vrac/articles/off-policy-evaluation-for-learning-to-rank-via-interpolating-the-item-position-model-and-the-position-based-model/#reference-17">Wang
+et al., 2016</a>).
+We make extensive use of Li et al.’s (<a href="https://theopinard.github.io/vrac/articles/off-policy-evaluation-for-learning-to-rank-via-interpolating-the-item-position-model-and-the-position-based-model/#reference-11">Li et al., 2018</a>) survey of click models for offline evaluation.
+Other approaches go beyond the full visibility setting such as policy aware approaches (<a href="https://theopinard.github.io/vrac/articles/off-policy-evaluation-for-learning-to-rank-via-interpolating-the-item-position-model-and-the-position-based-model/#reference-13">Oosterhuis and
+de Rijke, 2020</a>).</p>
+</div>
+</section>
+<section id="S3">
+<h2><span>3. </span>Background</h2>
+<div id="S3.p1">
+<p id="S3.p1.1">We are interested in estimating the total number of clicks for a target policy <math alttext="\pi" class="ltx_Math" display="inline" id="S3.p1.m1" intent=":literal"><semantics><mi>π</mi><annotation encoding="application/x-tex">\pi</annotation></semantics></math> using recorded interactions from a production policy <math alttext="\pi_{0}" class="ltx_Math" display="inline" id="S3.p1.m2" intent=":literal"><semantics><msub><mi>π</mi><mn>0</mn></msub><annotation encoding="application/x-tex">\pi_{0}</annotation></semantics></math>.
+The quantity of interest is
+<math alttext="\Delta_{\pi}=\mathbb{E}_{x}\mathbb{E}_{c}\mathbb{E}_{Y\sim\pi(\cdot|x)}\left[\sum_{y\in Y}c(y)\right]," class="ltx_math_unparsed" display="inline" id="S3.p1.m3" intent=":literal"><semantics><mrow><msub><mi mathvariant="normal">Δ</mi><mi>π</mi></msub><mo>=</mo><msub><mi>𝔼</mi><mi>x</mi></msub><msub><mi>𝔼</mi><mi>c</mi></msub><msub><mi>𝔼</mi><mrow><mi>Y</mi><mo>∼</mo><mi>π</mi><mo stretchy="false">(</mo><mo lspace="0em" rspace="0em">⋅</mo><mo fence="false" rspace="0.167em" stretchy="false">|</mo><mi>x</mi><mo stretchy="false">)</mo></mrow></msub><mrow><mo>[</mo><msub><mo lspace="0em">∑</mo><mrow><mi>y</mi><mo>∈</mo><mi>Y</mi></mrow></msub><mi>c</mi><mrow><mo stretchy="false">(</mo><mi>y</mi><mo stretchy="false">)</mo></mrow><mo>]</mo></mrow><mo>,</mo></mrow><annotation encoding="application/x-tex">\Delta_{\pi}=\mathbb{E}_{x}\mathbb{E}_{c}\mathbb{E}_{Y\sim\pi(\cdot|x)}\left[\sum_{y\in Y}c(y)\right],</annotation></semantics></math>
+where we compute expectations over context features <math alttext="x" class="ltx_Math" display="inline" id="S3.p1.m4" intent=":literal"><semantics><mi>x</mi><annotation encoding="application/x-tex">x</annotation></semantics></math>, received clicks <math alttext="c" class="ltx_Math" display="inline" id="S3.p1.m5" intent=":literal"><semantics><mi>c</mi><annotation encoding="application/x-tex">c</annotation></semantics></math> and exposed rankings <math alttext="Y" class="ltx_Math" display="inline" id="S3.p1.m6" intent=":literal"><semantics><mi>Y</mi><annotation encoding="application/x-tex">Y</annotation></semantics></math> that contain items <math alttext="y" class="ltx_Math" display="inline" id="S3.p1.m7" intent=":literal"><semantics><mi>y</mi><annotation encoding="application/x-tex">y</annotation></semantics></math>.
+We make use of logging data of the form <math alttext="\mathcal{D}=\left\{x_{i},Y_{0,i},c(\cdot|Y_{0,i}),\pi_{0}\right\}_{i=1}^{n}" class="ltx_math_unparsed" display="inline" id="S3.p1.m8" intent=":literal"><semantics><mrow><mi class="ltx_font_mathcaligraphic">𝒟</mi><mo>=</mo><msubsup><mrow><mo>{</mo><msub><mi>x</mi><mi>i</mi></msub><mo>,</mo><msub><mi>Y</mi><mrow><mn>0</mn><mo>,</mo><mi>i</mi></mrow></msub><mo>,</mo><mi>c</mi><mrow><mo stretchy="false">(</mo><mo lspace="0em" rspace="0em">⋅</mo><mo fence="false" rspace="0.167em" stretchy="false">|</mo><msub><mi>Y</mi><mrow><mn>0</mn><mo>,</mo><mi>i</mi></mrow></msub><mo stretchy="false">)</mo></mrow><mo>,</mo><msub><mi>π</mi><mn>0</mn></msub><mo>}</mo></mrow><mrow><mi>i</mi><mo>=</mo><mn>1</mn></mrow><mi>n</mi></msubsup></mrow><annotation encoding="application/x-tex">\mathcal{D}=\left\{x_{i},Y_{0,i},c(\cdot|Y_{0,i}),\pi_{0}\right\}_{i=1}^{n}</annotation></semantics></math> for <math alttext="n" class="ltx_Math" display="inline" id="S3.p1.m9" intent=":literal"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> different queries, where <math alttext="Y_{0,i}\sim\pi_{0}(\cdot|x_{i})" class="ltx_math_unparsed" display="inline" id="S3.p1.m10" intent=":literal"><semantics><mrow><msub><mi>Y</mi><mrow><mn>0</mn><mo>,</mo><mi>i</mi></mrow></msub><mo>∼</mo><msub><mi>π</mi><mn>0</mn></msub><mrow><mo stretchy="false">(</mo><mo lspace="0em" rspace="0em">⋅</mo><mo fence="false" rspace="0.167em" stretchy="false">|</mo><msub><mi>x</mi><mi>i</mi></msub><mo stretchy="false">)</mo></mrow></mrow><annotation encoding="application/x-tex">Y_{0,i}\sim\pi_{0}(\cdot|x_{i})</annotation></semantics></math> and <math alttext="c(y|Y_{0,i})\in\{0,1\}" class="ltx_Math" display="inline" id="S3.p1.m11" intent=":literal"><semantics><mrow><mrow><mi>c</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mi>y</mi><mo lspace="0em" rspace="0em">|</mo><msub><mi>Y</mi><mrow><mn>0</mn><mo>,</mo><mi>i</mi></mrow></msub><mo stretchy="false">)</mo></mrow></mrow><mo>∈</mo><mrow><mo stretchy="false">{</mo><mn>0</mn><mo>,</mo><mn>1</mn><mo stretchy="false">}</mo></mrow></mrow><annotation encoding="application/x-tex">c(y|Y_{0,i})\in\{0,1\}</annotation></semantics></math> indicates which items <math alttext="y\in Y_{0,i}" class="ltx_Math" display="inline" id="S3.p1.m12" intent=":literal"><semantics><mrow><mi>y</mi><mo>∈</mo><msub><mi>Y</mi><mrow><mn>0</mn><mo>,</mo><mi>i</mi></mrow></msub></mrow><annotation encoding="application/x-tex">y\in Y_{0,i}</annotation></semantics></math> received a click.
+Our suggested estimator has the form</p>
+<p><math alttext="\displaystyle\hat{\Delta}(\pi|\mathcal{D})=\frac{1}{n}\sum_{i=1}^{n}\sum_{y\in Y_{0,i}}w\times c(y|Y_{0,i})." class="ltx_Math" display="inline" id="S3.E1.m1" intent=":literal"><semantics><mrow><mrow><mrow><mover accent="true"><mi mathvariant="normal">Δ</mi><mo>^</mo></mover><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><mi>π</mi><mo lspace="0em" rspace="0em">|</mo><mi class="ltx_font_mathcaligraphic">𝒟</mi><mo stretchy="false">)</mo></mrow></mrow><mo>=</mo><mrow><mrow><mstyle displaystyle="true"><mfrac><mn>1</mn><mi>n</mi></mfrac></mstyle><mo lspace="0em" rspace="0em">​</mo><mrow><mstyle displaystyle="true"><munderover><mo movablelimits="false">∑</mo><mrow><mi>i</mi><mo>=</mo><mn>1</mn></mrow><mi>n</mi></munderover></mstyle><mrow><mstyle displaystyle="true"><munder><mo movablelimits="false">∑</mo><mrow><mi>y</mi><mo>∈</mo><msub><mi>Y</mi><mrow><mn>0</mn><mo>,</mo><mi>i</mi></mrow></msub></mrow></munder></mstyle><mi>w</mi></mrow></mrow></mrow><mo lspace="0.222em" rspace="0.222em">×</mo><mrow><mi>c</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mi>y</mi><mo lspace="0em" rspace="0em">|</mo><msub><mi>Y</mi><mrow><mn>0</mn><mo>,</mo><mi>i</mi></mrow></msub><mo stretchy="false">)</mo></mrow></mrow></mrow></mrow><mo lspace="0em">.</mo></mrow><annotation encoding="application/x-tex">\displaystyle\hat{\Delta}(\pi|\mathcal{D})=\frac{1}{n}\sum_{i=1}^{n}\sum_{y\in Y_{0,i}}w\times c(y|Y_{0,i}).</annotation></semantics></math> (1)</p>
+<p id="S3.p1.2">The inverse propensity score (IPS) weight <math alttext="w" class="ltx_Math" display="inline" id="S3.p1.m13" intent=":literal"><semantics><mi>w</mi><annotation encoding="application/x-tex">w</annotation></semantics></math> corrects the fact that logging and policy are different and accounts for position biases. We will specify the form of <math alttext="w" class="ltx_Math" display="inline" id="S3.p1.m14" intent=":literal"><semantics><mi>w</mi><annotation encoding="application/x-tex">w</annotation></semantics></math> depending on the underlying assumptions.
+The expectation of a click on item <math alttext="y" class="ltx_Math" display="inline" id="S3.p1.m15" intent=":literal"><semantics><mi>y</mi><annotation encoding="application/x-tex">y</annotation></semantics></math> is</p>
+<p><math alttext="\displaystyle\mathbb{E}_{c}[c(y|Y)|x]=\begin{cases}\overline{c}(y,\text{rank}(y|Y)|x),&amp;\text{for the item-position model,}\\
+\text{rel}(y|x)\times\mathbb{P}(o(y)|\text{rank}(y|Y)),&amp;\text{for the position-based model.}\end{cases}" class="ltx_Math" display="inline" id="S3.E2.m1" intent=":literal"><semantics><mrow><mrow><msub><mi>𝔼</mi><mi>c</mi></msub><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">[</mo><mrow><mrow><mi>c</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mi>y</mi><mo lspace="0em" rspace="0em">|</mo><mi>Y</mi><mo stretchy="false">)</mo></mrow></mrow><mo fence="false" rspace="0.167em" stretchy="false">|</mo><mi>x</mi></mrow><mo stretchy="false">]</mo></mrow></mrow><mo>=</mo><mrow><mo>{</mo><mtable columnspacing="5pt" rowspacing="0pt"><mtr><mtd class="ltx_align_left" columnalign="left"><mrow><mrow><mover accent="true"><mi>c</mi><mo stretchy="true">¯</mo></mover><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><mrow><mi>y</mi><mo>,</mo><mrow><mtext>rank</mtext><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><mi>y</mi><mo lspace="0em" rspace="0em">|</mo><mi>Y</mi><mo stretchy="false">)</mo></mrow></mrow></mrow><mo lspace="0em" rspace="0em">|</mo><mi>x</mi><mo stretchy="false">)</mo></mrow></mrow><mo>,</mo></mrow></mtd><mtd class="ltx_align_left" columnalign="left"><mtext>for the item-position model,</mtext></mtd></mtr><mtr><mtd class="ltx_align_left" columnalign="left"><mrow><mrow><mrow><mtext>rel</mtext><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><mi>y</mi><mo lspace="0em" rspace="0em">|</mo><mi>x</mi><mo rspace="0.055em" stretchy="false">)</mo></mrow></mrow><mo rspace="0.222em">×</mo><mrow><mi>ℙ</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mrow><mi>o</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mi>y</mi><mo stretchy="false">)</mo></mrow></mrow><mo lspace="0em" rspace="0em">|</mo><mrow><mtext>rank</mtext><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><mi>y</mi><mo lspace="0em" rspace="0em">|</mo><mi>Y</mi><mo stretchy="false">)</mo></mrow></mrow><mo stretchy="false">)</mo></mrow></mrow></mrow><mo>,</mo></mrow></mtd><mtd class="ltx_align_left" columnalign="left"><mtext>for the position-based model.</mtext></mtd></mtr></mtable></mrow></mrow><annotation encoding="application/x-tex">\displaystyle\mathbb{E}_{c}[c(y|Y)|x]=\begin{cases}\overline{c}(y,\text{rank}(y|Y)|x),&amp;\text{for the item-position model,}\\
+\text{rel}(y|x)\times\mathbb{P}(o(y)|\text{rank}(y|Y)),&amp;\text{for the position-based model.}\end{cases}</annotation></semantics></math> (2)</p>
+<p id="S3.p1.3">Under the IP model a click depends on item <math alttext="y" class="ltx_Math" display="inline" id="S3.p1.m16" intent=":literal"><semantics><mi>y</mi><annotation encoding="application/x-tex">y</annotation></semantics></math> and its position, defined by its rank, whereas the PB model assumes a click factorizes into relevance <math alttext="\text{rel}(y)" class="ltx_Math" display="inline" id="S3.p1.m17" intent=":literal"><semantics><mrow><mtext>rel</mtext><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><mi>y</mi><mo stretchy="false">)</mo></mrow></mrow><annotation encoding="application/x-tex">\text{rel}(y)</annotation></semantics></math> and observation probability <math alttext="\mathbb{P}(o(y)|\text{rank}(y|Y))" class="ltx_Math" display="inline" id="S3.p1.m18" intent=":literal"><semantics><mrow><mi>ℙ</mi><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><mrow><mi>o</mi><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><mi>y</mi><mo stretchy="false">)</mo></mrow></mrow><mo lspace="0em" rspace="0em">|</mo><mrow><mtext>rank</mtext><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><mi>y</mi><mo lspace="0em" rspace="0em">|</mo><mi>Y</mi><mo stretchy="false">)</mo></mrow></mrow><mo stretchy="false">)</mo></mrow></mrow><annotation encoding="application/x-tex">\mathbb{P}(o(y)|\text{rank}(y|Y))</annotation></semantics></math> of the item, where <math alttext="o(y)" class="ltx_Math" display="inline" id="S3.p1.m19" intent=":literal"><semantics><mrow><mi>o</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mi>y</mi><mo stretchy="false">)</mo></mrow></mrow><annotation encoding="application/x-tex">o(y)</annotation></semantics></math> indicates if an item was examined.</p>
+</div>
+<div id="S3.p2">
+<p id="S3.p2.1"><span id="S3.p2.1.1">Position-based model.</span>
+The position-based model corrects the fact that
+not all positions have equal probability of being observed by the user.
+By weighting clicks using a position bias curve the examination behavior of the user is taken into account.
+A position bias curve <math alttext="p" class="ltx_Math" display="inline" id="S3.p2.m1" intent=":literal"><semantics><mi>p</mi><annotation encoding="application/x-tex">p</annotation></semantics></math> quantifies the probability of an item being observed in a given position, i.e., <math alttext="p_{k}=\mathbb{P}(o(y)|\text{rank}(y|Y)=k)," class="ltx_Math" display="inline" id="S3.p2.m2" intent=":literal"><semantics><mrow><mrow><msub><mi>p</mi><mi>k</mi></msub><mo>=</mo><mrow><mi>ℙ</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mrow><mi>o</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mi>y</mi><mo stretchy="false">)</mo></mrow></mrow><mo lspace="0em" rspace="0em">|</mo><mrow><mrow><mtext>rank</mtext><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><mi>y</mi><mo lspace="0em" rspace="0em">|</mo><mi>Y</mi><mo stretchy="false">)</mo></mrow></mrow><mo>=</mo><mi>k</mi></mrow><mo stretchy="false">)</mo></mrow></mrow></mrow><mo>,</mo></mrow><annotation encoding="application/x-tex">p_{k}=\mathbb{P}(o(y)|\text{rank}(y|Y)=k),</annotation></semantics></math> where <math alttext="o(y)" class="ltx_Math" display="inline" id="S3.p2.m3" intent=":literal"><semantics><mrow><mi>o</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mi>y</mi><mo stretchy="false">)</mo></mrow></mrow><annotation encoding="application/x-tex">o(y)</annotation></semantics></math> denotes the event that item <math alttext="y" class="ltx_Math" display="inline" id="S3.p2.m4" intent=":literal"><semantics><mi>y</mi><annotation encoding="application/x-tex">y</annotation></semantics></math> is observed in the position it was displayed in.
+The corresponding IPS weight (in the full-visibility setting) is</p>
+<p><math alttext="\displaystyle w_{pbm}(y|Y,Y_{0})=\frac{p_{\text{rank}(y|Y)}}{p_{\text{rank}(y|Y_{0})}}." class="ltx_Math" display="inline" id="S3.E3.m1" intent=":literal"><semantics><mrow><mrow><mrow><msub><mi>w</mi><mrow><mi>p</mi><mo lspace="0em" rspace="0em">​</mo><mi>b</mi><mo lspace="0em" rspace="0em">​</mo><mi>m</mi></mrow></msub><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><mi>y</mi><mo lspace="0em" rspace="0em">|</mo><mrow><mi>Y</mi><mo>,</mo><msub><mi>Y</mi><mn>0</mn></msub></mrow><mo stretchy="false">)</mo></mrow></mrow><mo>=</mo><mstyle displaystyle="true"><mfrac><msub><mi>p</mi><mrow><mtext>rank</mtext><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><mi>y</mi><mo lspace="0em" rspace="0em">|</mo><mi>Y</mi><mo stretchy="false">)</mo></mrow></mrow></msub><msub><mi>p</mi><mrow><mtext>rank</mtext><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><mi>y</mi><mo lspace="0em" rspace="0em">|</mo><msub><mi>Y</mi><mn>0</mn></msub><mo stretchy="false">)</mo></mrow></mrow></msub></mfrac></mstyle></mrow><mo lspace="0em">.</mo></mrow><annotation encoding="application/x-tex">\displaystyle w_{pbm}(y|Y,Y_{0})=\frac{p_{\text{rank}(y|Y)}}{p_{\text{rank}(y|Y_{0})}}.</annotation></semantics></math> (3)</p>
+<p id="S3.p2.2">Thus, clicks are weighted according to the visibility ratio of items under logging policy and target policy.</p>
+</div>
+<div id="S3.p3">
+<p id="S3.p3.1"><span id="S3.p3.1.1">Item-position model.</span>
+The item-position model (<a href="https://theopinard.github.io/vrac/articles/off-policy-evaluation-for-learning-to-rank-via-interpolating-the-item-position-model-and-the-position-based-model/#reference-11">Li et al., 2018</a>) does not require a position bias curve. It uses directly the propensities of the logging policy, denoted <math alttext="\mathbb{P}(\text{rank}(y|Y_{0})=\cdot|x,\pi_{0})" class="ltx_math_unparsed" display="inline" id="S3.p3.m1" intent=":literal"><semantics><mrow><mi>ℙ</mi><mrow><mo stretchy="false">(</mo><mtext>rank</mtext><mrow><mo stretchy="false">(</mo><mi>y</mi><mo fence="false" rspace="0.167em" stretchy="false">|</mo><msub><mi>Y</mi><mn>0</mn></msub><mo stretchy="false">)</mo></mrow><mo rspace="0em">=</mo><mo lspace="0em" rspace="0em">⋅</mo><mo fence="false" rspace="0.167em" stretchy="false">|</mo><mi>x</mi><mo>,</mo><msub><mi>π</mi><mn>0</mn></msub><mo stretchy="false">)</mo></mrow></mrow><annotation encoding="application/x-tex">\mathbb{P}(\text{rank}(y|Y_{0})=\cdot|x,\pi_{0})</annotation></semantics></math>. The propensities quantify the probability with which an item is displayed in a given rank. The resulting IPS weight is</p>
+<p><math alttext="\displaystyle w_{ip}(y|Y,Y_{0})=\frac{I\{\text{rank}(y|Y_{0})=\text{rank}(y|Y)\}}{\mathbb{P}(\text{rank}(y|Y_{0})=\text{rank}(y|Y)|x,\pi_{0})}." class="ltx_Math" display="inline" id="S3.E4.m1" intent=":literal"><semantics><mrow><mrow><mrow><msub><mi>w</mi><mrow><mi>i</mi><mo lspace="0em" rspace="0em">​</mo><mi>p</mi></mrow></msub><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><mi>y</mi><mo lspace="0em" rspace="0em">|</mo><mrow><mi>Y</mi><mo>,</mo><msub><mi>Y</mi><mn>0</mn></msub></mrow><mo stretchy="false">)</mo></mrow></mrow><mo>=</mo><mstyle displaystyle="true"><mfrac><mrow><mi>I</mi><mo stretchy="false">{</mo><mtext>rank</mtext><mo stretchy="false">(</mo><mi>y</mi><mo fence="false" rspace="0.167em" stretchy="false">|</mo><mi>Y</mi><msub><mrow></mrow><mn>0</mn></msub><mo stretchy="false">)</mo><mo>=</mo><mtext>rank</mtext><mo stretchy="false">(</mo><mi>y</mi><mo fence="false" rspace="0.167em" stretchy="false">|</mo><mi>Y</mi><mo stretchy="false">)</mo><mo stretchy="false">}</mo></mrow><mrow><mi>ℙ</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mrow><mrow><mtext>rank</mtext><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><mi>y</mi><mo lspace="0em" rspace="0em">|</mo><msub><mi>Y</mi><mn>0</mn></msub><mo stretchy="false">)</mo></mrow></mrow><mo>=</mo><mrow><mtext>rank</mtext><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><mi>y</mi><mo lspace="0em" rspace="0em">|</mo><mi>Y</mi><mo stretchy="false">)</mo></mrow></mrow></mrow><mo lspace="0em" rspace="0em">|</mo><mrow><mi>x</mi><mo>,</mo><msub><mi>π</mi><mn>0</mn></msub></mrow><mo stretchy="false">)</mo></mrow></mrow></mfrac></mstyle></mrow><mo lspace="0em">.</mo></mrow><annotation encoding="application/x-tex">\displaystyle w_{ip}(y|Y,Y_{0})=\frac{I\{\text{rank}(y|Y_{0})=\text{rank}(y|Y)\}}{\mathbb{P}(\text{rank}(y|Y_{0})=\text{rank}(y|Y)|x,\pi_{0})}.</annotation></semantics></math> (4)</p>
+<p id="S3.p3.2">Here, we assume that the
+target policy is deterministic, and the logging policy is stochastic. The IP model assigns a weight of <math alttext="0" class="ltx_Math" display="inline" id="S3.p3.m2" intent=":literal"><semantics><mn>0</mn><annotation encoding="application/x-tex">0</annotation></semantics></math> if target and logging position mismatch and weights up rewards where target and logging rank agree.</p>
+</div>
+</section>
+<section id="S4">
+<h2><span>4. </span>INTERPOL estimator</h2>
+<div id="S4.p1">
+<p id="S4.p1.1">The position-based model captures overall user behavior, but it can be biased. The item-position model makes fewer modeling assumptions that may lead to bias, but it can have high variance.
+We suggest an interpolation between the two approaches.
+We check if the position where the logging policy ranks an item
+<math alttext="\text{rank}(y|Y_{0})" class="ltx_Math" display="inline" id="S4.p1.m1" intent=":literal"><semantics><mrow><mtext>rank</mtext><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><mi>y</mi><mo lspace="0em" rspace="0em">|</mo><msub><mi>Y</mi><mn>0</mn></msub><mo stretchy="false">)</mo></mrow></mrow><annotation encoding="application/x-tex">\text{rank}(y|Y_{0})</annotation></semantics></math> falls inside a window of size <math alttext="T" class="ltx_Math" display="inline" id="S4.p1.m2" intent=":literal"><semantics><mi>T</mi><annotation encoding="application/x-tex">T</annotation></semantics></math>
+around the position <math alttext="\text{rank}(y|Y)" class="ltx_Math" display="inline" id="S4.p1.m3" intent=":literal"><semantics><mrow><mtext>rank</mtext><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><mi>y</mi><mo lspace="0em" rspace="0em">|</mo><mi>Y</mi><mo stretchy="false">)</mo></mrow></mrow><annotation encoding="application/x-tex">\text{rank}(y|Y)</annotation></semantics></math> where the target policy ranked it.
+The size of the window is controlled by the interpolation parameter <math alttext="T" class="ltx_Math" display="inline" id="S4.p1.m4" intent=":literal"><semantics><mi>T</mi><annotation encoding="application/x-tex">T</annotation></semantics></math>, and we denote
+the event of y being inside the window by <math alttext="I\{\text{rank}(y|Y_{0})\in[\text{rank}(y|Y)\pm T]\}" class="ltx_math_unparsed" display="inline" id="S4.p1.m5" intent=":literal"><semantics><mrow><mi>I</mi><mrow><mo stretchy="false">{</mo><mtext>rank</mtext><mrow><mo stretchy="false">(</mo><mi>y</mi><mo fence="false" rspace="0.167em" stretchy="false">|</mo><msub><mi>Y</mi><mn>0</mn></msub><mo stretchy="false">)</mo></mrow><mo>∈</mo><mrow><mo stretchy="false">[</mo><mtext>rank</mtext><mrow><mo stretchy="false">(</mo><mi>y</mi><mo fence="false" rspace="0.167em" stretchy="false">|</mo><mi>Y</mi><mo stretchy="false">)</mo></mrow><mo>±</mo><mi>T</mi><mo stretchy="false">]</mo></mrow><mo stretchy="false">}</mo></mrow></mrow><annotation encoding="application/x-tex">I\{\text{rank}(y|Y_{0})\in[\text{rank}(y|Y)\pm T]\}</annotation></semantics></math>.
+Our novel estimator is based on the weight</p>
+<p><math alttext="\displaystyle w_{T}(y|Y,Y_{0})=\frac{I\{\text{rank}(y|Y_{0})\in[\text{rank}(y|Y)\pm T]\}}{P(\text{rank}(y|Y_{0})\in[\text{rank}(y|Y)\pm T]|x,\pi_{0})}\times\frac{p_{\text{rank}(y|Y)}}{p_{\text{rank}(y|Y_{0})}}." class="ltx_Math" display="inline" id="S4.E5.m1" intent=":literal"><semantics><mrow><mrow><mrow><msub><mi>w</mi><mi>T</mi></msub><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><mi>y</mi><mo lspace="0em" rspace="0em">|</mo><mrow><mi>Y</mi><mo>,</mo><msub><mi>Y</mi><mn>0</mn></msub></mrow><mo stretchy="false">)</mo></mrow></mrow><mo>=</mo><mrow><mstyle displaystyle="true"><mfrac><mrow><mi>I</mi><mo stretchy="false">{</mo><mtext>rank</mtext><mo stretchy="false">(</mo><mi>y</mi><mo fence="false" rspace="0.167em" stretchy="false">|</mo><mi>Y</mi><msub><mrow></mrow><mn>0</mn></msub><mo stretchy="false">)</mo><mo>∈</mo><mo stretchy="false">[</mo><mtext>rank</mtext><mo stretchy="false">(</mo><mi>y</mi><mo fence="false" rspace="0.167em" stretchy="false">|</mo><mi>Y</mi><mo stretchy="false">)</mo><mo>±</mo><mi>T</mi><mo stretchy="false">]</mo><mo stretchy="false">}</mo></mrow><mrow><mi>P</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mrow><mrow><mtext>rank</mtext><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><mi>y</mi><mo lspace="0em" rspace="0em">|</mo><msub><mi>Y</mi><mn>0</mn></msub><mo stretchy="false">)</mo></mrow></mrow><mo>∈</mo><mrow><mo stretchy="false">[</mo><mrow><mrow><mtext>rank</mtext><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><mi>y</mi><mo lspace="0em" rspace="0em">|</mo><mi>Y</mi><mo stretchy="false">)</mo></mrow></mrow><mo>±</mo><mi>T</mi></mrow><mo stretchy="false">]</mo></mrow></mrow><mo lspace="0em" rspace="0em">|</mo><mrow><mi>x</mi><mo>,</mo><msub><mi>π</mi><mn>0</mn></msub></mrow><mo stretchy="false">)</mo></mrow></mrow></mfrac></mstyle><mo lspace="0.222em" rspace="0.222em">×</mo><mstyle displaystyle="true"><mfrac><msub><mi>p</mi><mrow><mtext>rank</mtext><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><mi>y</mi><mo lspace="0em" rspace="0em">|</mo><mi>Y</mi><mo stretchy="false">)</mo></mrow></mrow></msub><msub><mi>p</mi><mrow><mtext>rank</mtext><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><mi>y</mi><mo lspace="0em" rspace="0em">|</mo><msub><mi>Y</mi><mn>0</mn></msub><mo stretchy="false">)</mo></mrow></mrow></msub></mfrac></mstyle></mrow></mrow><mo lspace="0em">.</mo></mrow><annotation encoding="application/x-tex">\displaystyle w_{T}(y|Y,Y_{0})=\frac{I\{\text{rank}(y|Y_{0})\in[\text{rank}(y|Y)\pm T]\}}{P(\text{rank}(y|Y_{0})\in[\text{rank}(y|Y)\pm T]|x,\pi_{0})}\times\frac{p_{\text{rank}(y|Y)}}{p_{\text{rank}(y|Y_{0})}}.</annotation></semantics></math> (5)</p>
+<p id="S4.p1.2">If <math alttext="T=0" class="ltx_Math" display="inline" id="S4.p1.m6" intent=":literal"><semantics><mrow><mi>T</mi><mo>=</mo><mn>0</mn></mrow><annotation encoding="application/x-tex">T=0</annotation></semantics></math>, then the position of an item has to be identical under the target and logging policy in order to provide a non-zero weight for observed rewards. In this case we recover the IPM as the PBM part is either 1 or ignored in case of a miss-match. For <math alttext="T&gt;0" class="ltx_Math" display="inline" id="S4.p1.m7" intent=":literal"><semantics><mrow><mi>T</mi><mo>&gt;</mo><mn>0</mn></mrow><annotation encoding="application/x-tex">T&gt;0</annotation></semantics></math> position bias weights are limited to at most <math alttext="T" class="ltx_Math" display="inline" id="S4.p1.m8" intent=":literal"><semantics><mi>T</mi><annotation encoding="application/x-tex">T</annotation></semantics></math> positions apart. If <math alttext="T" class="ltx_Math" display="inline" id="S4.p1.m9" intent=":literal"><semantics><mi>T</mi><annotation encoding="application/x-tex">T</annotation></semantics></math> is equal to the length of the displayed list <math alttext="|Y|" class="ltx_Math" display="inline" id="S4.p1.m10" intent=":literal"><semantics><mrow><mo stretchy="false">|</mo><mi>Y</mi><mo stretchy="false">|</mo></mrow><annotation encoding="application/x-tex">|Y|</annotation></semantics></math> in the full visibility setting, the resulting denominator is equal to <math alttext="1" class="ltx_Math" display="inline" id="S4.p1.m11" intent=":literal"><semantics><mn>1</mn><annotation encoding="application/x-tex">1</annotation></semantics></math> as <math alttext="P(\text{rank}(y|Y_{0})\in[\text{rank}(y|Y)\pm T]|x,\pi_{0})=1" class="ltx_Math" display="inline" id="S4.p1.m12" intent=":literal"><semantics><mrow><mrow><mi>P</mi><mo>⁡</mo><mrow><mo stretchy="false">(</mo><mrow><mrow><mtext>rank</mtext><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><mi>y</mi><mo lspace="0em" rspace="0em">|</mo><msub><mi>Y</mi><mn>0</mn></msub><mo stretchy="false">)</mo></mrow></mrow><mo>∈</mo><mrow><mo stretchy="false">[</mo><mrow><mrow><mtext>rank</mtext><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><mi>y</mi><mo lspace="0em" rspace="0em">|</mo><mi>Y</mi><mo stretchy="false">)</mo></mrow></mrow><mo>±</mo><mi>T</mi></mrow><mo stretchy="false">]</mo></mrow></mrow><mo lspace="0em" rspace="0em">|</mo><mrow><mi>x</mi><mo>,</mo><msub><mi>π</mi><mn>0</mn></msub></mrow><mo stretchy="false">)</mo></mrow></mrow><mo>=</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">P(\text{rank}(y|Y_{0})\in[\text{rank}(y|Y)\pm T]|x,\pi_{0})=1</annotation></semantics></math> and the PBM is recovered.
+We denote by <math alttext="\hat{\Delta}_{T}(\pi|x,\pi_{0},Y_{0})" class="ltx_Math" display="inline" id="S4.p1.m13" intent=":literal"><semantics><mrow><msub><mover accent="true"><mi mathvariant="normal">Δ</mi><mo>^</mo></mover><mi>T</mi></msub><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><mi>π</mi><mo lspace="0em" rspace="0em">|</mo><mrow><mi>x</mi><mo>,</mo><msub><mi>π</mi><mn>0</mn></msub><mo>,</mo><msub><mi>Y</mi><mn>0</mn></msub></mrow><mo stretchy="false">)</mo></mrow></mrow><annotation encoding="application/x-tex">\hat{\Delta}_{T}(\pi|x,\pi_{0},Y_{0})</annotation></semantics></math> the estimator that uses the weights as defined in (<a href="https://theopinard.github.io/vrac/articles/off-policy-evaluation-for-learning-to-rank-via-interpolating-the-item-position-model-and-the-position-based-model/#S4.E5"><span>5</span></a>) inside the generic estimator in (<a href="https://theopinard.github.io/vrac/articles/off-policy-evaluation-for-learning-to-rank-via-interpolating-the-item-position-model-and-the-position-based-model/#S3.E1"><span>1</span></a>).</p>
+</div>
+<div id="S4.Thmtheorem1">
+<h6>Proposition 4.1.</h6>
+<div id="S4.Thmtheorem1.p1">
+<p id="S4.Thmtheorem1.p1.1"><math alttext="\hat{\Delta}_{T}(\pi|x,\pi_{0},Y_{0})" class="ltx_Math" display="inline" id="S4.Thmtheorem1.p1.m1" intent=":literal"><semantics><mrow><msub><mover accent="true"><mi mathvariant="normal">Δ</mi><mo>^</mo></mover><mi>T</mi></msub><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><mi>π</mi><mo lspace="0em" rspace="0em">|</mo><mrow><mi>x</mi><mo>,</mo><msub><mi>π</mi><mn>0</mn></msub><mo>,</mo><msub><mi>Y</mi><mn>0</mn></msub></mrow><mo stretchy="false">)</mo></mrow></mrow><annotation encoding="application/x-tex">\hat{\Delta}_{T}(\pi|x,\pi_{0},Y_{0})</annotation></semantics></math><span id="S4.Thmtheorem1.p1.1.1"> is an unbiased estimator of <math alttext="\Delta_{\pi}" class="ltx_Math" display="inline" id="S4.Thmtheorem1.p1.m2" intent=":literal"><semantics><msub><mi mathvariant="normal">Δ</mi><mi>π</mi></msub><annotation encoding="application/x-tex">\Delta_{\pi}</annotation></semantics></math> for all window sizes <math alttext="T" class="ltx_Math" display="inline" id="S4.Thmtheorem1.p1.m3" intent=":literal"><semantics><mi>T</mi><annotation encoding="application/x-tex">T</annotation></semantics></math> if the logging data is generated from a known logging policy <math alttext="\pi_{0}" class="ltx_Math" display="inline" id="S4.Thmtheorem1.p1.m4" intent=":literal"><semantics><msub><mi>π</mi><mn>0</mn></msub><annotation encoding="application/x-tex">\pi_{0}</annotation></semantics></math> with full support, under the position-based model with a known position bias curve <math alttext="p" class="ltx_Math" display="inline" id="S4.Thmtheorem1.p1.m5" intent=":literal"><semantics><mi>p</mi><annotation encoding="application/x-tex">p</annotation></semantics></math>.
+(See the appendix for a proof.)</span></p>
+</div>
+</div>
+</section>
+<section id="S5">
+<h2><span>5. </span>Experiments</h2>
+<div id="S5.p1">
+<p id="S5.p1.1">We illustrate our off-policy evaluation approach INTERPOL with experiments on a synthetic data set that is simulated in a controlled environment using <math alttext="5,000" class="ltx_Math" display="inline" id="S5.p1.m1" intent=":literal"><semantics><mn>5,000</mn><annotation encoding="application/x-tex">5,000</annotation></semantics></math> data points. We highlight the impact of varying (i) the position bias misspecification (using powers of the true curve); (ii) the different window sizes and (iii) the randomization of the logging policy (via random position swaps, which are controlled by a parameter called stay probability) on our offline evaluation. Implementation details are available in the appendix.</p>
+</div>
+<figure id="S5.F1"><img alt="Refer to caption" height="261" src="https://arxiv.org/html/2210.09512v1/figures/mse_varying_pb_n_selected_10.png" width="476"/><img alt="Refer to caption" height="310" src="https://arxiv.org/html/2210.09512v1/figures/varying_stay_prob_n_selected_10.png" width="476"/><img alt="Refer to caption" height="298" src="https://arxiv.org/html/2210.09512v1/figures/mse_var_bias_n_selected_10.png" width="476"/><figcaption><span><span id="S5.F1.sf1.3">(a)</span> </span><span id="S5.F1.sf1.4">Stay probability set to <math alttext="0.95" class="ltx_Math" display="inline" id="S5.F1.sf1.m2" intent=":literal"><semantics><mn>0.95</mn><annotation encoding="application/x-tex">0.95</annotation></semantics></math>. </span></figcaption></figure>
+<div id="S5.p2">
+<p id="S5.p2.1"><span id="S5.p2.1.1">Results.</span>
+When it comes to the interpolation between the IPM (window size 0) and the PBM (window size 10) we see that the arising bias-variance trade-off in Figure <a href="https://theopinard.github.io/vrac/articles/off-policy-evaluation-for-learning-to-rank-via-interpolating-the-item-position-model-and-the-position-based-model/#S5.F1.sf1"><span>1(a)</span></a> is impacted by the misspecification of the position bias curve. As the window size goes up (left to right) the MSE of the estimator first decreases due to a reduction in variance and then increase due to an increase in bias. For all levels of misspecification we eventually end at a clearly biased PBM estimator. For small powers (below <math alttext="1" class="ltx_Math" display="inline" id="S5.p2.m1" intent=":literal"><semantics><mn>1</mn><annotation encoding="application/x-tex">1</annotation></semantics></math>) the misspecification of the PBM actual acts as weight clipping, which seems to be beneficial in terms of MSE for small window sizes. There seems to be a region around window size 1 to 6, where the MSE is lowest. Consequently, the estimator that offers the best bias-variance trade-off is INTERPOL with a properly chosen window size. Interestingly, the interpolation of INTERPOL can also reduce variance even if the correct position bias curve is used, as highlights Figure <a href="https://theopinard.github.io/vrac/articles/off-policy-evaluation-for-learning-to-rank-via-interpolating-the-item-position-model-and-the-position-based-model/#S5.F1.sf1"><span>1(a)</span></a>, where a large window size of 8 leads to favorable MSE.
+When varying the randomization of the logging policy, see Figure <a href="https://theopinard.github.io/vrac/articles/off-policy-evaluation-for-learning-to-rank-via-interpolating-the-item-position-model-and-the-position-based-model/#S5.F1.sf2"><span>1(b)</span></a>,
+we also identify a favorable bias-variance trade-off for a window size between <math alttext="2" class="ltx_Math" display="inline" id="S5.p2.m2" intent=":literal"><semantics><mn>2</mn><annotation encoding="application/x-tex">2</annotation></semantics></math> and <math alttext="6" class="ltx_Math" display="inline" id="S5.p2.m3" intent=":literal"><semantics><mn>6</mn><annotation encoding="application/x-tex">6</annotation></semantics></math> for a weak randomization of the logging policy (stay probability above <math alttext="0.9" class="ltx_Math" display="inline" id="S5.p2.m4" intent=":literal"><semantics><mn>0.9</mn><annotation encoding="application/x-tex">0.9</annotation></semantics></math>). For stronger randomization the IPM has a lower MSE.
+Figure <a href="https://theopinard.github.io/vrac/articles/off-policy-evaluation-for-learning-to-rank-via-interpolating-the-item-position-model-and-the-position-based-model/#S5.F1.sf3"><span>1(c)</span></a> illustrates a bias-variance decomposition of the estimator. For a window size larger than <math alttext="2" class="ltx_Math" display="inline" id="S5.p2.m5" intent=":literal"><semantics><mn>2</mn><annotation encoding="application/x-tex">2</annotation></semantics></math> the bias starts dominating the MSE.</p>
+</div>
+</section>
+<section id="S6">
+<h2><span>6. </span>Discussion and conclusion</h2>
+<div id="S6.p1">
+<p id="S6.p1.1">We have introduced a novel off-policy estimator, called INTERPOL, for learning-to-rank in the full visibility setting that interpolates the IPM and the PBM. INTERPOL has a favorable MSE, even when the PBM is correctly specified.
+In future work, we plan to include the top-k setting, investigate the misspecified version of the PBM and study the MSE of different window size <math alttext="T" class="ltx_Math" display="inline" id="S6.p1.m1" intent=":literal"><semantics><mi>T</mi><annotation encoding="application/x-tex">T</annotation></semantics></math> from a theoretical perspective. We also want to extend experiments and provide methods for choosing the best window size, using ideas based on (<a href="https://theopinard.github.io/vrac/articles/off-policy-evaluation-for-learning-to-rank-via-interpolating-the-item-position-model-and-the-position-based-model/#reference-15">Su
+et al., 2020</a>).
+Finally, we aim to develop off-policy learning approaches based on our interpolation idea.</p>
+</div>
+</section>
+<div><h2 id="works-cited">References</h2><p id="reference-1">[1]
+<span>
+Aman Agarwal, Ivan
+Zaitsev, Xuanhui Wang, Cheng Li,
+Marc Najork, and Thorsten Joachims.
+2019.
+
+</span>
+<span>Estimating position bias without intrusive
+interventions. In <em id="bib.bib2.3">Proceedings of the Twelfth ACM
+International Conference on Web Search and Data Mining</em>.
+474–482.
+
+</span>
+<span>
+</span></p><p id="reference-2">[2]
+<span>
+Qingyao Ai, Keping Bi,
+Cheng Luo, Jiafeng Guo, and
+W Bruce Croft. 2018.
+
+</span>
+<span>Unbiased learning to rank with unbiased propensity
+estimation. In <em id="bib.bib3.3">The 41st International ACM SIGIR
+Conference on Research &amp; Development in Information Retrieval</em>.
+385–394.
+
+</span>
+<span>
+</span></p><p id="reference-3">[3]
+<span>
+Walid Bendada, Guillaume
+Salha, and Théo Bontempelli.
+2020.
+
+</span>
+<span>Carousel personalization in music streaming apps
+with contextual bandits. In <em id="bib.bib4.3">Fourteenth ACM
+Conference on Recommender Systems</em>. 420–425.
+
+</span>
+<span>
+</span></p><p id="reference-4">[4]
+<span>
+Aleksandr Chuklin, Ilya
+Markov, and Maarten de Rijke.
+2015.
+
+</span>
+<span>Click models for web search.
+
+</span>
+<span><em id="bib.bib5.3">Synthesis lectures on information concepts,
+retrieval, and services</em> 7, 3
+(2015), 1–115.
+
+</span>
+<span>
+</span></p><p id="reference-5">[5]
+<span>
+Alexandre Gilotte,
+Clément Calauzènes, Thomas
+Nedelec, Alexandre Abraham, and Simon
+Dollé. 2018.
+
+</span>
+<span>Offline a/b testing for recommender systems. In
+<em id="bib.bib6.3">Proceedings of the Eleventh ACM International
+Conference on Web Search and Data Mining</em>. 198–206.
+
+</span>
+<span>
+</span></p><p id="reference-6">[6]
+<span>
+Rolf Jagerman, Harrie
+Oosterhuis, and Maarten de Rijke.
+2019.
+
+</span>
+<span>To Model or to Intervene: A Comparison of
+Counterfactual and Online Learning to Rank from User Interactions. In
+<em id="bib.bib7.3">Proceedings of the 42nd International ACM SIGIR
+Conference on Research and Development in Information Retrieval</em> (Paris,
+France) <em id="bib.bib7.4">(SIGIR’19)</em>. Association
+for Computing Machinery, New York, NY, USA,
+15–24.
+
+</span>
+<span>
+<a href="https://doi.org/10.1145/3331184.3331269">https://doi.org/10.1145/3331184.3331269</a>
+</span></p><p id="reference-7">[7]
+<span>
+Thorsten Joachims, Laura
+Granka, Bing Pan, Helene Hembrooke,
+and Geri Gay. 2017a.
+
+</span>
+<span>Accurately interpreting clickthrough data as
+implicit feedback. In <em id="bib.bib8.3">Acm Sigir Forum</em>,
+Vol. 51. Acm New York, NY, USA, 4–11.
+
+</span>
+<span>
+</span></p><p id="reference-8">[8]
+<span>
+Thorsten Joachims, Laura
+Granka, Bing Pan, Helene Hembrooke,
+Filip Radlinski, and Geri Gay.
+2007.
+
+</span>
+<span>Evaluating the accuracy of implicit feedback from
+clicks and query reformulations in web search.
+
+</span>
+<span><em id="bib.bib9.3">ACM Transactions on Information Systems
+(TOIS)</em> 25, 2 (2007),
+7–es.
+
+</span>
+<span>
+</span></p><p id="reference-9">[9]
+<span>
+Thorsten Joachims, Adith
+Swaminathan, and Tobias Schnabel.
+2017b.
+
+</span>
+<span>Unbiased learning-to-rank with biased feedback. In
+<em id="bib.bib10.3">Proceedings of the tenth ACM international
+conference on web search and data mining</em>. 781–789.
+
+</span>
+<span>
+</span></p><p id="reference-10">[10]
+<span>
+Thorsten Joachims, Adith
+Swaminathan, and Tobias Schnabel.
+2017c.
+
+</span>
+<span>Unbiased Learning-to-Rank with Biased Feedback. In
+<em id="bib.bib11.3">Proceedings of the Tenth ACM International
+Conference on Web Search and Data Mining</em> (Cambridge, United Kingdom)
+<em id="bib.bib11.4">(WSDM ’17)</em>. Association for
+Computing Machinery, New York, NY, USA,
+781–789.
+
+</span>
+<span>
+<a href="https://doi.org/10.1145/3018661.3018699">https://doi.org/10.1145/3018661.3018699</a>
+</span></p><p id="reference-11">[11]
+<span>
+Shuai Li, Yasin
+Abbasi-Yadkori, Branislav Kveton, Shan
+Muthukrishnan, Vishwa Vinay, and Zheng
+Wen. 2018.
+
+</span>
+<span>Offline evaluation of ranking policies with click
+models. In <em id="bib.bib12.3">Proceedings of the 24th ACM SIGKDD
+International Conference on Knowledge Discovery &amp; Data Mining</em>.
+1685–1694.
+
+</span>
+<span>
+</span></p><p id="reference-12">[12]
+<span>
+James McInerney, Benjamin
+Lacker, Samantha Hansen, Karl Higley,
+Hugues Bouchard, Alois Gruson, and
+Rishabh Mehrotra. 2018.
+
+</span>
+<span>Explore, exploit, and explain: personalizing
+explainable recommendations with bandits. In
+<em id="bib.bib13.3">Proceedings of the 12th ACM conference on
+recommender systems</em>. 31–39.
+
+</span>
+<span>
+</span></p><p id="reference-13">[13]
+<span>
+Harrie Oosterhuis and
+Maarten de Rijke. 2020.
+
+</span>
+<span><em id="bib.bib14.1">Policy-Aware Unbiased Learning to Rank for
+Top-k Rankings</em>.
+
+</span>
+<span>Association for Computing Machinery,
+New York, NY, USA, 489–498.
+
+</span>
+<span>
+<a href="https://doi.org/10.1145/3397271.3401102">https://doi.org/10.1145/3397271.3401102</a>
+</span></p><p id="reference-14">[14]
+<span>
+Matteo Ruffini, Vito
+Bellini, Alexander Buchholz, Giuseppe
+Di Benedetto, and Yannik Stein.
+2022.
+
+</span>
+<span>Modeling Position Bias Ranking for Streaming Media
+Services.
+
+</span>
+<span>(2022).
+
+</span>
+<span>
+</span></p><p id="reference-15">[15]
+<span>
+Yi Su, Pavithra Srinath,
+and Akshay Krishnamurthy.
+2020.
+
+</span>
+<span>Adaptive estimator selection for off-policy
+evaluation. In <em id="bib.bib16.3">International Conference on Machine
+Learning</em>. PMLR, 9196–9205.
+
+</span>
+<span>
+</span></p><p id="reference-16">[16]
+<span>
+Adith Swaminathan, Akshay
+Krishnamurthy, Alekh Agarwal, Miro
+Dudik, John Langford, Damien Jose, and
+Imed Zitouni. 2017.
+
+</span>
+<span>Off-policy evaluation for slate recommendation.
+
+</span>
+<span><em id="bib.bib17.3">Advances in Neural Information Processing
+Systems</em> 30 (2017).
+
+</span>
+<span>
+</span></p><p id="reference-17">[17]
+<span>
+Xuanhui Wang, Michael
+Bendersky, Donald Metzler, and Marc
+Najork. 2016.
+
+</span>
+<span>Learning to rank with selection bias in personal
+search. In <em id="bib.bib18.3">Proceedings of the 39th International
+ACM SIGIR conference on Research and Development in Information Retrieval</em>.
+115–124.
+
+</span>
+<span>
+</span></p><p id="reference-18">[18]
+<span>
+Xuanhui Wang, Nadav
+Golbandi, Michael Bendersky, Donald
+Metzler, and Marc Najork.
+2018.
+
+</span>
+<span>Position bias estimation for unbiased learning to
+rank in personal search. In <em id="bib.bib19.3">Proceedings of the
+Eleventh ACM International Conference on Web Search and Data Mining</em>.
+610–618.
+
+</span>
+<span>
+</span></p></div>
+<div></div>
+<section id="A1">
+<h2><span>Appendix A </span>Theoretical results</h2>
+<div id="A1.p1">
+<p id="A1.p1.1">In this section we provide the proof of our main result.</p>
+</div>
+<section id="A1.SS1">
+<h3><span>A.1. </span>Unbiasedness of the interpolating estimator under the position-based model</h3>
+<div id="A1.SS1.p1">
+<p id="A1.SS1.p1.1">We show that the interpolating estimator is unbiased if user interactions are actually coming from a position-based model, and we dispose of the correct position bias curve under the full visibility setting.</p>
+</div>
+<section id="A1.SS1.SSS0.Px1">
+<h4>Proof of Proposition <a href="https://theopinard.github.io/vrac/articles/off-policy-evaluation-for-learning-to-rank-via-interpolating-the-item-position-model-and-the-position-based-model/#S4.Thmtheorem1"><span>4.1</span></a></h4>
+<div id="A1.SS1.SSS0.Px1.1">
+<h6>Proof.</h6>
+<div id="A1.SS1.SSS0.Px1.p1">
+<p id="A1.SS1.SSS0.Px1.p1.1"><span id="A1.SS1.SSS0.Px1.p1.1.1">We focus on showing that <math alttext="\hat{\Delta}_{T}(\pi|x,\pi_{0},Y_{0})" class="ltx_Math" display="inline" id="A1.SS1.SSS0.Px1.p1.m1" intent=":literal"><semantics><mrow><msub><mover accent="true"><mi mathvariant="normal">Δ</mi><mo>^</mo></mover><mi>T</mi></msub><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><mi>π</mi><mo lspace="0em" rspace="0em">|</mo><mrow><mi>x</mi><mo>,</mo><msub><mi>π</mi><mn>0</mn></msub><mo>,</mo><msub><mi>Y</mi><mn>0</mn></msub></mrow><mo stretchy="false">)</mo></mrow></mrow><annotation encoding="application/x-tex">\hat{\Delta}_{T}(\pi|x,\pi_{0},Y_{0})</annotation></semantics></math> is unbiased for a single sample <math alttext="x" class="ltx_Math" display="inline" id="A1.SS1.SSS0.Px1.p1.m2" intent=":literal"><semantics><mi>x</mi><annotation encoding="application/x-tex">x</annotation></semantics></math>. The generalization using the distribution over contexts <math alttext="x" class="ltx_Math" display="inline" id="A1.SS1.SSS0.Px1.p1.m3" intent=":literal"><semantics><mi>x</mi><annotation encoding="application/x-tex">x</annotation></semantics></math> is straightforward.
+We evaluate</span></p>
+<p><math alttext="\displaystyle\mathbb{E}\left[\hat{\Delta}_{T}(\pi|x,\pi_{0},Y_{0})\right]" class="ltx_Math" display="inline" id="A1.E6.m1" intent=":literal"><semantics><mrow><mi>𝔼</mi><mo>⁡</mo><mrow><mo>[</mo><mrow><msub><mover accent="true"><mi mathvariant="normal">Δ</mi><mo>^</mo></mover><mi>T</mi></msub><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><mi>π</mi><mo lspace="0em" rspace="0em">|</mo><mrow><mi>x</mi><mo>,</mo><msub><mi>π</mi><mn>0</mn></msub><mo>,</mo><msub><mi>Y</mi><mn>0</mn></msub></mrow><mo stretchy="false">)</mo></mrow></mrow><mo>]</mo></mrow></mrow><annotation encoding="application/x-tex">\displaystyle\mathbb{E}\left[\hat{\Delta}_{T}(\pi|x,\pi_{0},Y_{0})\right]</annotation></semantics></math> (6)</p>
+<p id="A1.SS1.SSS0.Px1.p1.2"><span id="A1.SS1.SSS0.Px1.p1.2.1">Line (<a href="https://theopinard.github.io/vrac/articles/off-policy-evaluation-for-learning-to-rank-via-interpolating-the-item-position-model-and-the-position-based-model/#A1.E7"><span>7</span></a>) is obtained by using the definition of (<a href="https://theopinard.github.io/vrac/articles/off-policy-evaluation-for-learning-to-rank-via-interpolating-the-item-position-model-and-the-position-based-model/#S3.E1"><span>1</span></a>). Line (<a href="https://theopinard.github.io/vrac/articles/off-policy-evaluation-for-learning-to-rank-via-interpolating-the-item-position-model-and-the-position-based-model/#A1.E8"><span>8</span></a>) uses the definition of the position bias weights and decomposes the expectation. Line (<a href="https://theopinard.github.io/vrac/articles/off-policy-evaluation-for-learning-to-rank-via-interpolating-the-item-position-model-and-the-position-based-model/#A1.E9"><span>9</span></a>) pulls the expectation of the click model inside the sum, exploiting the linearity of the expectation and the fact that clicks do not interact by assumption of the PBM. Line (<a href="https://theopinard.github.io/vrac/articles/off-policy-evaluation-for-learning-to-rank-via-interpolating-the-item-position-model-and-the-position-based-model/#A1.E10"><span>10</span></a>) uses the definition of a click under the PBM and in line (<a href="https://theopinard.github.io/vrac/articles/off-policy-evaluation-for-learning-to-rank-via-interpolating-the-item-position-model-and-the-position-based-model/#A1.E11"><span>11</span></a>) we simplify the production of examination probability. In Line (<a href="https://theopinard.github.io/vrac/articles/off-policy-evaluation-for-learning-to-rank-via-interpolating-the-item-position-model-and-the-position-based-model/#A1.E12"><span>12</span></a>) we pull the expectation with respect to the logging policy inside the sum and line (<a href="https://theopinard.github.io/vrac/articles/off-policy-evaluation-for-learning-to-rank-via-interpolating-the-item-position-model-and-the-position-based-model/#A1.E13"><span>13</span></a>) evaluates this expectation. Finally line (<a href="https://theopinard.github.io/vrac/articles/off-policy-evaluation-for-learning-to-rank-via-interpolating-the-item-position-model-and-the-position-based-model/#A1.E14"><span>14</span></a>) simplifies the expression and uses the previous identities in reverse using the position-based model under the target policy <math alttext="\pi" class="ltx_Math" display="inline" id="A1.SS1.SSS0.Px1.p1.m4" intent=":literal"><semantics><mi>π</mi><annotation encoding="application/x-tex">\pi</annotation></semantics></math>.
+∎</span></p>
+</div>
+</div>
+</section>
+</section>
+</section>
+<section id="A2">
+<h2><span>Appendix B </span>Experiments</h2>
+<div id="A2.p1">
+<p id="A2.p1.1">We describe our experiment in more detail and provide more results on the estimator in the full visibility setting.</p>
+</div>
+<div id="A2.p2">
+<p id="A2.p2.1"><span id="A2.p2.1.1">Data generation for the toy experiment</span>
+Our synthetic data generation uses a toy model that allows to easily compute expectations of the true reward as well as to control the strength of logging policy randomization and the level of position bias misspecification. This experimental set-up is not supposed to be realistic, but rather to study properties of INTERPOL easily.
+We generate <math alttext="5,000" class="ltx_Math" display="inline" id="A2.p2.m1" intent=":literal"><semantics><mn>5,000</mn><annotation encoding="application/x-tex">5,000</annotation></semantics></math> observations from a synthetic logging policy that ranks <math alttext="K=10" class="ltx_Math" display="inline" id="A2.p2.m2" intent=":literal"><semantics><mrow><mi>K</mi><mo>=</mo><mn>10</mn></mrow><annotation encoding="application/x-tex">K=10</annotation></semantics></math> different actions.
+The true position bias curve is given as <math alttext="p=[1,0.9,0.8,\cdots,0.1]" class="ltx_Math" display="inline" id="A2.p2.m3" intent=":literal"><semantics><mrow><mi>p</mi><mo>=</mo><mrow><mo stretchy="false">[</mo><mrow><mn>1</mn><mo>,</mo><mn>0.9</mn><mo>,</mo><mn>0.8</mn><mo>,</mo><mo lspace="0em" rspace="0em">⋯</mo><mo>,</mo><mn>0.1</mn></mrow><mo stretchy="false">]</mo></mrow></mrow><annotation encoding="application/x-tex">p=[1,0.9,0.8,\cdots,0.1]</annotation></semantics></math>, the biased curve is defined as <math alttext="p^{x}" class="ltx_Math" display="inline" id="A2.p2.m4" intent=":literal"><semantics><msup><mi>p</mi><mi>x</mi></msup><annotation encoding="application/x-tex">p^{x}</annotation></semantics></math> component wise, where <math alttext="x\in[0.2,0.6,0.8,1,1.2,1.4,1.6,1.8,2.0]" class="ltx_Math" display="inline" id="A2.p2.m5" intent=":literal"><semantics><mrow><mi>x</mi><mo>∈</mo><mrow><mo stretchy="false">[</mo><mrow><mn>0.2</mn><mo>,</mo><mn>0.6</mn><mo>,</mo><mn>0.8</mn><mo>,</mo><mn>1</mn><mo>,</mo><mn>1.2</mn><mo>,</mo><mn>1.4</mn><mo>,</mo><mn>1.6</mn><mo>,</mo><mn>1.8</mn><mo>,</mo><mn>2.0</mn></mrow><mo stretchy="false">]</mo></mrow></mrow><annotation encoding="application/x-tex">x\in[0.2,0.6,0.8,1,1.2,1.4,1.6,1.8,2.0]</annotation></semantics></math>. We illustrate the curves for <math alttext="p^{x}" class="ltx_Math" display="inline" id="A2.p2.m6" intent=":literal"><semantics><msup><mi>p</mi><mi>x</mi></msup><annotation encoding="application/x-tex">p^{x}</annotation></semantics></math> in Figure <a href="https://theopinard.github.io/vrac/articles/off-policy-evaluation-for-learning-to-rank-via-interpolating-the-item-position-model-and-the-position-based-model/#A2.F2"><span>2</span></a>.
+The relevant items are items <math alttext="[1,2,4,7]" class="ltx_Math" display="inline" id="A2.p2.m7" intent=":literal"><semantics><mrow><mo stretchy="false">[</mo><mrow><mn>1</mn><mo>,</mo><mn>2</mn><mo>,</mo><mn>4</mn><mo>,</mo><mn>7</mn></mrow><mo stretchy="false">]</mo></mrow><annotation encoding="application/x-tex">[1,2,4,7]</annotation></semantics></math> and the logging policy <math alttext="\pi_{0}" class="ltx_Math" display="inline" id="A2.p2.m8" intent=":literal"><semantics><msub><mi>π</mi><mn>0</mn></msub><annotation encoding="application/x-tex">\pi_{0}</annotation></semantics></math> orders items <math alttext="[6,0,3,1,4]" class="ltx_Math" display="inline" id="A2.p2.m9" intent=":literal"><semantics><mrow><mo stretchy="false">[</mo><mrow><mn>6</mn><mo>,</mo><mn>0</mn><mo>,</mo><mn>3</mn><mo>,</mo><mn>1</mn><mo>,</mo><mn>4</mn></mrow><mo stretchy="false">]</mo></mrow><annotation encoding="application/x-tex">[6,0,3,1,4]</annotation></semantics></math> at the top and items <math alttext="[7,5,2]" class="ltx_Math" display="inline" id="A2.p2.m10" intent=":literal"><semantics><mrow><mo stretchy="false">[</mo><mrow><mn>7</mn><mo>,</mo><mn>5</mn><mo>,</mo><mn>2</mn></mrow><mo stretchy="false">]</mo></mrow><annotation encoding="application/x-tex">[7,5,2]</annotation></semantics></math>
+at the bottom of the list. The other items are displayed in arbitrary order. Additionally, the logging policy swaps the ranked items randomly, where every item has a probability of <math alttext="q\%" class="ltx_Math" display="inline" id="A2.p2.m11" intent=":literal"><semantics><mrow><mi>q</mi><mo>%</mo></mrow><annotation encoding="application/x-tex">q\%</annotation></semantics></math> of staying in its original position and a probability of <math alttext="(100-q\%)/9" class="ltx_Math" display="inline" id="A2.p2.m12" intent=":literal"><semantics><mrow><mrow><mo stretchy="false">(</mo><mrow><mn>100</mn><mo>−</mo><mrow><mi>q</mi><mo>%</mo></mrow></mrow><mo stretchy="false">)</mo></mrow><mo>/</mo><mn>9</mn></mrow><annotation encoding="application/x-tex">(100-q\%)/9</annotation></semantics></math> of being ranked in all other positions. We set these probabilities to <math alttext="[50\%,55\%,60\%,70\%,80\%,90\%,95\%,99\%]" class="ltx_Math" display="inline" id="A2.p2.m13" intent=":literal"><semantics><mrow><mo stretchy="false">[</mo><mrow><mrow><mn>50</mn><mo>%</mo></mrow><mo>,</mo><mrow><mn>55</mn><mo>%</mo></mrow><mo>,</mo><mrow><mn>60</mn><mo>%</mo></mrow><mo>,</mo><mrow><mn>70</mn><mo>%</mo></mrow><mo>,</mo><mrow><mn>80</mn><mo>%</mo></mrow><mo>,</mo><mrow><mn>90</mn><mo>%</mo></mrow><mo>,</mo><mrow><mn>95</mn><mo>%</mo></mrow><mo>,</mo><mrow><mn>99</mn><mo>%</mo></mrow></mrow><mo stretchy="false">]</mo></mrow><annotation encoding="application/x-tex">[50\%,55\%,60\%,70\%,80\%,90\%,95\%,99\%]</annotation></semantics></math>. We denote this probability <span id="A2.p2.1.2">stay probability</span>.
+The target policy <math alttext="\pi" class="ltx_Math" display="inline" id="A2.p2.m14" intent=":literal"><semantics><mi>π</mi><annotation encoding="application/x-tex">\pi</annotation></semantics></math> deterministically ranks items
+<math alttext="[7,0,3,1]" class="ltx_Math" display="inline" id="A2.p2.m15" intent=":literal"><semantics><mrow><mo stretchy="false">[</mo><mrow><mn>7</mn><mo>,</mo><mn>0</mn><mo>,</mo><mn>3</mn><mo>,</mo><mn>1</mn></mrow><mo stretchy="false">]</mo></mrow><annotation encoding="application/x-tex">[7,0,3,1]</annotation></semantics></math> at the top and items <math alttext="[2,4]" class="ltx_Math" display="inline" id="A2.p2.m16" intent=":literal"><semantics><mrow><mo stretchy="false">[</mo><mn>2</mn><mo>,</mo><mn>4</mn><mo stretchy="false">]</mo></mrow><annotation encoding="application/x-tex">[2,4]</annotation></semantics></math> at the bottom.
+A positive reward of <math alttext="1" class="ltx_Math" display="inline" id="A2.p2.m17" intent=":literal"><semantics><mn>1</mn><annotation encoding="application/x-tex">1</annotation></semantics></math> is generated for the relevant items and this reward is revealed according to the examination probability (i.e., position bias curve <math alttext="p" class="ltx_Math" display="inline" id="A2.p2.m18" intent=":literal"><semantics><mi>p</mi><annotation encoding="application/x-tex">p</annotation></semantics></math>).
+Hence, the expected reward for the target policy (under full visibility) is
+<math alttext="1\times p_{0}+1\times p_{3}+1\times p_{8}+1\times p_{9}=2" class="ltx_Math" display="inline" id="A2.p2.m19" intent=":literal"><semantics><mrow><mrow><mrow><mn>1</mn><mo lspace="0.222em" rspace="0.222em">×</mo><msub><mi>p</mi><mn>0</mn></msub></mrow><mo>+</mo><mrow><mn>1</mn><mo lspace="0.222em" rspace="0.222em">×</mo><msub><mi>p</mi><mn>3</mn></msub></mrow><mo>+</mo><mrow><mn>1</mn><mo lspace="0.222em" rspace="0.222em">×</mo><msub><mi>p</mi><mn>8</mn></msub></mrow><mo>+</mo><mrow><mn>1</mn><mo lspace="0.222em" rspace="0.222em">×</mo><msub><mi>p</mi><mn>9</mn></msub></mrow></mrow><mo>=</mo><mn>2</mn></mrow><annotation encoding="application/x-tex">1\times p_{0}+1\times p_{3}+1\times p_{8}+1\times p_{9}=2</annotation></semantics></math>, where <math alttext="p_{0}=1,p_{3}=0.7,p_{8}=0.2,p_{9}=0.1" class="ltx_Math" display="inline" id="A2.p2.m20" intent=":literal"><semantics><mrow><mrow><msub><mi>p</mi><mn>0</mn></msub><mo>=</mo><mn>1</mn></mrow><mo>,</mo><mrow><msub><mi>p</mi><mn>3</mn></msub><mo>=</mo><mn>0.7</mn></mrow><mo>,</mo><mrow><msub><mi>p</mi><mn>8</mn></msub><mo>=</mo><mn>0.2</mn></mrow><mo>,</mo><mrow><msub><mi>p</mi><mn>9</mn></msub><mo>=</mo><mn>0.1</mn></mrow></mrow><annotation encoding="application/x-tex">p_{0}=1,p_{3}=0.7,p_{8}=0.2,p_{9}=0.1</annotation></semantics></math>.</p>
+</div>
+<figure id="A2.F2"><img alt="Refer to caption" height="156" src="https://arxiv.org/html/2210.09512v1/figures/varying_pb_true_pb_n_selected_10.png" width="238"/><figcaption><span><span id="A2.F2.3">Figure 2</span>. </span><span id="A2.F2.4">Position bias curves used in the experiments.</span></figcaption></figure>
+<div id="A2.p3">
+<p id="A2.p3.1">Figure <a href="https://theopinard.github.io/vrac/articles/off-policy-evaluation-for-learning-to-rank-via-interpolating-the-item-position-model-and-the-position-based-model/#A2.F3"><span>3</span></a> highlights the behavior of the item-position model and the position-based model. The left-hand figure uses a misspecified position bias curve and clearly the resulting estimate is severely biased. The IP model (middle figure) exhibits higher variance but the true reward (straight line) lies inside the 95 % confidence interval of the IPM estimator. As the data set size increase, the estimator gets more precise and the confidence intervals shrink around the true value (<math alttext="2.0" class="ltx_Math" display="inline" id="A2.p3.m1" intent=":literal"><semantics><mn>2.0</mn><annotation encoding="application/x-tex">2.0</annotation></semantics></math>). The PBM (right-hand figure) that uses the correct position bias curve estimates the reward correctly and has less variability than the IP model.
+For illustrative purpose we also show the interpolation over different window sizes in Figure <a href="https://theopinard.github.io/vrac/articles/off-policy-evaluation-for-learning-to-rank-via-interpolating-the-item-position-model-and-the-position-based-model/#A2.F4"><span>4</span></a>.</p>
+</div>
+<figure id="A2.F3"><img alt="Refer to caption" height="204" src="https://arxiv.org/html/2210.09512v1/figures/convergence_estimators_n_selected_10.png" width="381"/><figcaption><span><span id="A2.F3.3">Figure 3</span>. </span><span id="A2.F3.4">Estimated reward for different estimators over different data set size in the full visibility setting. Stay probability set to <math alttext="95\%" class="ltx_Math" display="inline" id="A2.F3.m3" intent=":literal"><semantics><mrow><mn>95</mn><mo mathsize="1.110em">%</mo></mrow><annotation encoding="application/x-tex">95\%</annotation></semantics></math> and the misspecified position bias curve is <math alttext="p^{1.8}" class="ltx_Math" display="inline" id="A2.F3.m4" intent=":literal"><semantics><msup><mi>p</mi><mn>1.8</mn></msup><annotation encoding="application/x-tex">p^{1.8}</annotation></semantics></math>.</span></figcaption></figure>
+<figure id="A2.F4"><img alt="Refer to caption" height="159" src="https://arxiv.org/html/2210.09512v1/figures/convergence_estimators_n_selected_10_windows.png" width="476"/><figcaption><span><span id="A2.F4.3">Figure 4</span>. </span><span id="A2.F4.4">Interpolation of INTERPOL in the full visibility setting. Stay probability set to <math alttext="95\%" class="ltx_Math" display="inline" id="A2.F4.m3" intent=":literal"><semantics><mrow><mn>95</mn><mo mathsize="1.110em">%</mo></mrow><annotation encoding="application/x-tex">95\%</annotation></semantics></math> and the misspecified position bias curve is <math alttext="p^{1.8}" class="ltx_Math" display="inline" id="A2.F4.m4" intent=":literal"><semantics><msup><mi>p</mi><mn>1.8</mn></msup><annotation encoding="application/x-tex">p^{1.8}</annotation></semantics></math>.</span></figcaption></figure>
+</section>
+</article></body></html>
