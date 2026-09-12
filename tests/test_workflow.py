@@ -32,6 +32,7 @@ class WorkflowTests(unittest.TestCase):
                         metadata={"title": "Title"},
                         content_html="<p>content</p>",
                         source_links=((url, url),),
+                        library_url="https://library.test/vrac/",
                     ),
                     encoding="utf-8",
                 )
@@ -100,6 +101,7 @@ class WorkflowTests(unittest.TestCase):
                         metadata={"title": slug},
                         content_html="<p>new</p>",
                         source_links=((url, url),),
+                        library_url="https://library.test/vrac/",
                     ),
                     encoding="utf-8",
                 )
@@ -155,6 +157,7 @@ class WorkflowTests(unittest.TestCase):
                             metadata={"title": slug.title(), "date": date},
                             content_html="<p>content</p>",
                             source_links=((url, url),),
+                            library_url="https://library.test/vrac/",
                         ),
                         encoding="utf-8",
                     )

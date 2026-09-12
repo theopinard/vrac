@@ -112,6 +112,7 @@ def render_article_page(
     metadata: Mapping[str, str],
     content_html: str,
     source_links: Sequence[tuple[str, str]],
+    library_url: str,
 ) -> str:
     fingerprint_input = json.dumps(
         {
@@ -140,7 +141,7 @@ def render_article_page(
     assert shell.body is not None
     navigation = shell.new_tag("p")
     navigation["class"] = "library-link"
-    library_link = shell.new_tag("a", href="../../")
+    library_link = shell.new_tag("a", href=library_url)
     library_link.string = "All articles"
     navigation.append(library_link)
     shell.body.append(navigation)

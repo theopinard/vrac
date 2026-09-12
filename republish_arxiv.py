@@ -941,6 +941,7 @@ def render_page(
     source: ArxivSource,
     source_url: str,
     slug: str,
+    library_url: str,
 ) -> str:
     return render_article_page(
         slug=slug,
@@ -949,6 +950,7 @@ def render_page(
         metadata=metadata,
         content_html=article.decode_contents(formatter="minimal"),
         source_links=(("arXiv HTML", source.html_url), ("PDF", source.pdf_url)),
+        library_url=library_url,
     )
 
 
@@ -971,7 +973,9 @@ def republish(
         raise ValueError("Could not copy the semantic arXiv article")
 
     slug = slug_override or slug_from_title(metadata["title"])
-    asset_base_url = urljoin(public_articles_url.rstrip("/") + "/", slug + "/")
+    articles_base_url = public_articles_url.rstrip("/") + "/"
+    asset_base_url = urljoin(articles_base_url, slug + "/")
+    library_url = urljoin(articles_base_url, "../")
     output_directory = output_root / slug
     with tempfile.TemporaryDirectory(prefix="arxiv-republish-") as temporary:
         temporary_directory = Path(temporary)
@@ -1004,7 +1008,7 @@ def republish(
         sanitize_article(article, source.html_url, asset_base_url)
         if article.find("svg") or article.find("object", type="image/svg+xml"):
             raise ValueError("An SVG remained after figure conversion")
-        html = render_page(metadata, article, source, url, slug)
+        html = render_page(metadata, article, source, url, slug, library_url)
 
         output_directory.mkdir(parents=True, exist_ok=True)
         for pattern in ("figure-*.png", "figure-*.jpg", "table-*.png", "table-*.jpg"):

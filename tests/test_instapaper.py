@@ -14,6 +14,7 @@ def article_html(content: str = "Current content") -> str:
         metadata={"title": "Example article"},
         content_html=f"<p>{content}</p>",
         source_links=(("Source", "https://source.example/article"),),
+        library_url="https://library.test/vrac/",
     )
 
 

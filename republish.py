@@ -426,7 +426,11 @@ def slug_from_url(url: str, title: str) -> str:
 
 
 def render_page(
-    metadata: dict[str, str], body_html: str, source_url: str, slug: str
+    metadata: dict[str, str],
+    body_html: str,
+    source_url: str,
+    slug: str,
+    public_base_url: str,
 ) -> str:
     return render_article_page(
         slug=slug,
@@ -435,6 +439,7 @@ def render_page(
         metadata=metadata,
         content_html=body_html,
         source_links=((source_url, source_url),),
+        library_url=public_base_url,
     )
 
 
@@ -443,6 +448,7 @@ def republish(
     output_root: Path,
     *,
     slug_override: str | None = None,
+    public_base_url: str = DEFAULT_PUBLIC_BASE_URL,
 ) -> Path:
     html = fetch_html(url)
     soup = BeautifulSoup(html, "html.parser")
@@ -453,7 +459,7 @@ def republish(
     output_path = output_root / slug / "index.html"
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(
-        render_page(metadata, body_html, url, slug),
+        render_page(metadata, body_html, url, slug, public_base_url),
         encoding="utf-8",
     )
     return output_path
@@ -461,7 +467,9 @@ def republish(
 
 def _builders(public_base_url: str):
     def build_substack(url: str, output_root: Path, slug: str | None) -> Path:
-        return republish(url, output_root, slug_override=slug)
+        return republish(
+            url, output_root, slug_override=slug, public_base_url=public_base_url
+        )
 
     def build_arxiv(url: str, output_root: Path, slug: str | None) -> Path:
         import republish_arxiv

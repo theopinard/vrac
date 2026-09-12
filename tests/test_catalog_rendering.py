@@ -27,6 +27,7 @@ def generated(
         metadata={"title": title, "author": "Author", "date": date},
         content_html="<p>Readable content.</p>",
         source_links=((source_url, source_url),),
+        library_url="https://library.test/vrac/",
     )
 
 
@@ -69,7 +70,9 @@ class RenderingTests(unittest.TestCase):
     def test_article_has_catalog_link_and_machine_metadata(self) -> None:
         html = generated("example", "Example", "2026-09-07")
         soup = BeautifulSoup(html, "html.parser")
-        self.assertEqual(soup.select_one(".library-link a")["href"], "../../")
+        self.assertEqual(
+            soup.select_one(".library-link a")["href"], "https://library.test/vrac/"
+        )
         self.assertEqual(soup.select_one("meta[name='vrac-slug']")["content"], "example")
         parsed = generated_article_from_html(html)
         self.assertEqual(parsed.title, "Example")
