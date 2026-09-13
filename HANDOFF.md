@@ -1,5 +1,17 @@
 # Kobo + Instapaper article republisher handoff
 
+> **Kobo image fix (2026-09-13):** The user confirmed that converting the
+> previously remote arXiv PNG figures to locally hosted baseline RGB JPEGs fixed
+> the broken Airbnb Journey Ranker and IDProxy figures. HTTP 200 from arXiv did
+> not guarantee Kobo rendering; transparency alone did not explain IDProxy.
+> All arXiv raster images must pass through `localize_raster_images`, alongside
+> the existing PDF figure/table conversion. Never restore remote image fallbacks.
+> Preserve normal URL resolution: adding a slash to the arXiv page URL can
+> duplicate a version prefix already present in a relative image path.
+> `tests/test_article_images.py` audits local JPEG assets for all cataloged arXiv
+> articles. This requirement is arXiv-only; leave Substack handling unchanged.
+> See the Kobo image compatibility section in `README.md` for the output contract.
+
 > **Architecture update (2026-09-07):** This file preserves the historical
 > Kobo/Instapaper investigation. Its recommendations against catalog and API
 > automation have been superseded. The current catalog-driven build and

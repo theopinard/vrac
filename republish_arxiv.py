@@ -664,7 +664,10 @@ def localize_raster_images(article: Tag, source_url: str, asset_directory: Path)
         src = str(image["src"])
         if re.fullmatch(r"(?:figure|table)-\d+\.jpe?g", src) and (asset_directory / src).is_file():
             continue
-        url = urljoin(source_url.rstrip("/") + "/", src)
+        # Follow the source page's URL semantics: arXiv can emit a version
+        # prefix in src ("2607.23749v1/plot.png"). Appending a slash to the
+        # page URL would duplicate that prefix and turn a valid image into 404.
+        url = urljoin(source_url, src)
         if url not in converted:
             response = fetch_response(url)
             with Image.open(io.BytesIO(response.content)) as original:

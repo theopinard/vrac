@@ -8,9 +8,34 @@ The Substack extractor keeps readable article structure and remote images while
 removing the application shell and interactive UI. The arXiv extractor uses
 semantic HTML for reading order and the matching PDF to turn SVG figures and
 formatted data tables into local baseline RGB JPEGs.
-Source raster images are also downloaded and converted to local baseline RGB
+The arXiv extractor downloads source raster images and converts them to local baseline RGB
 JPEGs, with transparency flattened onto white and dimensions bounded to
-1200 × 1600 pixels. Readers therefore do not need to fetch figures from arXiv.
+1200 × 1600 pixels. Readers therefore do not need to fetch figures from source sites.
+
+## Kobo image compatibility: verified September 2026
+
+Kobo displayed broken images in the Airbnb Journey Ranker article and IDProxy
+Figure 1, even though the original arXiv PNG URLs returned HTTP 200. IDProxy
+Figure 2 worked. Airbnb's PNGs used transparency, but both IDProxy figures were
+RGB PNGs, so transparency alone did not explain the failures. The precise
+Kobo/Instapaper decoder or retrieval failure was not established.
+
+After hosting baseline RGB JPEG versions locally, the user confirmed that the
+images worked on Kobo. Preserve this tested output contract for **all arXiv articles**:
+
+- Download every image; never leave remote image fallbacks in generated HTML.
+- Flatten transparency onto white, normalize to RGB, and save non-progressive
+  JPEGs. Bound source raster images to 1200 × 1600 pixels without upscaling.
+- Use absolute public URLs pointing to files inside the article's own directory.
+- Abort a staged build on download or decode failure instead of publishing
+  broken assets. Keep local figure/table JPEGs generated from PDFs.
+
+The implementation is `localize_raster_images` in `republish_arxiv.py`. Run
+`uv run python republish.py rebuild` and `uv run python -m unittest discover -v`
+before publishing. The checked-in-library regression test verifies every arXiv article
+image is local, exists, decodes, and is a baseline RGB JPEG. A successful source
+HTTP request or desktop preview alone is not evidence of Kobo compatibility.
+After publication, verify updated articles through the actual Kobo reading flow.
 
 ## Setup
 

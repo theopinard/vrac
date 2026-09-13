@@ -26,7 +26,7 @@ class RasterImageTests(unittest.TestCase):
     def test_localizes_transparent_images_and_reuses_duplicate_downloads(self):
         data = io.BytesIO()
         Image.new("RGBA", (2400, 800), (0, 0, 0, 0)).save(data, format="PNG")
-        soup = BeautifulSoup('<article><img src="x.png"><img src="x.png">'
+        soup = BeautifulSoup('<article><img src="123v1/x.png"><img src="123v1/x.png">'
                              '<img src="figure-1.jpg"></article>', 'html.parser')
         with tempfile.TemporaryDirectory() as temp, patch(
             'republish_arxiv.fetch_response', return_value=Mock(content=data.getvalue())
