@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import io
 import re
 import shutil
 import sys
@@ -15,6 +16,7 @@ from urllib.parse import urljoin, urlparse
 import pymupdf
 import requests
 from bs4 import BeautifulSoup, Tag
+from PIL import Image, ImageOps
 
 from republisher.rendering import render_article_page
 from republisher.workflow import add_article
@@ -651,6 +653,36 @@ def render_svg_figures(
     return len(svgs)
 
 
+def localize_raster_images(article: Tag, source_url: str, asset_directory: Path) -> int:
+    """Normalize source images to the same reader-safe format as PDF crops.
+
+    Download/decode failures abort the staged build rather than publishing a
+    remote fallback that can silently break in Instapaper or on a Kobo.
+    """
+    converted: dict[str, tuple[str, tuple[int, int]]] = {}
+    for image in article.find_all("img", src=True):
+        src = str(image["src"])
+        if re.fullmatch(r"(?:figure|table)-\d+\.jpe?g", src) and (asset_directory / src).is_file():
+            continue
+        url = urljoin(source_url.rstrip("/") + "/", src)
+        if url not in converted:
+            response = fetch_response(url)
+            with Image.open(io.BytesIO(response.content)) as original:
+                rgba = ImageOps.exif_transpose(original).convert("RGBA")
+                rgb = Image.new("RGB", rgba.size, "white")
+                rgb.paste(rgba, mask=rgba.getchannel("A"))
+                rgb.thumbnail((1200, 1600), Image.Resampling.LANCZOS)
+                filename = f"image-{len(converted) + 1}.jpg"
+                rgb.save(asset_directory / filename, format="JPEG", quality=88,
+                         progressive=False, optimize=False, subsampling=2)
+                converted[url] = filename, rgb.size
+        filename, (width, height) = converted[url]
+        image["src"] = filename
+        image["width"] = str(width)
+        image["height"] = str(height)
+    return len(converted)
+
+
 def numbered_figure(element: Tag) -> tuple[Tag | None, str | None]:
     """Return the nearest ancestor figure with a numbered caption and its number.
 
@@ -1151,7 +1183,7 @@ def sanitize_article(article: Tag, source_url: str, asset_base_url: str) -> None
         src = str(image["src"])
         image["src"] = (
             urljoin(asset_base_url, src)
-            if re.fullmatch(r"(?:figure|table)-\d+\.jpe?g", src)
+            if re.fullmatch(r"(?:figure|table|image)-\d+\.jpe?g", src)
             else urljoin(source_url, src)
         )
 
@@ -1253,6 +1285,7 @@ def republish(
             rendered_tables = render_data_tables(
                 article, document, asset_directory
             )
+        localize_raster_images(article, source.html_url, asset_directory)
         if rendered == 0:
             print("warning: the article contained no SVG figures", file=sys.stderr)
         if rendered_tables == 0:
@@ -1267,7 +1300,7 @@ def republish(
         html = render_page(metadata, article, source, url, slug, library_url)
 
         output_directory.mkdir(parents=True, exist_ok=True)
-        for pattern in ("figure-*.png", "figure-*.jpg", "table-*.png", "table-*.jpg"):
+        for pattern in ("figure-*.png", "figure-*.jpg", "table-*.png", "table-*.jpg", "image-*.jpg"):
             for stale_asset in output_directory.glob(pattern):
                 stale_asset.unlink()
         for asset in asset_directory.iterdir():

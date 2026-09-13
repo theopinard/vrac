@@ -1,9 +1,16 @@
 import unittest
+import io
+import tempfile
+from pathlib import Path
+from unittest.mock import Mock, patch
+
+from PIL import Image
 
 from bs4 import BeautifulSoup
 
 from republish_arxiv import (
     base_identifier,
+    localize_raster_images,
     data_tables_to_render,
     normalize_bibliography,
     normalize_equation_tables,
@@ -13,6 +20,38 @@ from republish_arxiv import (
     sanitize_article,
     unwrap_citations,
 )
+
+
+class RasterImageTests(unittest.TestCase):
+    def test_localizes_transparent_images_and_reuses_duplicate_downloads(self):
+        data = io.BytesIO()
+        Image.new("RGBA", (2400, 800), (0, 0, 0, 0)).save(data, format="PNG")
+        soup = BeautifulSoup('<article><img src="x.png"><img src="x.png">'
+                             '<img src="figure-1.jpg"></article>', 'html.parser')
+        with tempfile.TemporaryDirectory() as temp, patch(
+            'republish_arxiv.fetch_response', return_value=Mock(content=data.getvalue())
+        ) as fetch:
+            root = Path(temp)
+            (root / 'figure-1.jpg').write_bytes(b'existing PDF crop')
+            self.assertEqual(localize_raster_images(soup.article, 'https://arxiv.org/html/123v1', root), 1)
+            fetch.assert_called_once_with('https://arxiv.org/html/123v1/x.png')
+            with Image.open(root / 'image-1.jpg') as result:
+                self.assertEqual(result.mode, 'RGB')
+                self.assertEqual(result.size, (1200, 400))
+                self.assertEqual(result.getpixel((0, 0)), (255, 255, 255))
+                self.assertFalse(result.info.get('progressive'))
+            self.assertEqual(soup.find_all('img')[1]['src'], 'image-1.jpg')
+            sanitize_article(soup.article, 'https://arxiv.org/html/123v1/', 'https://example.test/paper/')
+            self.assertEqual(soup.img['src'], 'https://example.test/paper/image-1.jpg')
+
+    def test_invalid_download_aborts_instead_of_leaving_remote_fallback(self):
+        soup = BeautifulSoup('<article><img src="bad.png"></article>', 'html.parser')
+        with tempfile.TemporaryDirectory() as temp, patch(
+            'republish_arxiv.fetch_response', return_value=Mock(content=b'not an image')
+        ):
+            with self.assertRaises(OSError):
+                localize_raster_images(soup.article, 'https://arxiv.org/', Path(temp))
+            self.assertEqual(list(Path(temp).iterdir()), [])
 
 
 class ArxivUrlTests(unittest.TestCase):

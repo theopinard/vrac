@@ -8,6 +8,9 @@ The Substack extractor keeps readable article structure and remote images while
 removing the application shell and interactive UI. The arXiv extractor uses
 semantic HTML for reading order and the matching PDF to turn SVG figures and
 formatted data tables into local baseline RGB JPEGs.
+Source raster images are also downloaded and converted to local baseline RGB
+JPEGs, with transparency flattened onto white and dimensions bounded to
+1200 × 1600 pixels. Readers therefore do not need to fetch figures from arXiv.
 
 ## Setup
 
