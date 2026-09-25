@@ -1,0 +1,940 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1" name="viewport"/><title>JourneyFormer : Encoding Airbnb Guest Journey with Sequence Modeling</title><style>body {
+  max-width: 760px;
+  margin: 2rem auto;
+  padding: 0 1rem;
+  color: #202020;
+  background: #fff;
+  font-family: Georgia, serif;
+  line-height: 1.55;
+}
+a { color: #315f8c; }
+.library-link { margin-bottom: 2rem; }
+img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 1.5rem auto;
+}
+figure { margin: 2rem 0; }
+figcaption, .article-meta { font-size: 0.9em; }
+pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+blockquote {
+  margin-left: 0;
+  padding-left: 1rem;
+  border-left: 3px solid #999;
+}
+math[display="block"] { margin: 1rem auto; overflow-x: auto; }</style><meta content="journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling" name="vrac-slug"/><meta content="arxiv" name="vrac-source-type"/><meta content="https://arxiv.org/html/2606.19108v1" name="vrac-source-url"/><meta content="JourneyFormer : Encoding Airbnb Guest Journey with Sequence Modeling" name="vrac-title"/><meta content="Daochen Zha, Chun How Tan, Xin Liu, Bin Xu, Han Zhao, Xiaowei Liu, Tracy Yu, Hui Gao, Huiji Gao, Liwei He, Stephanie Moyerman, Sanjeev Katariya" name="vrac-author"/><meta content="arXiv:2606.19108v1" name="vrac-publication"/><meta content="17 Jun 2026" name="vrac-published"/><meta content="8e2a7d482ad62100594bb1e2dfde08e12911fabc513f5b73b3e0a087f192928a" name="vrac-content-sha256"/></head><body><p class="library-link"><a href="https://theopinard.github.io/vrac/">All articles</a></p><article><h1>JourneyFormer : Encoding Airbnb Guest Journey with Sequence Modeling</h1><p class="article-meta">Daochen Zha, Chun How Tan, Xin Liu, Bin Xu, Han Zhao, Xiaowei Liu, Tracy Yu, Hui Gao, Huiji Gao, Liwei He, Stephanie Moyerman, Sanjeev Katariya · arXiv:2606.19108v1 · 17 Jun 2026</p><p class="article-meta">Original: <a href="https://arxiv.org/html/2606.19108v1">arXiv HTML</a> · <a href="https://arxiv.org/pdf/2606.19108v1">PDF</a></p>
+<span><span><span><span>Conference: </span>Proceedings of the 32nd ACM SIGKDD Conference on Knowledge Discovery and Data Mining V.2; August 09–13, 2026; Jeju Island, Republic of Korea</span><span>Proceedings of the 32nd ACM SIGKDD Conference on Knowledge Discovery and Data Mining V.2 (KDD ’26), August 09–13, 2026, Jeju Island, Republic of Korea</span><span><span>DOI: </span><a href="https://doi.org/10.1145/3770855.3818437">10.1145/3770855.3818437</a></span><span><span>ISBN: </span>979-8-4007-2259-2/2026/08</span><span><span>CCS: </span>Computing methodologies Machine learning</span><span><span>CCS: </span>Computing methodologies Artificial intelligence</span></span></span>
+<div id="abstract1"><h2>Abstract</h2>
+<p id="abstract1.1">Sequence modeling has become increasingly popular in recommendation and ranking algorithms, owing to its capacity to model users’ historical behaviors and infer user intentions. Despite its theoretical simplicity, the practical deployment of a sequence model in production is non-trivial due to complexity of the sequence and sparse labels. For example, in Airbnb, guest sequences are often long, exploratory and complex, and we focus on booking labels, which are sparse. As such, we are often required to make various design decisions regarding data and modeling to strike a balance between effectiveness and scalability. This work delved into these production challenges and deployed <span id="abstract1.1.1">JourneyFormer</span>, a sequence modeling solution for search ranking at Airbnb. We detail crucial design considerations, covering aspects such as guest event selection, ID embeddings, model architecture, and label attribution. Additionally, we describe several tailored strategies to accelerate model training and inference. <span id="abstract1.1.2">JourneyFormer</span> has been successfully deployed within Airbnb’s production, where its effectiveness and impact have been evidenced not only by improved offline ranking metrics but also by significant gains in key business metrics through online A/B testing across 2 production surfaces.</p>
+</div>
+<div>
+<h6>Keywords: </h6>Search Ranking, Recommender Systems, Sequence Modeling
+</div><span id="id38"><sup>†</sup><span><span><sup>†</sup><span>cc-license: </span>by</span></span></span>
+<section id="S1">
+<h2><span>1. </span>Introduction</h2>
+<div id="S1.p1">
+<p id="S1.p1.1">On two-sided e-commerce platforms like Airbnb, search ranking plays a vital role. Guests typically begin their journey on Airbnb with a search, then browse and interact with the ranked listings. A smart search ranking algorithm can help guests find suitable stays and make confident booking decisions, a triple win for guests, hosts, and the platform: guests find what they are looking for, hosts receive more bookings, and the overall business on Airbnb grows.</p>
+</div>
+<div id="S1.p2">
+<p id="S1.p2.1">Booking decisions are complicated as guests often invest considerable time browsing and comparing listings. Figure <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#S1.F1"><span>1</span></a> shows an example of a guest journey, which is typically long, exploratory, and complex. Beyond viewing (clicking to open the listing page) and booking events, guests may cancel trips (e.g., due to a change of plans), leave reviews (positive or negative), or contact Customer Service (CS). These events naturally form a time-stamped sequence.</p>
+</div>
+<figure id="S1.F1"><img alt="Refer to caption" height="140" src="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/image-1.jpg" width="1200"/><figcaption><span><span id="S1.F1.3">Figure 1</span>. </span><span id="S1.F1.4">An example of a guest journey—typically long, exploratory, and complex. Note that this journey is purely hypothetical for illustration purpose and is not from any real guest data. The sad face refers to a listing that delivered a poor guest experience.</span></figcaption></figure>
+<div id="S1.p3">
+<p id="S1.p3.1">Sequence modeling has recently gained traction in recommendation and ranking algorithms (<a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-30">Sun et al., 2019</a>; <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-19">Kang and McAuley, 2018</a>; <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-38">Wu et al., 2020</a>; <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-20">Li et al., 2020</a>; <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-6">Chen et al., 2022</a>; <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-12">Fan et al., 2022</a>; <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-11">Du et al., 2023</a>; <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-42">Zhang et al., 2023</a>; <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-44">Zhou et al., 2023</a>; <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-41">Zhai et al., 2024</a>; <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-25">Pancha et al., 2022</a>). The core idea of these methods is to use sequence models like Transformer (<a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-36">Vaswani et al., 2017</a>) to encode user sequence into compact representations. These representations are then used to enhance recommendation and ranking performance. Inspired by the impressive results in prior research, we aim to encode Airbnb’s guest journeys with sequence modeling to better infer guest intent and surface the right listings in search ranking.</p>
+</div>
+<div id="S1.p4">
+<p id="S1.p4.1">However, despite its theoretical simplicity, the practical deployment of a sequence model in production is non-trivial due to complexity of the sequence and sparse labels. For example, in Airbnb search ranking, there are several challenges:</p>
+<ul id="S1.I1">
+<li id="S1.I1.i1"><span>•</span>
+<div id="S1.I1.i1.p1">
+<p id="S1.I1.i1.p1.1">Long and exploratory nature of the guest journey - Many guests spend significant time exploring Airbnb listings across different destinations and dates by interacting with the search ranking, often resulting in a very long guest sequences. Some guest events may reflect an intent to find a place to stay, while others could be simply exploratory without a clear goal. Additionally, the user might exhibit back-and-forth behavior when viewing the same listing, which is often uncommon on social media platforms. Extracting meaningful representations from these long, noisy sequences is challenging.</p>
+</div></li>
+<li id="S1.I1.i2"><span>•</span>
+<div id="S1.I1.i2.p1">
+<p id="S1.I1.i2.p1.1">Complexity of guest events - Guest events come in many forms: some indicate preference (e.g., bookings), while others are ambiguous (e.g., reviews, views, or CS tickets). Their frequency also varies widely—views, for instance, are far more common than other events. A sequence model must effectively capture this complexity to model guest behavior well.</p>
+</div></li>
+<li id="S1.I1.i3"><span>•</span>
+<div id="S1.I1.i3.p1">
+<p id="S1.I1.i3.p1.1">Focusing on the sparse booking labels rather than engagement - Unlike social media platforms (<a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-25">Pancha et al., 2022</a>; <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-39">Xia et al., 2023</a>) that often focus on engagement, e-commerce platforms like Airbnb prioritize booking conversion. As a result, engagement signals can be noisy. For instance, a listing view might reflect genuine booking interest—or simply as a comparison to other listings, or even random browsing. Moreover, guests rarely book the same or sometimes even similar listings twice, so suggesting similar options is often not effective. We need a truly generalizable model to infer guests’ underlying needs.</p>
+</div></li>
+</ul>
+</div>
+<div id="S1.p5">
+<p id="S1.p5.1">As a result, practically deploying a sequence model in a production environment like in Airbnb typically faces a wide range of obstacles and tradeoffs—from feature formulation and label definition to training and inference scalability. Our work aims to bridge this gap and facilitate the real-world adoption of sequence models in industry-scale search ranking platforms.</p>
+</div>
+<div id="S1.p6">
+<p id="S1.p6.1">In this work, we present <span id="S1.p6.1.1">JourneyFormer</span>, a sequence modeling solution deployed in Airbnb’s search ranking. While most prior work is research-oriented and focuses on improving prediction accuracy, ours addresses the production challenges of deploying sequence models—which often require careful trade-offs. To keep our contribution focused, we adopt a simple modeling architecture and center our discussions on key design decisions encountered in production, such as guest event selection, ID embeddings, model architecture, label attribution, and strategies to accelerate training and inference. In summary, our main contributions are:</p>
+</div>
+<div id="S1.p7">
+<ul id="S1.I2">
+<li id="S1.I2.i1"><span>•</span>
+<div id="S1.I2.i1.p1">
+<p id="S1.I2.i1.p1.1">We discuss sequence model beyond model architecture itself, covering key production considerations—from selecting and capping guest events, to feature encoding, label attribution, and strategies for efficient training and model serving.</p>
+</div></li>
+<li id="S1.I2.i2"><span>•</span>
+<div id="S1.I2.i2.p1">
+<p id="S1.I2.i2.p1.1">We successfully deployed <span id="S1.I2.i2.p1.1.1">JourneyFormer</span>, a sequence model in Airbnb’s search ranking. Unlike our previous ranking models that relied on hand-crafted features, <span id="S1.I2.i2.p1.1.2">JourneyFormer</span> uses a Transformer to encode guest journeys, resulting in more expressive and meaningful guest representations.</p>
+</div></li>
+<li id="S1.I2.i3"><span>•</span>
+<div id="S1.I2.i3.p1">
+<p id="S1.I2.i3.p1.1"><span id="S1.I2.i3.p1.1.1">JourneyFormer</span> not only achieves substantial improvements in offline metrics over a strong baseline, but also delivers significant gains in key business metrics—such as uncanceled bookers and nights booked—through online A/B testing across 2 production surfaces on search ranking and promotional emails. Moreover, we conduct extensive analysis to understand <span id="S1.I2.i3.p1.1.2">JourneyFormer</span> under alternative design choices, the impact of ablated training acceleration strategies, performance across sequence lengths, and sensitivity to distribution shifts.</p>
+</div></li>
+<li id="S1.I2.i4"><span>•</span>
+<div id="S1.I2.i4.p1">
+<p id="S1.I2.i4.p1.1">Furthermore, we discuss several seemingly promising directions that we explored but ultimately did not adopt. We hope our lessons and findings can benefit applied researchers and help the broader research community understand the complexities faced in industrial search ranking applications.</p>
+</div></li>
+</ul>
+</div>
+</section>
+<section id="S2">
+<h2><span>2. </span>Preliminaries</h2>
+<section id="S2.SS1">
+<h3><span>2.1. </span>How is Guest Journey Encoded at Airbnb Search Ranking prior to <span id="S2.SS1.2">JourneyFormer</span>?</h3>
+<div id="S2.SS1.p1">
+<p id="S2.SS1.p1.1">The idea of leveraging the guest journey to enhance search ranking is not new. Prior to <span id="S2.SS1.p1.1.1">JourneyFormer</span>, Airbnb’s ranking algorithms relied on hand-crafted features to encapsulate the guest journey (<a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-31">Tan et al., 2023</a>; <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-33">Tang et al., 2024</a>; <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-15">Haldar et al., 2019</a>). These features were typically devised by aggregating various guest statistics across different time frames. For instance, features such as the total number of bookings and the average price of bookings over a specified period were common. Additionally, some guest-listing crossed features, like the number of times a guest viewed a specific listing within a specific period, were also used. The hand-crafted features offered conveniences in production: the feature aggregation can be straightforwardly implemented through either batched or real-time data pipelines; for inference, the models often employed neural network architectures like MLP, which are relatively cost-efficient and easy to support.</p>
+</div>
+<div id="S2.SS1.p2">
+<p id="S2.SS1.p2.1">However, our team is facing scalability challenges with the above hand-crafted feature engineering approach. Specifically, as machine learning engineers kept adding more and more features into the model, maintaining the data pipelines became increasingly difficult. Furthermore, the hand-crafted nature of these features could result in sub-optimal performance, as the model might struggle to infer complex guest intentions from the aggregated feature values alone. This motivated us to explore a more scalable and sustainable search ranking architecture based on sequence modeling.</p>
+</div>
+<figure id="S2.F2"><img alt="Refer to caption" height="503" src="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/image-2.jpg" width="1200"/><figcaption><span><span id="S2.F2.4">Figure 2</span>. </span><span id="S2.F2.5">An overview of <span id="S2.F2.5.1">JourneyFormer</span>. The guest sequence consists of a long-term sequence (events from the past 7 years, excluding frequent events like listing views) and a short-term sequence (frequent events from the past 21 days). The guest sequence, the search query and the retrieved listing candidates use a shared feature pool to construct feature representations. They are then processed by a sequence encoder and a ranking model to generate listing scores.</span></figcaption></figure>
+</section>
+<section id="S2.SS2">
+<h3><span>2.2. </span>Notations &amp; Problem Statement</h3>
+<div id="S2.SS2.p1">
+<p id="S2.SS2.p1.1">We start by considering a guest <math alttext="g\in\mathcal{G}" class="ltx_Math" display="inline" id="S2.SS2.p1.m1" intent=":literal"><semantics><mrow><mi>g</mi><mo>∈</mo><mi class="ltx_font_mathcaligraphic">𝒢</mi></mrow><annotation encoding="application/x-tex">g\in\mathcal{G}</annotation></semantics></math> initiates a search at Airbnb, where <math alttext="\mathcal{G}" class="ltx_Math" display="inline" id="S2.SS2.p1.m2" intent=":literal"><semantics><mi class="ltx_font_mathcaligraphic">𝒢</mi><annotation encoding="application/x-tex">\mathcal{G}</annotation></semantics></math> denotes the set of all Airbnb guests. The search request includes a query, denoted as <math alttext="q" class="ltx_Math" display="inline" id="S2.SS2.p1.m3" intent=":literal"><semantics><mi>q</mi><annotation encoding="application/x-tex">q</annotation></semantics></math>, encompassing information like destinations, dates, and guest numbers. The search backend then retrieves relevant listings <math alttext="\mathcal{L}_{q}" class="ltx_Math" display="inline" id="S2.SS2.p1.m4" intent=":literal"><semantics><msub><mi class="ltx_font_mathcaligraphic">ℒ</mi><mi>q</mi></msub><annotation encoding="application/x-tex">\mathcal{L}_{q}</annotation></semantics></math> from Airbnb’s listing pool <math alttext="\mathcal{L}" class="ltx_Math" display="inline" id="S2.SS2.p1.m5" intent=":literal"><semantics><mi class="ltx_font_mathcaligraphic">ℒ</mi><annotation encoding="application/x-tex">\mathcal{L}</annotation></semantics></math> (<math alttext="|\mathcal{L}|&gt;8M" class="ltx_Math" display="inline" id="S2.SS2.p1.m6" intent=":literal"><semantics><mrow><mrow><mo stretchy="false">|</mo><mi class="ltx_font_mathcaligraphic">ℒ</mi><mo stretchy="false">|</mo></mrow><mo>&gt;</mo><mrow><mn>8</mn><mo lspace="0em" rspace="0em">​</mo><mi>M</mi></mrow></mrow><annotation encoding="application/x-tex">|\mathcal{L}|&gt;8M</annotation></semantics></math>) using <math alttext="q" class="ltx_Math" display="inline" id="S2.SS2.p1.m7" intent=":literal"><semantics><mi>q</mi><annotation encoding="application/x-tex">q</annotation></semantics></math>, where <math alttext="\mathcal{L}_{q}=\{l_{1},l_{2},...,l_{n}\}\subset\mathcal{L}" class="ltx_Math" display="inline" id="S2.SS2.p1.m8" intent=":literal"><semantics><mrow><msub><mi class="ltx_font_mathcaligraphic">ℒ</mi><mi>q</mi></msub><mo>=</mo><mrow><mo stretchy="false">{</mo><mrow><msub><mi>l</mi><mn>1</mn></msub><mo>,</mo><msub><mi>l</mi><mn>2</mn></msub><mo>,</mo><mi mathvariant="normal">…</mi><mo>,</mo><msub><mi>l</mi><mi>n</mi></msub></mrow><mo stretchy="false">}</mo></mrow><mo>⊂</mo><mi class="ltx_font_mathcaligraphic">ℒ</mi></mrow><annotation encoding="application/x-tex">\mathcal{L}_{q}=\{l_{1},l_{2},...,l_{n}\}\subset\mathcal{L}</annotation></semantics></math>, and <math alttext="n" class="ltx_Math" display="inline" id="S2.SS2.p1.m9" intent=":literal"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> varies significantly from query to query, typically falling within the range of tens of thousands. Additionally, we can retrieve a sequence of guest events arranged in chronological order, denoted as <math alttext="\mathcal{S}_{g}=\{e_{1},e_{2},...,e_{t}\}" class="ltx_Math" display="inline" id="S2.SS2.p1.m10" intent=":literal"><semantics><mrow><msub><mi class="ltx_font_mathcaligraphic">𝒮</mi><mi>g</mi></msub><mo>=</mo><mrow><mo stretchy="false">{</mo><mrow><msub><mi>e</mi><mn>1</mn></msub><mo>,</mo><msub><mi>e</mi><mn>2</mn></msub><mo>,</mo><mi mathvariant="normal">…</mi><mo>,</mo><msub><mi>e</mi><mi>t</mi></msub></mrow><mo stretchy="false">}</mo></mrow></mrow><annotation encoding="application/x-tex">\mathcal{S}_{g}=\{e_{1},e_{2},...,e_{t}\}</annotation></semantics></math>, where each <math alttext="e_{i}\in\mathcal{E}" class="ltx_Math" display="inline" id="S2.SS2.p1.m11" intent=":literal"><semantics><mrow><msub><mi>e</mi><mi>i</mi></msub><mo>∈</mo><mi class="ltx_font_mathcaligraphic">ℰ</mi></mrow><annotation encoding="application/x-tex">e_{i}\in\mathcal{E}</annotation></semantics></math> (<math alttext="i\in\{1,2,...,t\}" class="ltx_Math" display="inline" id="S2.SS2.p1.m12" intent=":literal"><semantics><mrow><mi>i</mi><mo>∈</mo><mrow><mo stretchy="false">{</mo><mrow><mn>1</mn><mo>,</mo><mn>2</mn><mo>,</mo><mi mathvariant="normal">…</mi><mo>,</mo><mi>t</mi></mrow><mo stretchy="false">}</mo></mrow></mrow><annotation encoding="application/x-tex">i\in\{1,2,...,t\}</annotation></semantics></math>). The set <math alttext="\mathcal{E}" class="ltx_Math" display="inline" id="S2.SS2.p1.m13" intent=":literal"><semantics><mi class="ltx_font_mathcaligraphic">ℰ</mi><annotation encoding="application/x-tex">\mathcal{E}</annotation></semantics></math> encompasses all events logged by the platform, such as listing views, booking requests, and reviews. <math alttext="|\mathcal{E}|" class="ltx_Math" display="inline" id="S2.SS2.p1.m14" intent=":literal"><semantics><mrow><mo stretchy="false">|</mo><mi class="ltx_font_mathcaligraphic">ℰ</mi><mo stretchy="false">|</mo></mrow><annotation encoding="application/x-tex">|\mathcal{E}|</annotation></semantics></math> is quite large, typically, containing hundreds of millions of events on a daily basis. The length of the guest event sequence <math alttext="|\mathcal{S}_{g}|" class="ltx_Math" display="inline" id="S2.SS2.p1.m15" intent=":literal"><semantics><mrow><mo stretchy="false">|</mo><msub><mi class="ltx_font_mathcaligraphic">𝒮</mi><mi>g</mi></msub><mo stretchy="false">|</mo></mrow><annotation encoding="application/x-tex">|\mathcal{S}_{g}|</annotation></semantics></math> differs greatly among guests, spanning from 0 (indicating a new guest) to hundreds of thousands.</p>
+</div>
+<div id="S2.SS2.p2">
+<p id="S2.SS2.p2.1">Rather than using the aggregated features to represent <math alttext="\mathcal{S}_{g}" class="ltx_Math" display="inline" id="S2.SS2.p2.m1" intent=":literal"><semantics><msub><mi class="ltx_font_mathcaligraphic">𝒮</mi><mi>g</mi></msub><annotation encoding="application/x-tex">\mathcal{S}_{g}</annotation></semantics></math> as discussed in Section <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#S2.SS1"><span>2.1</span></a>, our goal is to learn a sequence embedding <math alttext="\mathbf{e}_{g}" class="ltx_Math" display="inline" id="S2.SS2.p2.m2" intent=":literal"><semantics><msub><mi>𝐞</mi><mi>g</mi></msub><annotation encoding="application/x-tex">\mathbf{e}_{g}</annotation></semantics></math> for each guest and use it to improve ranking results. More specifically, given the guest event sequence <math alttext="\mathcal{S}_{g}" class="ltx_Math" display="inline" id="S2.SS2.p2.m3" intent=":literal"><semantics><msub><mi class="ltx_font_mathcaligraphic">𝒮</mi><mi>g</mi></msub><annotation encoding="application/x-tex">\mathcal{S}_{g}</annotation></semantics></math>, query <math alttext="q" class="ltx_Math" display="inline" id="S2.SS2.p2.m4" intent=":literal"><semantics><mi>q</mi><annotation encoding="application/x-tex">q</annotation></semantics></math>, and retrieved listings <math alttext="\mathcal{L}_{q}" class="ltx_Math" display="inline" id="S2.SS2.p2.m5" intent=":literal"><semantics><msub><mi class="ltx_font_mathcaligraphic">ℒ</mi><mi>q</mi></msub><annotation encoding="application/x-tex">\mathcal{L}_{q}</annotation></semantics></math>, we aim to develop a sequence model that can rank the listings in <math alttext="\mathcal{L}_{q}" class="ltx_Math" display="inline" id="S2.SS2.p2.m6" intent=":literal"><semantics><msub><mi class="ltx_font_mathcaligraphic">ℒ</mi><mi>q</mi></msub><annotation encoding="application/x-tex">\mathcal{L}_{q}</annotation></semantics></math> to boost conversions; in Airbnb’s search ranking context, one of the primary focus is on increasing uncancelled bookings and uncancelled nights booked.</p>
+</div>
+</section>
+</section>
+<section id="S3">
+<h2><span>3. </span><span id="S3.2">JourneyFormer</span></h2>
+<div id="S3.p1">
+<p id="S3.p1.1">Figure <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#S2.F2"><span>2</span></a> shows an overview of <span id="S3.p1.1.1">JourneyFormer</span>. It selects a subset of events to construct long-term and short-term sequences based on the frequency of each event type (Section <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#S3.SS1"><span>3.1</span></a>). Then a shared feature pool is used for guest sequences, search queries, and listing candidates to derive feature representations (Section <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#S3.SS2"><span>3.2</span></a>). For modeling, a sequence encoder is employed to generate sequence embeddings (Section <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#S3.SS3"><span>3.3</span></a>), followed by a ranking model to score listing candidates (Section <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#S3.SS4"><span>3.4</span></a>). Furthermore, we introduce several training strategies that helped boost training throughput by around 4x (Section <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#S3.SS5"><span>3.5</span></a>), as well as the model serving workflow which combines batch inference and real-time inference (Section <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#S3.SS6"><span>3.6</span></a>).</p>
+</div>
+<section id="S3.SS1">
+<h3><span>3.1. </span>Long-term &amp; Short-term Sequences</h3>
+<div id="S3.SS1.p1">
+<p id="S3.SS1.p1.1">We consider the following event types in a guest journey:</p>
+</div>
+<div id="S3.SS1.p2">
+<ul id="S3.I1">
+<li id="S3.I1.i1"><span>•</span>
+<div id="S3.I1.i1.p1">
+<p id="S3.I1.i1.p1.1">View - An opening of a product listing page. Note that, on social media platforms, "views" typically indicate that a user has seen an item in a results list before clicking. On Airbnb, however, a "view" refers to a user clicking into the listing page.</p>
+</div></li>
+<li id="S3.I1.i2"><span>•</span>
+<div id="S3.I1.i2.p1">
+<p id="S3.I1.i2.p1.1">Booking request - A listing reservation request from a guest.</p>
+</div></li>
+<li id="S3.I1.i3"><span>•</span>
+<div id="S3.I1.i3.p1">
+<p id="S3.I1.i3.p1.1">Booking - An acceptance (by host) of a reservation request.</p>
+</div></li>
+<li id="S3.I1.i4"><span>•</span>
+<div id="S3.I1.i4.p1">
+<p id="S3.I1.i4.p1.1">Cancellation - A cancellation of a reservation.</p>
+</div></li>
+<li id="S3.I1.i5"><span>•</span>
+<div id="S3.I1.i5.p1">
+<p id="S3.I1.i5.p1.1">Review - A review for a listing from a guest.</p>
+</div></li>
+<li id="S3.I1.i6"><span>•</span>
+<div id="S3.I1.i6.p1">
+<p id="S3.I1.i6.p1.1">CS ticket - A customer service ticket from a guest or host.</p>
+</div></li>
+</ul>
+<p id="S3.SS1.p2.1">Other events such as wishlist creation, map movements, and payment page visits could also be included in the <span id="S3.SS1.p2.1.1">JourneyFormer</span> framework. We will explore them in the future work.</p>
+</div>
+<div id="S3.SS1.p3">
+<p id="S3.SS1.p3.1"><span id="S3.SS1.p3.1.1">Event selection.</span> Modeling the guest sequence <math alttext="\mathcal{S}_{g}" class="ltx_Math" display="inline" id="S3.SS1.p3.m1" intent=":literal"><semantics><msub><mi class="ltx_font_mathcaligraphic">𝒮</mi><mi>g</mi></msub><annotation encoding="application/x-tex">\mathcal{S}_{g}</annotation></semantics></math> is challenging due to its typically large size, with some certain guests having an extremely large number of events. To reduce the cost, we adopt a <em id="S3.SS1.p3.1.2">frequency-based selection strategy</em>. Specifically, for frequent events, we retain only those within a narrow time window; for infrequent events, we use a broader time frame to preserve most of them. To instantiate this strategy, we plot the event type distribution in Figure <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#S3.F3"><span>3</span></a>, which shows that the majority is view event. Motivated by this, we construct two guest sequences as follows:</p>
+</div>
+<div id="S3.SS1.p4">
+<ul id="S3.I2">
+<li id="S3.I2.i1"><span>•</span>
+<div id="S3.I2.i1.p1">
+<p id="S3.I2.i1.p1.1">Long-term sequence - This includes the events from the past 7 years, focusing on infrequent events (i.e., excluding view events).</p>
+</div></li>
+<li id="S3.I2.i2"><span>•</span>
+<div id="S3.I2.i2.p1">
+<p id="S3.I2.i2.p1.1">Short-term sequence - This only includes the view events from the guest in the past 21 days.</p>
+</div></li>
+</ul>
+</div>
+<figure id="S3.F3"><img alt="Figure 3 . The distribution of event types, with the majority being listing views, while the others only account for 2.2%." height="236" src="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/figure-1.jpg" width="975"/><figcaption><span><span id="S3.F3.3">Figure 3</span>. </span><span id="S3.F3.4">The distribution of event types, with the majority being listing views, while the others only account for 2.2%.</span></figcaption></figure>
+<div id="S3.SS1.p5">
+<p id="S3.SS1.p5.1"><span id="S3.SS1.p5.1.1">Event capping.</span> To ensure scalability, we limit long-term and short-term sequences to a maximum of 80 and 200 recent events, respectively. The thresholds are set by limiting the top 2% of guests with the longest sequences and taking into account of the GPU VRAM usage necessary for model training. While raising these thresholds could improve ranking performance, it may impact scalability. We aim to investigate this further in the future. The final guest sequence is obtained by combining the capped long-term and short-term events and then reordering them using time-stamps.</p>
+</div>
+<div id="S3.SS1.p6">
+<p id="S3.SS1.p6.1"><span id="S3.SS1.p6.1.1">Discussion.</span> In e-commerce platforms like Airbnb, infrequent events can be highly informative. For instance, a booking request could clearly indicate guest preferences, while frequent events such as views may include noise because guests might view listings without intending to book them. Thus, frequency-based selection can reduce cost while preserving the most valuable information.</p>
+</div>
+</section>
+<section id="S3.SS2">
+<h3><span>3.2. </span>Feature Representation</h3>
+<div id="S3.SS2.p1">
+<p id="S3.SS2.p1.1">We use a shared feature pool to organize all features, selecting relevant ones for each event, query, and listing to build feature representations. We have only used raw features without feature engineering to maintain the original semantics of the events. This feature pool encompasses three types of features:</p>
+<ul id="S3.I3">
+<li id="S3.I3.i1"><span>•</span>
+<div id="S3.I3.i1.p1">
+<p id="S3.I3.i1.p1.1">ID features - These include de-identified listing IDs, host IDs, and S2Cell IDs, which denote hierarchical geographical locations.</p>
+</div></li>
+<li id="S3.I3.i2"><span>•</span>
+<div id="S3.I3.i2.p1">
+<p id="S3.I3.i2.p1.1">Categorical features - These are discrete features with a limited and typically small set of possible values, such as country, listing room type, and the language of the Airbnb app.</p>
+</div></li>
+<li id="S3.I3.i3"><span>•</span>
+<div id="S3.I3.i3.p1">
+<p id="S3.I3.i3.p1.1">Continuous features - Continuous values like listing price.</p>
+</div></li>
+</ul>
+<p id="S3.SS2.p1.2">A shared feature pool allows the same feature to be used across multiple contexts. For instance, a listing ID can be used in both listing candidates and specific events, such as listing view events, which can facilitate the learning of ID embeddings. In total, we only used less than a hundred features in <span id="S3.SS2.p1.2.1">JourneyFormer</span>, while our previous non-sequence model uses several hundreds of features.</p>
+</div>
+<div id="S3.SS2.p2">
+<p id="S3.SS2.p2.1"><span id="S3.SS2.p2.1.1">Processing categorical &amp; continuous features.</span> Handling categorical and continuous features is straightforward. Specifically, we encode each categorical feature using an embedding table and normalize continuous features with a batch normalization layer (and log transformation if necessary).</p>
+</div>
+<div id="S3.SS2.p3">
+<p id="S3.SS2.p3.1"><span id="S3.SS2.p3.1.1">Processing ID features.</span> Processing ID features is challenging due to their high cardinality. To reduce the modeling cost, we adopt Unified Embedding (<a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-8">Coleman et al., 2023</a>). Specifically, we use a shared embedding table, <span id="S3.SS2.p3.1.2">UnifiedEmb</span>, for all ID features. For each feature <math alttext="x_{\text{id}}" class="ltx_Math" display="inline" id="S3.SS2.p3.m1" intent=":literal"><semantics><msub><mi>x</mi><mtext>id</mtext></msub><annotation encoding="application/x-tex">x_{\text{id}}</annotation></semantics></math>, we use <math alttext="m" class="ltx_Math" display="inline" id="S3.SS2.p3.m2" intent=":literal"><semantics><mi>m</mi><annotation encoding="application/x-tex">m</annotation></semantics></math> static random seeds, <math alttext="\{s_{1},s_{2},...,s_{m}\}" class="ltx_Math" display="inline" id="S3.SS2.p3.m3" intent=":literal"><semantics><mrow><mo stretchy="false">{</mo><mrow><msub><mi>s</mi><mn>1</mn></msub><mo>,</mo><msub><mi>s</mi><mn>2</mn></msub><mo>,</mo><mi mathvariant="normal">…</mi><mo>,</mo><msub><mi>s</mi><mi>m</mi></msub></mrow><mo stretchy="false">}</mo></mrow><annotation encoding="application/x-tex">\{s_{1},s_{2},...,s_{m}\}</annotation></semantics></math>, and obtain its embedding by:</p>
+<p><math alttext="\mathbf{e}_{x_{\text{id}}}=\texttt{Concat}_{i=1}^{m}\{\texttt{UnifiedEmb}(\texttt{Hash}_{s_{i}}(x_{\text{id}}))\}," class="ltx_Math" display="block" id="S3.E1.m1" intent=":literal"><semantics><mrow><mrow><msub><mi>𝐞</mi><msub><mi>x</mi><mtext>id</mtext></msub></msub><mo>=</mo><mrow><msubsup><mtext class="ltx_mathvariant_monospace">Concat</mtext><mrow><mi>i</mi><mo>=</mo><mn>1</mn></mrow><mi>m</mi></msubsup><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">{</mo><mrow><mtext class="ltx_mathvariant_monospace">UnifiedEmb</mtext><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><mrow><msub><mtext class="ltx_mathvariant_monospace">Hash</mtext><msub><mi>s</mi><mi>i</mi></msub></msub><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><msub><mi>x</mi><mtext>id</mtext></msub><mo stretchy="false">)</mo></mrow></mrow><mo stretchy="false">)</mo></mrow></mrow><mo stretchy="false">}</mo></mrow></mrow></mrow><mo>,</mo></mrow><annotation encoding="application/x-tex">\mathbf{e}_{x_{\text{id}}}=\texttt{Concat}_{i=1}^{m}\{\texttt{UnifiedEmb}(\texttt{Hash}_{s_{i}}(x_{\text{id}}))\},</annotation></semantics></math> (1)</p>
+<p id="S3.SS2.p3.2">where <math alttext="\texttt{Hash}_{s}(\cdot)" class="ltx_Math" display="inline" id="S3.SS2.p3.m4" intent=":literal"><semantics><mrow><msub><mtext class="ltx_mathvariant_monospace">Hash</mtext><mi>s</mi></msub><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><mo lspace="0em" rspace="0em">⋅</mo><mo stretchy="false">)</mo></mrow></mrow><annotation encoding="application/x-tex">\texttt{Hash}_{s}(\cdot)</annotation></semantics></math> hashes the input to a random row of <span id="S3.SS2.p3.2.1">UnifiedEmb</span> with seed <math alttext="s" class="ltx_Math" display="inline" id="S3.SS2.p3.m5" intent=":literal"><semantics><mi>s</mi><annotation encoding="application/x-tex">s</annotation></semantics></math>, <math alttext="\texttt{UnifiedEmb}(\cdot)" class="ltx_Math" display="inline" id="S3.SS2.p3.m6" intent=":literal"><semantics><mrow><mtext class="ltx_mathvariant_monospace">UnifiedEmb</mtext><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><mo lspace="0em" rspace="0em">⋅</mo><mo stretchy="false">)</mo></mrow></mrow><annotation encoding="application/x-tex">\texttt{UnifiedEmb}(\cdot)</annotation></semantics></math> performs an embedding lookup using the hashed ID, and <span id="S3.SS2.p3.2.2">Concat</span> concatenates the retrieved embeddings. Similar to the original paper (<a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-8">Coleman et al., 2023</a>), we found that given the same parameter budget, the unified embedding table is more scalable and performant than having separate id embeddings.</p>
+</div>
+<div id="S3.SS2.p4">
+<p id="S3.SS2.p4.1"><span id="S3.SS2.p4.1.1">Hierarchical S2Cell IDs.</span> S2Cell<span id="footnote1"><sup>1</sup><span><span><sup>1</sup>
+<span>1</span>
+<a href="http://s2geometry.io/devguide/s2cell_hierarchy.html">http://s2geometry.io/devguide/s2cell_hierarchy.html</a></span></span></span> offers a hierarchical geographical indexing system. We employ S2Cell IDs from level 0 to level 13 (covering areas up to 1.27 <math alttext="km^{2}" class="ltx_Math" display="inline" id="S3.SS2.p4.m1" intent=":literal"><semantics><mrow><mi>k</mi><mo lspace="0em" rspace="0em">​</mo><msup><mi>m</mi><mn>2</mn></msup></mrow><annotation encoding="application/x-tex">km^{2}</annotation></semantics></math>) to allow our model to understand location specifics at various scales. For instance, a listing in San Francisco is represented by 14 S2Cell IDs, capturing details from narrow streets to broader areas like the city or state. We find that this multi-level S2Cell ID approach enhances model performance compared to using a single S2Cell ID (see Section <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#S4.SS3"><span>4.3</span></a>).</p>
+</div>
+</section>
+<section id="S3.SS3">
+<h3><span>3.3. </span>Sequence Encoding</h3>
+<div id="S3.SS3.p1">
+<p id="S3.SS3.p1.1">Given a guest sequence <math alttext="\mathcal{S}_{g}=\{e_{1},e_{2},...,e_{t}\}" class="ltx_Math" display="inline" id="S3.SS3.p1.m1" intent=":literal"><semantics><mrow><msub><mi class="ltx_font_mathcaligraphic">𝒮</mi><mi>g</mi></msub><mo>=</mo><mrow><mo stretchy="false">{</mo><mrow><msub><mi>e</mi><mn>1</mn></msub><mo>,</mo><msub><mi>e</mi><mn>2</mn></msub><mo>,</mo><mi mathvariant="normal">…</mi><mo>,</mo><msub><mi>e</mi><mi>t</mi></msub></mrow><mo stretchy="false">}</mo></mrow></mrow><annotation encoding="application/x-tex">\mathcal{S}_{g}=\{e_{1},e_{2},...,e_{t}\}</annotation></semantics></math>, our goal is to encode it into a sequence embedding <math alttext="\mathbf{e}_{g}" class="ltx_Math" display="inline" id="S3.SS3.p1.m2" intent=":literal"><semantics><msub><mi>𝐞</mi><mi>g</mi></msub><annotation encoding="application/x-tex">\mathbf{e}_{g}</annotation></semantics></math> to represent the guest’s journey. We start by mapping the event features onto an event embedding space, resulting in <math alttext="\{\mathbf{e}_{i}\}_{i=1}^{t}=\{\mathbf{e}_{1},\mathbf{e}_{2},...,\mathbf{e}_{t}\}" class="ltx_Math" display="inline" id="S3.SS3.p1.m3" intent=":literal"><semantics><mrow><msubsup><mrow><mo stretchy="false">{</mo><msub><mi>𝐞</mi><mi>i</mi></msub><mo stretchy="false">}</mo></mrow><mrow><mi>i</mi><mo>=</mo><mn>1</mn></mrow><mi>t</mi></msubsup><mo>=</mo><mrow><mo stretchy="false">{</mo><mrow><msub><mi>𝐞</mi><mn>1</mn></msub><mo>,</mo><msub><mi>𝐞</mi><mn>2</mn></msub><mo>,</mo><mi mathvariant="normal">…</mi><mo>,</mo><msub><mi>𝐞</mi><mi>t</mi></msub></mrow><mo stretchy="false">}</mo></mrow></mrow><annotation encoding="application/x-tex">\{\mathbf{e}_{i}\}_{i=1}^{t}=\{\mathbf{e}_{1},\mathbf{e}_{2},...,\mathbf{e}_{t}\}</annotation></semantics></math>, through a projection layer. Any sequence model can serve as the backbone of sequence encoder. Below, we describe our instantiation at Airbnb with self-attention.</p>
+</div>
+<div id="S3.SS3.p2">
+<p id="S3.SS3.p2.1"><span id="S3.SS3.p2.1.1">Self-attention sequence encoder.</span> Following (<a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-36">Vaswani et al., 2017</a>), we encode the sequence using multi-head self-attention layers with position encoding and residual connections. Additionally, we apply a causal mask to prevent future events from influencing the encoding:</p>
+<p><math alttext="\{\mathbf{e}^{\text{Pos}}_{i}\}_{i=1}^{t}=\texttt{Pos}(\{\mathbf{e}_{i}\}_{i=1}^{t}))," class="ltx_Math" display="block" id="S3.E2.m1" intent=":literal"><semantics><mrow><mrow><mo fence="true" rspace="0em">OPEN</mo><mrow><msubsup><mrow><mo stretchy="false">{</mo><msubsup><mi>𝐞</mi><mi>i</mi><mtext>Pos</mtext></msubsup><mo stretchy="false">}</mo></mrow><mrow><mi>i</mi><mo>=</mo><mn>1</mn></mrow><mi>t</mi></msubsup><mo>=</mo><mrow><mtext class="ltx_mathvariant_monospace">Pos</mtext><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><msubsup><mrow><mo stretchy="false">{</mo><msub><mi>𝐞</mi><mi>i</mi></msub><mo stretchy="false">}</mo></mrow><mrow><mi>i</mi><mo>=</mo><mn>1</mn></mrow><mi>t</mi></msubsup><mo stretchy="false">)</mo></mrow></mrow></mrow><mo stretchy="false">)</mo></mrow><mo>,</mo></mrow><annotation encoding="application/x-tex">\{\mathbf{e}^{\text{Pos}}_{i}\}_{i=1}^{t}=\texttt{Pos}(\{\mathbf{e}_{i}\}_{i=1}^{t})),</annotation></semantics></math> (2)</p>
+<p><math alttext="\{\hat{\mathbf{e}}^{\text{Pos}}_{i}\}_{i=1}^{t}=\texttt{LayerNorm}(\texttt{MaskedAtt}(\{\mathbf{e}^{\text{Pos}}_{i}\}_{i=1}^{t})+\{\mathbf{e}^{\text{Pos}}_{i}\}_{i=1}^{t})," class="ltx_Math" display="block" id="S3.E3.m1" intent=":literal"><semantics><mrow><mrow><msubsup><mrow><mo stretchy="false">{</mo><msubsup><mover accent="true"><mi>𝐞</mi><mo>^</mo></mover><mi>i</mi><mtext>Pos</mtext></msubsup><mo stretchy="false">}</mo></mrow><mrow><mi>i</mi><mo>=</mo><mn>1</mn></mrow><mi>t</mi></msubsup><mo>=</mo><mrow><mtext class="ltx_mathvariant_monospace">LayerNorm</mtext><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><mrow><mrow><mtext class="ltx_mathvariant_monospace">MaskedAtt</mtext><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><msubsup><mrow><mo stretchy="false">{</mo><msubsup><mi>𝐞</mi><mi>i</mi><mtext>Pos</mtext></msubsup><mo stretchy="false">}</mo></mrow><mrow><mi>i</mi><mo>=</mo><mn>1</mn></mrow><mi>t</mi></msubsup><mo stretchy="false">)</mo></mrow></mrow><mo>+</mo><msubsup><mrow><mo stretchy="false">{</mo><msubsup><mi>𝐞</mi><mi>i</mi><mtext>Pos</mtext></msubsup><mo stretchy="false">}</mo></mrow><mrow><mi>i</mi><mo>=</mo><mn>1</mn></mrow><mi>t</mi></msubsup></mrow><mo stretchy="false">)</mo></mrow></mrow></mrow><mo>,</mo></mrow><annotation encoding="application/x-tex">\{\hat{\mathbf{e}}^{\text{Pos}}_{i}\}_{i=1}^{t}=\texttt{LayerNorm}(\texttt{MaskedAtt}(\{\mathbf{e}^{\text{Pos}}_{i}\}_{i=1}^{t})+\{\mathbf{e}^{\text{Pos}}_{i}\}_{i=1}^{t}),</annotation></semantics></math> (3)</p>
+<p id="S3.SS3.p2.2">where <math alttext="\texttt{Pos}(\cdot)" class="ltx_Math" display="inline" id="S3.SS3.p2.m1" intent=":literal"><semantics><mrow><mtext class="ltx_mathvariant_monospace">Pos</mtext><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><mo lspace="0em" rspace="0em">⋅</mo><mo stretchy="false">)</mo></mrow></mrow><annotation encoding="application/x-tex">\texttt{Pos}(\cdot)</annotation></semantics></math> adds position encoding to the embeddings, <math alttext="\texttt{MaskedAtt}(\cdot)" class="ltx_Math" display="inline" id="S3.SS3.p2.m2" intent=":literal"><semantics><mrow><mtext class="ltx_mathvariant_monospace">MaskedAtt</mtext><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><mo lspace="0em" rspace="0em">⋅</mo><mo stretchy="false">)</mo></mrow></mrow><annotation encoding="application/x-tex">\texttt{MaskedAtt}(\cdot)</annotation></semantics></math> applies multi-head self-attention with causal mask, and <math alttext="\texttt{LayerNorm}(\cdot)" class="ltx_Math" display="inline" id="S3.SS3.p2.m3" intent=":literal"><semantics><mrow><mtext class="ltx_mathvariant_monospace">LayerNorm</mtext><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><mo lspace="0em" rspace="0em">⋅</mo><mo stretchy="false">)</mo></mrow></mrow><annotation encoding="application/x-tex">\texttt{LayerNorm}(\cdot)</annotation></semantics></math> means a layer normalization layer. We stack Eq. <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#S3.E3"><span>3</span></a> multiple times to obtain the final embeddings, and the final embedding corresponding to the last event is used as the sequence embedding <math alttext="\mathbf{e}_{g}" class="ltx_Math" display="inline" id="S3.SS3.p2.m4" intent=":literal"><semantics><msub><mi>𝐞</mi><mi>g</mi></msub><annotation encoding="application/x-tex">\mathbf{e}_{g}</annotation></semantics></math>.</p>
+</div>
+<div id="S3.SS3.p3">
+<p id="S3.SS3.p3.1"><span id="S3.SS3.p3.1.1">Why causal mask?</span> In Section <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#S3.SS5"><span>3.5</span></a>, we will explain how using embeddings from events other than the last one can accelerate training speed. The causal mask guarantees that future events do not influence the embedding, preventing information leakage.</p>
+</div>
+<div id="S3.SS3.p4">
+<p id="S3.SS3.p4.1"><span id="S3.SS3.p4.1.1">Why exclude the feed forward layer?</span> Despite common uses along with self-attention layers (<a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-36">Vaswani et al., 2017</a>), we find that feed forward layers lead to worse performances and slower training (Section <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#S4.SS3"><span>4.3</span></a>).</p>
+</div>
+</section>
+<section id="S3.SS4">
+<h3><span>3.4. </span>Listing Ranking</h3>
+<div id="S3.SS4.p1">
+<p id="S3.SS4.p1.1">Given a sequence embedding <math alttext="\mathbf{e}_{g}" class="ltx_Math" display="inline" id="S3.SS4.p1.m1" intent=":literal"><semantics><msub><mi>𝐞</mi><mi>g</mi></msub><annotation encoding="application/x-tex">\mathbf{e}_{g}</annotation></semantics></math>, a query <math alttext="q" class="ltx_Math" display="inline" id="S3.SS4.p1.m2" intent=":literal"><semantics><mi>q</mi><annotation encoding="application/x-tex">q</annotation></semantics></math>, and the set of retrieved listings <math alttext="\mathcal{L}_{q}=\{l_{1},l_{2},...,l_{n}\}" class="ltx_Math" display="inline" id="S3.SS4.p1.m3" intent=":literal"><semantics><mrow><msub><mi class="ltx_font_mathcaligraphic">ℒ</mi><mi>q</mi></msub><mo>=</mo><mrow><mo stretchy="false">{</mo><mrow><msub><mi>l</mi><mn>1</mn></msub><mo>,</mo><msub><mi>l</mi><mn>2</mn></msub><mo>,</mo><mi mathvariant="normal">…</mi><mo>,</mo><msub><mi>l</mi><mi>n</mi></msub></mrow><mo stretchy="false">}</mo></mrow></mrow><annotation encoding="application/x-tex">\mathcal{L}_{q}=\{l_{1},l_{2},...,l_{n}\}</annotation></semantics></math>, our goal is to train a ranking model that scores each listing within <math alttext="\mathcal{L}_{q}" class="ltx_Math" display="inline" id="S3.SS4.p1.m4" intent=":literal"><semantics><msub><mi class="ltx_font_mathcaligraphic">ℒ</mi><mi>q</mi></msub><annotation encoding="application/x-tex">\mathcal{L}_{q}</annotation></semantics></math>. Specifically, at Airbnb, our goal is to rank listings with a higher booking likelihood higher.</p>
+</div>
+<div id="S3.SS4.p2">
+<p id="S3.SS4.p2.1"><span id="S3.SS4.p2.1.1">Label attribution.</span> As shown in Figure <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#S3.F3"><span>3</span></a>, guest view listings many times, leading to far more viewing events than booking events. In practice, many guests search for days to browse through listings. To maximally leverage booking labels, we attribute each booking to searches conducted in the previous 7 days. Specifically, if a listing in <math alttext="\mathcal{L}_{q}" class="ltx_Math" display="inline" id="S3.SS4.p2.m1" intent=":literal"><semantics><msub><mi class="ltx_font_mathcaligraphic">ℒ</mi><mi>q</mi></msub><annotation encoding="application/x-tex">\mathcal{L}_{q}</annotation></semantics></math> is booked within the next 7 days, it is marked as a positive listing (label 1); otherwise, we assign label 0. We only include searches with at least one booking and sample up to four searches per day for each guest sequence to reduce data size while preserving diversity.</p>
+</div>
+<div id="S3.SS4.p3">
+<p id="S3.SS4.p3.1"><span id="S3.SS4.p3.1.1">Ranking model.</span> We concatenate the embeddings of the sequence, query, and listing and use an MLP to produce the listing’s score. The choice of MLP is due to its simplicity and effectiveness. We will investigate more sophisticated architectures in future work.</p>
+</div>
+<div id="S3.SS4.p4">
+<p id="S3.SS4.p4.1"><span id="S3.SS4.p4.1.1">Loss.</span> We use listwise loss (<a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-4">Cao et al., 2007</a>) to train the embedding tables, sequence encoder, and the ranking model in an end-to-end manner. For <math alttext="n" class="ltx_Math" display="inline" id="S3.SS4.p4.m1" intent=":literal"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math> listings in a search, let <math alttext="z_{i}" class="ltx_Math" display="inline" id="S3.SS4.p4.m2" intent=":literal"><semantics><msub><mi>z</mi><mi>i</mi></msub><annotation encoding="application/x-tex">z_{i}</annotation></semantics></math> be the produced listing score, and <math alttext="y_{i}" class="ltx_Math" display="inline" id="S3.SS4.p4.m3" intent=":literal"><semantics><msub><mi>y</mi><mi>i</mi></msub><annotation encoding="application/x-tex">y_{i}</annotation></semantics></math> be the label, where <math alttext="i\in\{1,2,...,n\}" class="ltx_Math" display="inline" id="S3.SS4.p4.m4" intent=":literal"><semantics><mrow><mi>i</mi><mo>∈</mo><mrow><mo stretchy="false">{</mo><mrow><mn>1</mn><mo>,</mo><mn>2</mn><mo>,</mo><mi mathvariant="normal">…</mi><mo>,</mo><mi>n</mi></mrow><mo stretchy="false">}</mo></mrow></mrow><annotation encoding="application/x-tex">i\in\{1,2,...,n\}</annotation></semantics></math>. The loss is computed as:</p>
+<p><math alttext="\texttt{RankingLoss}=-\sum_{i=1}^{n}\frac{y_{i}}{\sum_{j=1}^{n}y_{j}}\log(\texttt{Softmax}(z_{i}))." class="ltx_math_unparsed" display="block" id="S3.E4.m1" intent=":literal"><semantics><mrow><mtext class="ltx_mathvariant_monospace">RankingLoss</mtext><mo rspace="0em">=</mo><mo lspace="0em" rspace="0.055em">−</mo><munderover><mo movablelimits="false">∑</mo><mrow><mi>i</mi><mo>=</mo><mn>1</mn></mrow><mi>n</mi></munderover><mfrac><msub><mi>y</mi><mi>i</mi></msub><mrow><msubsup><mo>∑</mo><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mi>n</mi></msubsup><msub><mi>y</mi><mi>j</mi></msub></mrow></mfrac><mi>log</mi><mrow><mo stretchy="false">(</mo><mtext class="ltx_mathvariant_monospace">Softmax</mtext><mrow><mo stretchy="false">(</mo><msub><mi>z</mi><mi>i</mi></msub><mo stretchy="false">)</mo></mrow><mo stretchy="false">)</mo></mrow><mo lspace="0em">.</mo></mrow><annotation encoding="application/x-tex">\texttt{RankingLoss}=-\sum_{i=1}^{n}\frac{y_{i}}{\sum_{j=1}^{n}y_{j}}\log(\texttt{Softmax}(z_{i})).</annotation></semantics></math> (4)</p>
+<p id="S3.SS4.p4.2">The <math alttext="\texttt{Softmax}(\cdot)" class="ltx_Math" display="inline" id="S3.SS4.p4.m5" intent=":literal"><semantics><mrow><mtext class="ltx_mathvariant_monospace">Softmax</mtext><mo lspace="0em" rspace="0em">​</mo><mrow><mo stretchy="false">(</mo><mo lspace="0em" rspace="0em">⋅</mo><mo stretchy="false">)</mo></mrow></mrow><annotation encoding="application/x-tex">\texttt{Softmax}(\cdot)</annotation></semantics></math> denotes the Softmax operation. We normalize <math alttext="y_{i}" class="ltx_Math" display="inline" id="S3.SS4.p4.m6" intent=":literal"><semantics><msub><mi>y</mi><mi>i</mi></msub><annotation encoding="application/x-tex">y_{i}</annotation></semantics></math> due to the possibility of multiple booked listings in a search.</p>
+</div>
+<figure id="S3.F4"><img alt="Figure 4 . Batching of searches during training." height="422" src="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/figure-2.jpg" width="977"/><figcaption><span><span id="S3.F4.3">Figure 4</span>. </span><span id="S3.F4.4">Batching of searches during training.</span></figcaption></figure>
+</section>
+<section id="S3.SS5">
+<h3><span>3.5. </span>Efficient Training Strategies</h3>
+<div id="S3.SS5.p1">
+<p id="S3.SS5.p1.1">To handle the large-scale production data, we have adopted several training strategies to improve training efficiency.</p>
+</div>
+<div id="S3.SS5.p2">
+<p id="S3.SS5.p2.1"><span id="S3.SS5.p2.1.1">Sequence bucketization.</span> Batching sequence data can easily cause data skewness issue because some guest journeys may have many events, whereas others have relatively few. To accommodate multiple journeys within a batch, we need to pad those with fewer events to match the journey with the highest number of events in the batch (280 for our model), which is inefficient because of the skewness. To address this issue, we bucketize sequences according to their lengths, using boundaries of 4, 16, 44, 88, 148, and 280. For example, a 15-event sequence is padded to meet the 16-event boundary. Then batches are drawn from these buckets, allowing for six possible batch sizes, improving the data handling efficiency. We implemented it with <span id="S3.SS5.p2.1.2">bucket_by_sequence_length</span> in Tensorflow.</p>
+</div>
+<div id="S3.SS5.p3">
+<p id="S3.SS5.p3.1"><span id="S3.SS5.p3.1.1">Batching of searches.</span> Recall that the encoder model provides not just the embedding of the last event but also the embeddings of all preceding events. In practice, these intermediate embeddings can serve as the sequence embeddings for searches immediately following them. As illustrated in Figure <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#S3.F4"><span>4</span></a>, searches at a later time-stamp (T=4, T=7, and T=10) can utilize the embeddings from a previous time-stamp (T=3, T=6, and T=9). This allows us to process these three searches with just a single forward and backward pass of the encoder model, significantly reducing FLOPs since we often have a large sequence model and a relatively smaller ranking model.</p>
+</div>
+<div id="S3.SS5.p4">
+<p id="S3.SS5.p4.1"><span id="S3.SS5.p4.1.1">Sparse calculation of searches.</span> Similarly, batching searches requires padding those journeys with fewer searches and can lead to data skewness due to the significant variation in the number of searches per journey. Given that sequences are already bucketized by length, we can not use the same strategy for searches. To tackle this, we selectively input only the non-padded searches into the ranking model (e.g., using
+<span id="S3.SS5.p4.1.2">tf.gather_nd</span> in TensorFlow). For example, consider three journeys with 1, 2, and 3 searches, respectively. Instead of padding the first two journeys (resulting in 9 searches as input), we select only the 6 non-padded searches to pass into the ranking model. This trick can substantially improve training speed.</p>
+</div>
+<figure id="S3.F5"><img alt="Refer to caption" height="769" src="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/image-3.jpg" width="995"/><figcaption><span><span id="S3.F5.3">Figure 5</span>. </span><span id="S3.F5.4">An illustration of model serving.</span></figcaption></figure>
+</section>
+<section id="S3.SS6">
+<h3><span>3.6. </span>Model Serving</h3>
+<div id="S3.SS6.p1">
+<p id="S3.SS6.p1.1">As illustrated in Figure <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#S3.F5"><span>5</span></a>, our serving workflow comprises both batch and real-time inferences.</p>
+</div>
+<div id="S3.SS6.p2">
+<p id="S3.SS6.p2.1"><span id="S3.SS6.p2.1.1">Batch inference of sequence model.</span> Due to the quadratic increase in computational cost with the number of events, sequence models tend to be more expensive. Consequently, we employ a batch inference approach, periodically generating sequence embeddings for all guests and storing these embeddings in the database.</p>
+</div>
+<div id="S3.SS6.p3">
+<p id="S3.SS6.p3.1"><span id="S3.SS6.p3.1.1">Real-time inference of ranking model.</span> For the ranking model, we conduct real-time inference using the search query, retrieved listings, and the sequence embeddings.</p>
+</div>
+<div id="S3.SS6.p4">
+<p id="S3.SS6.p4.1"><span id="S3.SS6.p4.1.1">Discussion.</span> Using batch inference for the sequence model can also stabilize search results, potentially enhancing guest experience. This can mitigate some confusing scenarios where a listing visible in a previous search disappears shortly after in a subsequent search due to the too frequent updates of the sequence embedding.</p>
+</div>
+</section>
+</section>
+<section id="S4">
+<h2><span>4. </span>Experiments</h2>
+<div id="S4.p1">
+<p id="S4.p1.1">The experiments aim to answer the following questions: <span id="S4.p1.1.1">Q1:</span> How does <span id="S4.p1.1.2">JourneyFormer</span> compare with the non-sequence-modeling baseline model? <span id="S4.p1.1.3">Q2:</span> How will <span id="S4.p1.1.4">JourneyFormer</span> perform using alternative design choices? <span id="S4.p1.1.5">Q3:</span> Can the proposed training strategies improve efficiency? <span id="S4.p1.1.6">Q4:</span> How does <span id="S4.p1.1.7">JourneyFormer</span> perform across different sequence lengths? <span id="S4.p1.1.8">Q5:</span> Is <span id="S4.p1.1.9">JourneyFormer</span> sensitive to distribution shift across different days? <span id="S4.p1.1.10">Q6:</span> Can the offline improvement of <span id="S4.p1.1.11">JourneyFormer</span> translate to final guest conversion online?</p>
+</div>
+<section id="S4.SS1">
+<h3><span>4.1. </span>Experimental Setting</h3>
+<section id="S4.SS1.SSS1">
+<h4><span>4.1.1. </span>Production Baseline</h4>
+<div id="S4.SS1.SSS1.p1">
+<p id="S4.SS1.SSS1.p1.1">The baseline is Airbnb’s previous production search ranking model, which relies on hand-crafted features rather than sequence modeling. At Airbnb, we adhered to a strict criterion for features that were launched into production, requiring each feature to demonstrate a gain in bookings or nights through online A/B testing. Over the past decades, we have incorporated several hundred features along with numerous model architecture improvements. As such, the baseline is very strong because it is the collective wisdom accumulated over many years of iterations.</p>
+</div>
+<div id="S4.SS1.SSS1.p2">
+<p id="S4.SS1.SSS1.p2.1">The production baseline model consumes a rich set (around 900) of query, guest, host, listing, and price-related features that capture both short-term intent and long-term behavioral patterns. On the query side, we include basic request metadata (timing, device, locale, geography) as well as coarse signals of demand and search context. On the guest side, we incorporate aggregate statistics over past searches, views, and bookings to summarize engagement, and trip preferences, while avoiding any personally identifiable information. On the listing/host side, we use a combination of static attributes (capacity, room and property type, amenities, location, photos, and host profile characteristics) and dynamic marketplace signals (search impressions, page views, bookings, cancellations, review aggregates, and occupancy patterns), often aggregated at multiple spatial and temporal scales. Price features summarize both the current price breakdown and historical booking and exposure prices. Many of these signals are represented as low-dimensional embeddings (e.g., for categorical attributes and interaction buckets) or as compact aggregates (counts, rates, and moments), which allows the model to capture complex interactions between query, guest, host, and listing without exposing raw identifiers or fine-grained operational details.</p>
+</div>
+<div id="S4.SS1.SSS1.p3">
+<p id="S4.SS1.SSS1.p3.1">The production baseline uses a simple MLP architecture. In the past, we experimented with models that explicitly capture feature interactions, such as Deep &amp; Cross Networks (DCN) (<a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-37">Wang et al., 2017</a>), but did not observe performance gains. A likely reason is that we have already invested heavily in feature engineering, so many interactions are encoded in the features themselves, leaving limited room for further improvement from more complex architectures.</p>
+</div>
+<div id="S4.SS1.SSS1.p4">
+<p id="S4.SS1.SSS1.p4.1">In contrast, <span id="S4.SS1.SSS1.p4.1.1">JourneyFormer</span> uses fewer than 100 features in total, spanning guest, listing, host and journey signals. These are raw inputs; instead, all feature transformation and interaction modeling is delegated to the encoder.</p>
+</div>
+</section>
+<section id="S4.SS1.SSS2">
+<h4><span>4.1.2. </span>Training Dataset</h4>
+<div id="S4.SS1.SSS2.p1">
+<p id="S4.SS1.SSS2.p1.1">The model is trained on booked guest sequences of 1 year. Each sequence includes non-frequent events from the past 7 years (long-term sequence), view events from the past 21 days (short-term sequence), and searches in the past 7 days (including the current date). We only use sequences that contain booking, which account for roughly 5% of all the data. To control data scale and ensure quality, we apply the following filters, based on manual inspection and model training efficiency:</p>
+</div>
+<div id="S4.SS1.SSS2.p2">
+<ul id="S4.I1">
+<li id="S4.I1.i1"><span>•</span>
+<div id="S4.I1.i1.p1">
+<p id="S4.I1.i1.p1.1">Remove searches with fewer than 4 listing candidates.</p>
+</div></li>
+<li id="S4.I1.i2"><span>•</span>
+<div id="S4.I1.i2.p1">
+<p id="S4.I1.i2.p1.1">Keep at most 4 searches per day per guest.</p>
+</div></li>
+<li id="S4.I1.i3"><span>•</span>
+<div id="S4.I1.i3.p1">
+<p id="S4.I1.i3.p1.1">Keep only guest sequences with at least 1 search.</p>
+</div></li>
+</ul>
+</div>
+<div id="S4.SS1.SSS2.p3">
+<p id="S4.SS1.SSS2.p3.1">After filtering, the number of training sequences is in the magnitude of <math alttext="10^{8}" class="ltx_Math" display="inline" id="S4.SS1.SSS2.p3.m1" intent=":literal"><semantics><msup><mn>10</mn><mn>8</mn></msup><annotation encoding="application/x-tex">10^{8}</annotation></semantics></math>. For each sequence, there are on average 6.9 searches. In terms of search–label pairs, the total count is around 900 millions.</p>
+</div>
+</section>
+<section id="S4.SS1.SSS3">
+<h4><span>4.1.3. </span>Training Details</h4>
+<div id="S4.SS1.SSS3.p1">
+<p id="S4.SS1.SSS3.p1.1">Our model was trained with a training cluster. We used data from 9 days after the last date in training data for evaluation. For the sequence model, we used a standard 4-layer Transformer encoder with a model dimension of 128, positional encoding, and post-norm normalization, with each input event being projected through an MLP of 1024-512-256-128; to reduce storage costs, the output embeddings were downscaled to a dimension of 32 via an MLP of 512-128-32. For the ranking model, we employed a light-weighted MLP of 1024-256-64-1 for efficient real-time inference. For model serving, our deployed models refresh sequence embeddings daily. There is potential to enhance online performance by updating these embeddings more frequently, such as every few hours. However, this needs additional infrastructure support in our side, and we will investigate it in the future.</p>
+</div>
+</section>
+<section id="S4.SS1.SSS4">
+<h4><span>4.1.4. </span>Evaluation Protocol</h4>
+<div id="S4.SS1.SSS4.p1">
+<p id="S4.SS1.SSS4.p1.1">We evaluated our model using both the offline metric and online A/B testing. Offline, we measured performance with NDCG of booking labels. For each setting, we train three models and report their mean and standard deviations. For the online test, we focus on the following critical business metrics:</p>
+</div>
+<div id="S4.SS1.SSS4.p2">
+<ul id="S4.I2">
+<li id="S4.I2.i1"><span>•</span>
+<div id="S4.I2.i1.p1">
+<p id="S4.I2.i1.p1.1">Bookers - The number of guests who made at least one uncanceled booking. We used bookers rather than bookings to reduce the noise from some special guests, such as travel agents, who may book lots of listings in a short period of time.</p>
+</div></li>
+<li id="S4.I2.i2"><span>•</span>
+<div id="S4.I2.i2.p1">
+<p id="S4.I2.i2.p1.1">Booked Nights - The total number of uncanceled booked nights.</p>
+</div></li>
+<li id="S4.I2.i3"><span>•</span>
+<div id="S4.I2.i3.p1">
+<p id="S4.I2.i3.p1.1">Views - The total number of openings of a product listing page.</p>
+</div></li>
+</ul>
+</div>
+<div id="S4.SS1.SSS4.p3">
+<p id="S4.SS1.SSS4.p3.1">For more details, please refer to Appendix <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#A1"><span>A</span></a>.</p>
+</div>
+<figure id="S4.T1"><img alt="Table 1. End-to-end offline NDCG difference in percent compared with the baseline model without sequence modeling. JourneyFormer -Long, JourneyFormer -Short and JourneyFormer -Full correspond to using only long-term sequence, short-term seq" height="269" src="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/table-1.jpg" width="759"/><figcaption><span>Table 1. </span>End-to-end offline NDCG difference in percent compared with the baseline model without sequence modeling. <span id="S4.T1.11">JourneyFormer</span>-Long, <span id="S4.T1.12">JourneyFormer</span>-Short and <span id="S4.T1.13">JourneyFormer</span>-Full correspond to using only long-term sequence, short-term sequence and both sequences respectively</figcaption></figure>
+</section>
+</section>
+<section id="S4.SS2">
+<h3><span>4.2. </span>Comparison with Baseline (Q1)</h3>
+<div id="S4.SS2.p1">
+<p id="S4.SS2.p1.1">Table <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#S4.T1"><span>1</span></a> presents the NDCG improvement relative to the baseline for three variants of <span id="S4.SS2.p1.1.1">JourneyFormer</span>: using long-term, short-term, and both sequences, respectively. Our observations are as follows: (i) All three models significantly outperform the baseline, demonstrating the effectiveness of sequence modeling. It is noteworthy that at Airbnb, a 0.3% improvement in NDCG is considered significant given the highly optimized nature of our ranking model. (ii) The short-term sequence contributes more to the offline NDCG improvement. A possible reason is that the final booking is likely to be from listings viewed recently, making the short-term sequence with certain view events a strong indicator of booking intent.</p>
+</div>
+<figure id="S4.F6"><img alt="Figure 6 . NDCG of alternative design choices. We report the percentage difference compared to JourneyFormer -Full." height="372" src="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/figure-3.jpg" width="993"/><figcaption><span><span id="S4.F6.4">Figure 6</span>. </span><span id="S4.F6.5">NDCG of alternative design choices. We report the percentage difference compared to <span id="S4.F6.5.1">JourneyFormer</span>-Full.</span></figcaption></figure>
+</section>
+<section id="S4.SS3">
+<h3><span>4.3. </span>Analysis of Alternative Design Choices (Q2)</h3>
+<div id="S4.SS3.p1">
+<p id="S4.SS3.p1.1">In Figure <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#S4.F6"><span>6</span></a>, we test several alternative design choices.</p>
+</div>
+<div id="S4.SS3.p2">
+<p id="S4.SS3.p2.1"><span id="S4.SS3.p2.1.1">Is a feed forward layer helpful (the bar at 1-3)?</span> No. Recall that we have excluded the feed forward layer in the sequence encoder. Here, we test three different configurations of feed forward layers with sizes of 128, 256, and 128-256-128, respectively. We observe a drop in NDCG across all configurations. Thus, we excluded feed forward layer to reduce model parameters. We suspect this is because our MLP already maps event features to embeddings, making the feed-forward layer in the sequence encoder redundant. The underlying causes will be studied in our future work.</p>
+</div>
+<div id="S4.SS3.p3">
+<p id="S4.SS3.p3.1"><span id="S4.SS3.p3.1.1">Are ID embeddings helpful (the bar at 4-6)?</span> Yes. We individually remove listing ID, host ID, and S2Cell ID to study their impact and observe a decrease in NDCG (from 0.05% to 0.2%) for each case. Notably, removing S2Cell ID results in the largest NDCG drop. This suggests that the rich location information from S2Cell ID provided by S2Cell ID plays a crucial role in enhancing booking predictions. This is expected and unique to the Airbnb platform, as guests are often sensitive to location specifics of listings.</p>
+</div>
+<div id="S4.SS3.p4">
+<p id="S4.SS3.p4.1"><span id="S4.SS3.p4.1.1">Are hierarchical S2Cell IDs helpful (the bar at 7-9)?</span> Yes. Recall that we used 14 levels of S2Cell IDs, ranging from level 0 (broad areas like continents) to level 13 (narrow areas like street segments). To understand whether all 14 levels are necessary, we test three ablations: levels 0-6 (broader areas), levels 7-13 (narrower areas), and level 13 alone. (i) NDCG decreases across all ablations. (ii) Although level 13 theoretically contains all location information from levels 0-13 (e.g., an S2Cell ID for a specific street area in San Francisco should also include city and state details), using it alone underperforms compared to using multiple S2Cell levels. One possible reason is that the model may better understand locations using S2Cell inputs of varying granularities. These observations suggest that utilizing all 14 hierarchical S2Cell IDs can enhance the model’s ability to learn location representations.</p>
+</div>
+</section>
+<section id="S4.SS4">
+<h3><span>4.4. </span>Analysis of Acceleration Strategies (Q3)</h3>
+<figure id="S4.T2"><img alt="Table 2. Training throughput when removing each training acceleration strategy compared to JourneyFormer -Full." height="629" src="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/table-2.jpg" width="972"/><figcaption><span>Table 2. </span>Training throughput when removing each training acceleration strategy compared to <span id="S4.T2.7">JourneyFormer</span>-Full.</figcaption></figure>
+<div id="S4.SS4.p1">
+<p id="S4.SS4.p1.1">Table <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#S4.T2"><span>2</span></a> shows the impact of removing each of the training acceleration strategies discussed in Section <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#S3.SS5"><span>3.5</span></a>. We find that each strategy significantly increases training throughput. Notably, removing the batching of searches reduces throughput to approximately 1/4 of its original rate. A small trick for sparse calculation also enhances training efficiency notably. These acceleration strategies are crucial for efficiently training our model on large-scale production data.</p>
+</div>
+</section>
+<section id="S4.SS5">
+<h3><span>4.5. </span>Analysis of Sequence Lengths (Q4)</h3>
+<figure id="S4.F7"><img alt="Figure 7 . NDCG w.r.t. the number of long-term (left) and short-term (right) events. We report the percentage difference compared to the overall NDCG." height="403" src="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/figure-4.jpg" width="981"/><figcaption><span><span id="S4.F7.3">Figure 7</span>. </span><span id="S4.F7.4">NDCG w.r.t. the number of long-term (left) and short-term (right) events. We report the percentage difference compared to the overall NDCG.</span></figcaption></figure>
+<div id="S4.SS5.p1">
+<p id="S4.SS5.p1.1">To glean some insights of model’s behavior, we segment the evaluation dataset based on long-term and short-term sequence lengths and report the NDCG in Figure <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#S4.F7"><span>7</span></a>. We observe distinct patterns between long-term and short-term sequences. Specifically, for long-term sequences, there is a clear trend: the NDCG increases with sequence length, aligning with the expectation that more long-term events (e.g., bookings and reviews) enhances guest intention prediction. Interestingly, short-term sequences exhibit peak NDCG with 11-20 events, after which the NDCG notably decline with more events. A possible explanation is that predicting the intentions of guests who view many listings becomes challenging, as these guests may browse extensively without any concrete intent to book, aligning with our hypothesis that view events are noisy. This finding also validates the efficacy of our frequency-based selection strategy.</p>
+</div>
+<figure id="S4.F8"><img alt="Figure 8 . NDCG evaluated up to 1 month after the last date of the training data. We report the the percentage difference compared to the baseline model without sequence modeling. The shaded area represents mean ± \pm standard deviation." height="425" src="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/figure-5.jpg" width="990"/><figcaption><span><span id="S4.F8.3">Figure 8</span>. </span><span id="S4.F8.4">NDCG evaluated up to 1 month after the last date of the training data. We report the the percentage difference compared to the baseline model without sequence modeling. The shaded area represents mean <math alttext="\pm" class="ltx_Math" display="inline" id="S4.F8.m2" intent=":literal"><semantics><mo>±</mo><annotation encoding="application/x-tex">\pm</annotation></semantics></math> standard deviation.</span></figcaption></figure>
+</section>
+<section id="S4.SS6">
+<h3><span>4.6. </span>Sensitivity to Distribution Shift (Q5)</h3>
+<div id="S4.SS6.p1">
+<p id="S4.SS6.p1.1">We investigate the sensitivity of our model to shifts in data distribution. In Figure <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#S4.F8"><span>8</span></a>, we report the relative NDCG improvement of <span id="S4.SS6.p1.1.1">JourneyFormer</span> compared to the baseline on evaluation data extending up to one month beyond the training data’s last date. We observe that <span id="S4.SS6.p1.1.2">JourneyFormer</span> consistently outperforms the baseline by a large margin (&gt;1.4% for majority of the dates) with only a minor decrease (&lt;0.1%) in NDCG over this period. This indicates that frequent retraining of the model is unnecessary, which is a desirable property for deployment in production environments.</p>
+</div>
+</section>
+<section id="S4.SS7">
+<h3><span>4.7. </span>Online Results (Q6)</h3>
+<div id="S4.SS7.p1">
+<p id="S4.SS7.p1.1">Offline NDCG tends to be biased towards bookers since our evaluation dataset only includes guests with booking labels, despite they representing only a small fraction of overall traffic. However, our primary goal is to convert non-bookers into bookers, which is hard to assess directly with offline data.</p>
+</div>
+<div id="S4.SS7.p2">
+<p id="S4.SS7.p2.1">To test whether the improvement of <span id="S4.SS7.p2.1.1">JourneyFormer</span> can generalize to non-bookers, we conducted online A/B experiments over a three-week period to compare <span id="S4.SS7.p2.1.2">JourneyFormer</span>-Long and <span id="S4.SS7.p2.1.3">JourneyFormer</span>-Full with the baseline, reported in Table <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#S5.T3"><span>3</span></a>. The results show significant increases for all the metrics, highlighting the benefits of incorporating both long-term and short-term sequences. Interestingly, short-term sequences bring more gains in booked nights and views than bookers. A possible explanation is that guests planning to book more nights tend to be more cautious and hesitant, leading them to explore a wider range of listings before finalizing their decision. By learning from the recent viewing activity, our model could help these hesitant guests in identifying their desired listings, ultimately leading to more booked nights.</p>
+</div>
+<div id="S4.SS7.p3">
+<p id="S4.SS7.p3.1">To further test whether <span id="S4.SS7.p3.1.1">JourneyFormer</span> can truly identify guest needs, we applied <span id="S4.SS7.p3.1.2">JourneyFormer</span>-Full to recommend relevant listings to guests in promotional emails. Similar to search ranking, email listing ranking has been iterated for many years with strict launching criteria—a model can only be launched if it demonstrates significant gains in online A/B testing. As such, the baseline is very strong. Table <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#S5.T4"><span>4</span></a> shows the results. <span id="S4.SS7.p3.1.3">JourneyFormer</span>-Full significantly increases the likelihood of users clicking into the promotional email by more than 5%, leading to more bookers and booked nights.</p>
+</div>
+</section>
+</section>
+<section id="S5">
+<h2><span>5. </span>Discussion</h2>
+<div id="S5.p1">
+<p id="S5.p1.1">We discuss several promising directions we explored but ultimately did not pursue, in addition to those covered in Section <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#S4.SS3"><span>4.3</span></a>. The rationale for not adopting these approaches is to avoid added complexity or due to the gap between online and offline metrics. We provide additional discussion and results in Appendix <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#A2"><span>B</span></a>.</p>
+</div>
+<figure id="S5.T3"><img alt="Table 3. Online A/B testing results compared with the previous production model, conducted over a three-week period. * indicates p &lt; 0.05, while ** means p &lt; 0.01. Note that the production model in Airbnb search ranking has been already ite" height="189" src="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/table-3.jpg" width="931"/><figcaption><span>Table 3. </span>Online A/B testing results compared with the previous production model, conducted over a three-week period. * indicates p &lt; 0.05, while ** means p &lt; 0.01. Note that the production model in Airbnb search ranking has been already iterated for many years. A 0.3% improvement is considered very significant (see our previous work (<a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-31">Tan et al., 2023</a>; <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-33">Tang et al., 2024</a>; <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-15">Haldar et al., 2019</a>)). </figcaption></figure>
+<figure id="S5.T4"><img alt="Table 4. Online A/B testing results compared with the previous production model in email listing ranking. Views suggest the email is clicked by the guest. * indicates p &lt; 0.05, while ** means p &lt; 0.01." height="535" src="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/table-4.jpg" width="931"/><figcaption><span>Table 4. </span>Online A/B testing results compared with the previous production model in email listing ranking. Views suggest the email is clicked by the guest. * indicates p &lt; 0.05, while ** means p &lt; 0.01. </figcaption></figure>
+<div id="S5.p2">
+<ul id="S5.I1">
+<li id="S5.I1.i1"><span>•</span>
+<div id="S5.I1.i1.p1">
+<p id="S5.I1.i1.p1.1"><span id="S5.I1.i1.p1.1.1">Larger or more sophisticated models.</span> We have tried increasing the number of parameters by expanding embedding table size, adding more layers, or increasing the embedding dimension. We have also explored various model architecture and tuning tweaks, such as different approaches to modeling the interactions among query, listing, and sequence embeddings, as well as different learning rate schedulers. While we did observe some offline improvements (which may also be difficult to translate to online metric gains), the improvements were marginal compared to the costs they introduced. They also increased code complexity, accumulating technical debt. In the end, we kept only the components that worked and maintained a simple model architecture.</p>
+</div></li>
+<li id="S5.I1.i2"><span>•</span>
+<div id="S5.I1.i2.p1">
+<p id="S5.I1.i2.p1.1"><span id="S5.I1.i2.p1.1.1">Real-time inference of sequence model.</span> Ignoring serving costs, this approach initially seemed very promising as it yields significant gains in offline ranking metrics compared to daily inference (more than 5% improvement). However, we found that this offline gain does not translate to online gain due to retargeting, where the ranker repeatedly shows listings that users viewed previously. This typically does not help guests make booking decisions, since they are already aware of the retargeted listings—despite the fact that it can significantly improve ranking metrics. This phenomenon differs from social networks, where repeatedly showing content is likely to enhance the likelihood of user engagement. Booking is often a decision involving hundreds of dollars; guests will not book a listing simply because it is shown many times. Rather, our ranking system should help guests identify their needs instead of retargeting.</p>
+</div></li>
+<li id="S5.I1.i3"><span>•</span>
+<div id="S5.I1.i3.p1">
+<p id="S5.I1.i3.p1.1"><span id="S5.I1.i3.p1.1.1">Adding search events into the sequence.</span> Another very frequent event in search ranking is search itself, which could reveal guest intent. However, in our initial trial, adding search events was not helpful, possibly due to the noisiness of search data.</p>
+</div></li>
+<li id="S5.I1.i4"><span>•</span>
+<div id="S5.I1.i4.p1">
+<p id="S5.I1.i4.p1.1"><span id="S5.I1.i4.p1.1.1">Multi-task learning.</span> In addition to booking labels, other guest actions can naturally be used as labels, such as views. This naturally leads to multi-task learning, where we predict both booking and view labels. We observed some decent gains in offline metrics with this approach. However, we found that these gains do not translate to online improvements. A possible reason is that view events are quite noisy—guests may view a listing simply for comparison purposes. Using views as labels does not help improve bookings. While this was our initial finding, we believe there is still potential and will continue exploring this direction in the future. From a data perspective, this approach is promising since we can leverage significantly more training data from sessions where guests only viewed but did not book.</p>
+</div></li>
+</ul>
+</div>
+<figure id="S5.T5"><img alt="Table 5. Offline NDCG of DIN-style interaction over JourneyFormer ." height="150" src="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/table-5.jpg" width="665"/><figcaption><span>Table 5. </span>Offline NDCG of DIN-style interaction over <span id="S5.T5.7">JourneyFormer</span>.</figcaption></figure>
+</section>
+<section id="S6">
+<h2><span>6. </span>Related Work</h2>
+<div id="S6.p1">
+<p id="S6.p1.1"><span id="S6.p1.1.1">Sequence modeling for recommendation &amp; ranking.</span> Modeling user behaviors with sequence modeling has gained increasing popularity in recommendation and ranking algorithms. Initial efforts in capturing user intentions involve the use of Markov chains (<a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-29">Shani et al., 2005</a>; <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-28">Salakhutdinov et al., 2007</a>; <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-16">He et al., 2017</a>; <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-17">He and McAuley, 2016</a>). With the emergence of deep learning, Recurrent neural networks like LSTM (<a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-13">Graves and Graves, 2012</a>) and GRU (<a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-7">Chung et al., 2014</a>) have been extensively studied for recommendation (<a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-21">Li et al., 2017</a>; <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-26">Quadrana et al., 2017</a>; <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-18">Hidasi et al., 2015</a>; <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-40">Yu et al., 2016</a>; <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-10">Donkers et al., 2017</a>). Concurrently, other neural architectures, such as convolutional networks (<a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-32">Tang and Wang, 2018</a>) and memory networks (<a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-5">Chen et al., 2018</a>), have also been used for sequence modeling. More recently, inspired by the remarkable success of self-attention in NLP (<a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-36">Vaswani et al., 2017</a>; <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-27">Radford et al., 2019</a>; <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-2">Brown et al., 2020</a>; <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-9">Devlin et al., 2019</a>; <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-34">Touvron et al., 2023</a>), Transformer-based sequence models have demonstrated impressive performance in recommendation (<a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-30">Sun et al., 2019</a>; <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-19">Kang and McAuley, 2018</a>; <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-38">Wu et al., 2020</a>; <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-20">Li et al., 2020</a>; <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-6">Chen et al., 2022</a>; <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-12">Fan et al., 2022</a>; <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-11">Du et al., 2023</a>; <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-42">Zhang et al., 2023</a>; <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-44">Zhou et al., 2023</a>). The existing research has mainly focused on recommendation without search queries, where user intent is primarily inferred from the user sequence. However, in search ranking scenarios, user intent is mainly conveyed through the queries they submit. Our work demonstrates that in search ranking platforms like Airbnb, sequence modeling can still play a crucial role as a complementary signal alongside queries. Furthermore, beyond the algorithmic and neural architecture enhancements explored in prior research, we have emphasized and implemented practical design considerations for production, successfully deploying and testing our model with real guest traffic.</p>
+</div>
+<div id="S6.p2">
+<p id="S6.p2.1"><span id="S6.p2.1.1">Relationship to other sequence models.</span> <span id="S6.p2.1.2">JourneyFormer</span> is closely related to other sequential recommendation models (<a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-19">Kang and McAuley, 2018</a>; <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-30">Sun et al., 2019</a>; <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-43">Zhou et al., 2018</a>) and here, we discuss its relationship to several popular variants.</p>
+</div>
+<div id="S6.p3">
+<p id="S6.p3.1">SASRec (Self-Attentive Sequential Recommendation) (<a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-19">Kang and McAuley, 2018</a>) uses a self-attention network to model user action sequences and predict the next action. <span id="S6.p3.1.1">JourneyFormer</span> adopts a similar approach to encode guest actions. The key differences are that <span id="S6.p3.1.2">JourneyFormer</span> uses a sequence consisting of heterogeneous event types and ranks listings within a candidate set instead of predicting the next item. We also introduce training strategies tailored to search ranking. In this sense, <span id="S6.p3.1.3">JourneyFormer</span> can be viewed as an adaptation of SASRec to the search ranking setting.</p>
+</div>
+<div id="S6.p4">
+<p id="S6.p4.1">BERT4Rec (<a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-30">Sun et al., 2019</a>) is similar to SASRec but uses a bidirectional encoder. While bidirectional encoding can theoretically better capture user sequences by allowing tokens to attend in both directions, we found it to be neutral for our particular application empirically. Furthermore, in industrial settings, modest architectural gains are often outweighed by training speed (e.g. batched-search acceleration in <span id="S6.p4.1.1">JourneyFormer</span>), especially at our data scale. For this reason, we did not use a bidirectional encoder in <span id="S6.p4.1.2">JourneyFormer</span>.</p>
+</div>
+<div id="S6.p5">
+<p id="S6.p5.1">DIN (Deep Interest Network) (<a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-43">Zhou et al., 2018</a>) is another sequential recommendation model, originally proposed for click-through rate prediction. The main difference is that DIN is target-aware: it explicitly models interactions between the target item and each event in the sequence. In contrast, <span id="S6.p5.1.1">JourneyFormer</span> only models interactions between target items and the user embedding output by the encoder. DIN-style interaction is an “early-fusion” approach and can be more expressive, whereas <span id="S6.p5.1.2">JourneyFormer</span> is closer to “late-fusion.” However, early-fusion is much more expensive at serving time because we cannot precompute encoder outputs offline; <span id="S6.p5.1.3">JourneyFormer</span> can precompute user embeddings offline (where the encoder is expensive) and use a lightweight ranking head online.</p>
+</div>
+<div id="S6.p6">
+<p id="S6.p6.1">Despite these serving challenges, we are interested in whether DIN-style interactions can improve offline performance. To test this idea, we project query and candidate features into the same representation space as other events and insert these “search events” into the sequence, allowing them to interact via self-attention. This does not exactly replicate DIN but approximates early fusion with minimal changes to data and model, and still allows us to reuse acceleration strategies such as batched searches. We call this variant DIN-style <span id="S6.p6.1.1">JourneyFormer</span>. Trained on the same number of sequences, it takes about 15% more time due to the longer sequences. As shown in Table <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#S5.T5"><span>5</span></a>, we observe a decent offline NDCG gain of <math alttext="+0.20\%" class="ltx_Math" display="inline" id="S6.p6.m1" intent=":literal"><semantics><mrow><mo>+</mo><mrow><mn>0.20</mn><mo>%</mo></mrow></mrow><annotation encoding="application/x-tex">+0.20\%</annotation></semantics></math>, even without hyperparameter tuning. We plan to further tune hyperparameters and investigate ways to reduce serving latency for this variant in future work.</p>
+</div>
+<div id="S6.p7">
+<p id="S6.p7.1"><span id="S6.p7.1.1">Search ranking in industry.</span> Search ranking is a key function in various search platforms including Google (<a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-45">Ziakis et al., 2019</a>), Amazon (<a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-3">Buyl et al., 2023</a>; <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-24">Missault et al., 2021</a>; <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-22">Luo et al., 2022</a>), eBay (<a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-35">Trotman et al., 2017</a>), Walmart (<a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-23">Magnani et al., 2022</a>), Pinterest (<a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-25">Pancha et al., 2022</a>; <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-39">Xia et al., 2023</a>) and Airbnb (<a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-31">Tan et al., 2023</a>; <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-14">Haldar et al., 2023</a>; <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-33">Tang et al., 2024</a>; <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-15">Haldar et al., 2019</a>; <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-1">Abdool et al., 2020</a>). Most of these solutions rely on hand-crafted features to represent user sequences. The Generative Recommender from Meta (<a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-41">Zhai et al., 2024</a>) introduces an industrial-scale sequence model, which is designed for recommendation rather than search ranking. Pinterest also utilizes Transformer to learn user embeddings (<a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-25">Pancha et al., 2022</a>; <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-39">Xia et al., 2023</a>). The embeddings are then served as features in ranking models. Our work differs significantly from theirs, as our model focuses on booking conversion rather than engagement. As a result, engagement signals—such as listing views—often reflect exploratory behavior and can be quite noisy, making it challenging to infer true booking intent. Additionally, the complexity of guest events differ greatly from those on social media platforms.</p>
+</div>
+</section>
+<section id="S7">
+<h2><span>7. </span>Conclusions and Future Work</h2>
+<div id="S7.p1">
+<p id="S7.p1.1">In this work, we introduce <span id="S7.p1.1.1">JourneyFormer</span>, a sequence modeling solution for encoding Airbnb guest journeys. Deploying sequence models at Airbnb presents unique challenges, and we discuss how we address these production hurdles, including data selection, label attribution, and training and model serving considerations. Through extensive offline and online A/B testing, we demonstrate that <span id="S7.p1.1.2">JourneyFormer</span> significantly boosts key business metrics, helping guests find what they want and enabling hosts to more efficiently match with guests. In the future, in addition to the directions in Section <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#S5"><span>5</span></a>, we plan to enhance our serving infrastructure to allow sequence embeddings to be updated every few hours, and incorporate additional guest events into the sequence, such as wishlist creations, payment page visits, and map movements. Finally, we plan to explore reinforcement learning with sequence model.</p>
+</div>
+</section>
+<div><h2 id="works-cited">References</h2><p id="reference-1">[1]
+<span><span>M. Abdool, M. Haldar, P. Ramanathan, T. Sax, L. Zhang, A. Manaswala, L. Yang, B. Turnbull, Q. Zhang, and T. Legrand</span>
+</span>
+<span><span>Managing diversity in airbnb search</span>.
+</span>
+<span>In <span>Proceedings of the 26th ACM SIGKDD International Conference on Knowledge Discovery &amp; Data Mining</span>,
+</span>
+<span><span>pp. 2952–2960</span>.
+</span>
+</p><p id="reference-2">[2]
+<span><span>T. Brown, B. Mann, N. Ryder, M. Subbiah, J. D. Kaplan, P. Dhariwal, A. Neelakantan, P. Shyam, G. Sastry, A. Askell, <span>et al.</span></span>
+</span>
+<span><span>Language models are few-shot learners</span>.
+</span>
+<span><span>Advances in neural information processing systems</span> <span>33</span>, <span>pp. 1877–1901</span>.
+</span>
+</p><p id="reference-3">[3]
+<span><span>M. Buyl, P. Missault, and P. Sondag</span>
+</span>
+<span><span>Rankformer: listwise learning-to-rank using listwide labels</span>.
+</span>
+<span>In <span>Proceedings of the 29th ACM SIGKDD Conference on Knowledge Discovery and Data Mining</span>,
+</span>
+<span><span>pp. 3762–3773</span>.
+</span>
+</p><p id="reference-4">[4]
+<span><span>Z. Cao, T. Qin, T. Liu, M. Tsai, and H. Li</span>
+</span>
+<span><span>Learning to rank: from pairwise approach to listwise approach</span>.
+</span>
+<span>In <span>Proceedings of the 24th international conference on Machine learning</span>,
+</span>
+<span><span>pp. 129–136</span>.
+</span>
+</p><p id="reference-5">[5]
+<span><span>X. Chen, H. Xu, Y. Zhang, J. Tang, Y. Cao, Z. Qin, and H. Zha</span>
+</span>
+<span><span>Sequential recommendation with user memory networks</span>.
+</span>
+<span>In <span>Proceedings of the eleventh ACM international conference on web search and data mining</span>,
+</span>
+<span><span>pp. 108–116</span>.
+</span>
+</p><p id="reference-6">[6]
+<span><span>Y. Chen, Z. Liu, J. Li, J. McAuley, and C. Xiong</span>
+</span>
+<span><span>Intent contrastive learning for sequential recommendation</span>.
+</span>
+<span>In <span>Proceedings of the ACM web conference 2022</span>,
+</span>
+<span><span>pp. 2172–2182</span>.
+</span>
+</p><p id="reference-7">[7]
+<span><span>J. Chung, C. Gulcehre, K. Cho, and Y. Bengio</span>
+</span>
+<span><span>Empirical evaluation of gated recurrent neural networks on sequence modeling</span>.
+</span>
+<span><span>arXiv preprint arXiv:1412.3555</span>.
+</span>
+</p><p id="reference-8">[8]
+<span><span>B. Coleman, W. Kang, M. Fahrbach, R. Wang, L. Hong, E. Chi, and D. Cheng</span>
+</span>
+<span><span>Unified embedding: battle-tested feature representations for web-scale ml systems</span>.
+</span>
+<span><span>Advances in Neural Information Processing Systems</span> <span>36</span>, <span>pp. 56234–56255</span>.
+</span>
+</p><p id="reference-9">[9]
+<span><span>J. Devlin, M. Chang, K. Lee, and K. Toutanova</span>
+</span>
+<span><span>Bert: pre-training of deep bidirectional transformers for language understanding</span>.
+</span>
+<span>In <span>Proceedings of the 2019 conference of the North American chapter of the association for computational linguistics: human language technologies, volume 1 (long and short papers)</span>,
+</span>
+<span><span>pp. 4171–4186</span>.
+</span>
+</p><p id="reference-10">[10]
+<span><span>T. Donkers, B. Loepp, and J. Ziegler</span>
+</span>
+<span><span>Sequential user-based recurrent neural network recommendations</span>.
+</span>
+<span>In <span>Proceedings of the eleventh ACM conference on recommender systems</span>,
+</span>
+<span><span>pp. 152–160</span>.
+</span>
+</p><p id="reference-11">[11]
+<span><span>X. Du, H. Yuan, P. Zhao, J. Qu, F. Zhuang, G. Liu, Y. Liu, and V. S. Sheng</span>
+</span>
+<span><span>Frequency enhanced hybrid attention network for sequential recommendation</span>.
+</span>
+<span>In <span>Proceedings of the 46th International ACM SIGIR conference on research and development in information retrieval</span>,
+</span>
+<span><span>pp. 78–88</span>.
+</span>
+</p><p id="reference-12">[12]
+<span><span>Z. Fan, Z. Liu, Y. Wang, A. Wang, Z. Nazari, L. Zheng, H. Peng, and P. S. Yu</span>
+</span>
+<span><span>Sequential recommendation via stochastic self-attention</span>.
+</span>
+<span>In <span>Proceedings of the ACM web conference 2022</span>,
+</span>
+<span><span>pp. 2036–2047</span>.
+</span>
+</p><p id="reference-13">[13]
+<span><span>A. Graves and A. Graves</span>
+</span>
+<span><span>Long short-term memory</span>.
+</span>
+<span><span>Supervised sequence labelling with recurrent neural networks</span>, <span>pp. 37–45</span>.
+</span>
+</p><p id="reference-14">[14]
+<span><span>M. Haldar, M. Abdool, L. He, D. Davis, H. Gao, and S. Katariya</span>
+</span>
+<span><span>Learning to rank diversely at airbnb</span>.
+</span>
+<span>In <span>Proceedings of the 32nd ACM International Conference on Information and Knowledge Management</span>,
+</span>
+<span><span>pp. 4609–4615</span>.
+</span>
+</p><p id="reference-15">[15]
+<span><span>M. Haldar, M. Abdool, P. Ramanathan, T. Xu, S. Yang, H. Duan, Q. Zhang, N. Barrow-Williams, B. C. Turnbull, B. M. Collins, <span>et al.</span></span>
+</span>
+<span><span>Applying deep learning to airbnb search</span>.
+</span>
+<span>In <span>proceedings of the 25th ACM SIGKDD international conference on knowledge discovery &amp; Data Mining</span>,
+</span>
+<span><span>pp. 1927–1935</span>.
+</span>
+</p><p id="reference-16">[16]
+<span><span>R. He, W. Kang, and J. McAuley</span>
+</span>
+<span><span>Translation-based recommendation</span>.
+</span>
+<span>In <span>Proceedings of the eleventh ACM conference on recommender systems</span>,
+</span>
+<span><span>pp. 161–169</span>.
+</span>
+</p><p id="reference-17">[17]
+<span><span>R. He and J. McAuley</span>
+</span>
+<span><span>Fusing similarity models with markov chains for sparse sequential recommendation</span>.
+</span>
+<span>In <span>2016 IEEE 16th international conference on data mining (ICDM)</span>,
+</span>
+<span><span>pp. 191–200</span>.
+</span>
+</p><p id="reference-18">[18]
+<span><span>B. Hidasi, A. Karatzoglou, L. Baltrunas, and D. Tikk</span>
+</span>
+<span><span>Session-based recommendations with recurrent neural networks</span>.
+</span>
+<span><span>arXiv preprint arXiv:1511.06939</span>.
+</span>
+</p><p id="reference-19">[19]
+<span><span>W. Kang and J. McAuley</span>
+</span>
+<span><span>Self-attentive sequential recommendation</span>.
+</span>
+<span>In <span>2018 IEEE international conference on data mining (ICDM)</span>,
+</span>
+<span><span>pp. 197–206</span>.
+</span>
+</p><p id="reference-20">[20]
+<span><span>J. Li, Y. Wang, and J. McAuley</span>
+</span>
+<span><span>Time interval aware self-attention for sequential recommendation</span>.
+</span>
+<span>In <span>Proceedings of the 13th international conference on web search and data mining</span>,
+</span>
+<span><span>pp. 322–330</span>.
+</span>
+</p><p id="reference-21">[21]
+<span><span>J. Li, P. Ren, Z. Chen, Z. Ren, T. Lian, and J. Ma</span>
+</span>
+<span><span>Neural attentive session-based recommendation</span>.
+</span>
+<span>In <span>Proceedings of the 2017 ACM on Conference on Information and Knowledge Management</span>,
+</span>
+<span><span>pp. 1419–1428</span>.
+</span>
+</p><p id="reference-22">[22]
+<span><span>C. Luo, W. Headden, N. Avudaiappan, H. Jiang, T. Cao, Q. Yin, Y. Gao, Z. Li, R. Goutam, H. Zhang, <span>et al.</span></span>
+</span>
+<span><span>Query attribute recommendation at amazon search</span>.
+</span>
+<span>In <span>Proceedings of the 16th ACM conference on recommender systems</span>,
+</span>
+<span><span>pp. 506–508</span>.
+</span>
+</p><p id="reference-23">[23]
+<span><span>A. Magnani, F. Liu, S. Chaidaroon, S. Yadav, P. Reddy Suram, A. Puthenputhussery, S. Chen, M. Xie, A. Kashi, T. Lee, <span>et al.</span></span>
+</span>
+<span><span>Semantic retrieval at walmart</span>.
+</span>
+<span>In <span>Proceedings of the 28th ACM SIGKDD Conference on Knowledge Discovery and Data Mining</span>,
+</span>
+<span><span>pp. 3495–3503</span>.
+</span>
+</p><p id="reference-24">[24]
+<span><span>P. Missault, A. de Myttenaere, A. Radler, and P. Sondag</span>
+</span>
+<span><span>Addressing cold start with dataset transfer in e-commerce learning to rank</span>.
+</span>
+</p><p id="reference-25">[25]
+<span><span>N. Pancha, A. Zhai, J. Leskovec, and C. Rosenberg</span>
+</span>
+<span><span>Pinnerformer: sequence modeling for user representation at pinterest</span>.
+</span>
+<span>In <span>Proceedings of the 28th ACM SIGKDD conference on knowledge discovery and data mining</span>,
+</span>
+<span><span>pp. 3702–3712</span>.
+</span>
+</p><p id="reference-26">[26]
+<span><span>M. Quadrana, A. Karatzoglou, B. Hidasi, and P. Cremonesi</span>
+</span>
+<span><span>Personalizing session-based recommendations with hierarchical recurrent neural networks</span>.
+</span>
+<span>In <span>proceedings of the Eleventh ACM Conference on Recommender Systems</span>,
+</span>
+<span><span>pp. 130–137</span>.
+</span>
+</p><p id="reference-27">[27]
+<span><span>A. Radford, J. Wu, R. Child, D. Luan, D. Amodei, I. Sutskever, <span>et al.</span></span>
+</span>
+<span><span>Language models are unsupervised multitask learners</span>.
+</span>
+<span><span>OpenAI blog</span> <span>1</span> (<span>8</span>), <span>pp. 9</span>.
+</span>
+</p><p id="reference-28">[28]
+<span><span>R. Salakhutdinov, A. Mnih, and G. Hinton</span>
+</span>
+<span><span>Restricted boltzmann machines for collaborative filtering</span>.
+</span>
+<span>In <span>Proceedings of the 24th international conference on Machine learning</span>,
+</span>
+<span><span>pp. 791–798</span>.
+</span>
+</p><p id="reference-29">[29]
+<span><span>G. Shani, D. Heckerman, and R. I. Brafman</span>
+</span>
+<span><span>An mdp-based recommender system</span>.
+</span>
+<span><span>Journal of machine Learning research</span> <span>6</span> (<span>Sep</span>), <span>pp. 1265–1295</span>.
+</span>
+</p><p id="reference-30">[30]
+<span><span>F. Sun, J. Liu, J. Wu, C. Pei, X. Lin, W. Ou, and P. Jiang</span>
+</span>
+<span><span>BERT4Rec: sequential recommendation with bidirectional encoder representations from transformer</span>.
+</span>
+<span>In <span>Proceedings of the 28th ACM international conference on information and knowledge management</span>,
+</span>
+<span><span>pp. 1441–1450</span>.
+</span>
+</p><p id="reference-31">[31]
+<span><span>C. H. Tan, A. Chan, M. Haldar, J. Tang, X. Liu, M. Abdool, H. Gao, L. He, and S. Katariya</span>
+</span>
+<span><span>Optimizing airbnb search journey with multi-task learning</span>.
+</span>
+<span>In <span>Proceedings of the 29th ACM SIGKDD Conference on Knowledge Discovery and Data Mining</span>,
+</span>
+<span><span>pp. 4872–4881</span>.
+</span>
+</p><p id="reference-32">[32]
+<span><span>J. Tang and K. Wang</span>
+</span>
+<span><span>Personalized top-n sequential recommendation via convolutional sequence embedding</span>.
+</span>
+<span>In <span>Proceedings of the eleventh ACM international conference on web search and data mining</span>,
+</span>
+<span><span>pp. 565–573</span>.
+</span>
+</p><p id="reference-33">[33]
+<span><span>J. Tang, H. Gao, L. He, and S. Katariya</span>
+</span>
+<span><span>Multi-objective learning to rank by model distillation</span>.
+</span>
+<span>In <span>Proceedings of the 30th ACM SIGKDD Conference on Knowledge Discovery and Data Mining</span>,
+</span>
+<span><span>pp. 5783–5792</span>.
+</span>
+</p><p id="reference-34">[34]
+<span><span>H. Touvron, T. Lavril, G. Izacard, X. Martinet, M. Lachaux, T. Lacroix, B. Rozière, N. Goyal, E. Hambro, F. Azhar, <span>et al.</span></span>
+</span>
+<span><span>Llama: open and efficient foundation language models</span>.
+</span>
+<span><span>arXiv preprint arXiv:2302.13971</span>.
+</span>
+</p><p id="reference-35">[35]
+<span><span>A. Trotman, J. Degenhardt, and S. Kallumadi</span>
+</span>
+<span><span>The architecture of ebay search.</span>.
+</span>
+<span>In <span>eCOM@ SIGIR</span>,
+</span>
+<span><span>pp. 88</span>.
+</span>
+</p><p id="reference-36">[36]
+<span><span>A. Vaswani, N. Shazeer, N. Parmar, J. Uszkoreit, L. Jones, A. N. Gomez, Ł. Kaiser, and I. Polosukhin</span>
+</span>
+<span><span>Attention is all you need</span>.
+</span>
+<span><span>Advances in neural information processing systems</span> <span>30</span>.
+</span>
+</p><p id="reference-37">[37]
+<span><span>R. Wang, B. Fu, G. Fu, and M. Wang</span>
+</span>
+<span><span>Deep &amp; cross network for ad click predictions</span>.
+</span>
+<span>In <span>Proceedings of the ADKDD’</span>,
+</span>
+<span><span>pp. 1–7</span>.
+</span>
+</p><p id="reference-38">[38]
+<span><span>L. Wu, S. Li, C. Hsieh, and J. Sharpnack</span>
+</span>
+<span><span>SSE-pt: sequential recommendation via personalized transformer</span>.
+</span>
+<span>In <span>Proceedings of the 14th ACM conference on recommender systems</span>,
+</span>
+<span><span>pp. 328–337</span>.
+</span>
+</p><p id="reference-39">[39]
+<span><span>X. Xia, P. Eksombatchai, N. Pancha, D. D. Badani, P. Wang, N. Gu, S. V. Joshi, N. Farahpour, Z. Zhang, and A. Zhai</span>
+</span>
+<span><span>TransAct: transformer-based realtime user action model for recommendation at pinterest</span>.
+</span>
+<span><span>Proceedings of the 29th ACM SIGKDD Conference on Knowledge Discovery and Data Mining</span>.
+</span>
+<span>External Links: <span><a href="https://api.semanticscholar.org/CorpusID:258999754">Link</a></span>
+</span>
+</p><p id="reference-40">[40]
+<span><span>F. Yu, Q. Liu, S. Wu, L. Wang, and T. Tan</span>
+</span>
+<span><span>A dynamic recurrent model for next basket recommendation</span>.
+</span>
+<span>In <span>Proceedings of the 39th International ACM SIGIR conference on Research and Development in Information Retrieval</span>,
+</span>
+<span><span>pp. 729–732</span>.
+</span>
+</p><p id="reference-41">[41]
+<span><span>J. Zhai, L. Liao, X. Liu, Y. Wang, R. Li, X. Cao, L. Gao, Z. Gong, F. Gu, M. He, Y. Lu, and Y. Shi</span>
+</span>
+<span><span>Actions speak louder than words: trillion-parameter sequential transducers for generative recommendations</span>.
+</span>
+<span><span>ArXiv</span> <span>abs/2402.17152</span>.
+</span>
+<span>External Links: <span><a href="https://api.semanticscholar.org/CorpusID:268033327">Link</a></span>
+</span>
+</p><p id="reference-42">[42]
+<span><span>Y. Zhang, X. Wang, H. Chen, and W. Zhu</span>
+</span>
+<span><span>Adaptive disentangled transformer for sequential recommendation</span>.
+</span>
+<span>In <span>Proceedings of the 29th ACM SIGKDD conference on knowledge discovery and data mining</span>,
+</span>
+<span><span>pp. 3434–3445</span>.
+</span>
+</p><p id="reference-43">[43]
+<span><span>G. Zhou, X. Zhu, C. Song, Y. Fan, H. Zhu, X. Ma, Y. Yan, J. Jin, H. Li, and K. Gai</span>
+</span>
+<span><span>Deep interest network for click-through rate prediction</span>.
+</span>
+<span>In <span>Proceedings of the 24th ACM SIGKDD international conference on knowledge discovery &amp; data mining</span>,
+</span>
+<span><span>pp. 1059–1068</span>.
+</span>
+</p><p id="reference-44">[44]
+<span><span>P. Zhou, Q. Ye, Y. Xie, J. Gao, S. Wang, J. B. Kim, C. You, and S. Kim</span>
+</span>
+<span><span>Attention calibration for transformer-based sequential recommendation</span>.
+</span>
+<span>In <span>Proceedings of the 32nd ACM international conference on information and knowledge management</span>,
+</span>
+<span><span>pp. 3595–3605</span>.
+</span>
+</p><p id="reference-45">[45]
+<span><span>C. Ziakis, M. Vlachopoulou, T. Kyrkoudis, and M. Karagkiozidou</span>
+</span>
+<span><span>Important factors for improving google search rank</span>.
+</span>
+<span><span>Future internet</span> <span>11</span> (<span>2</span>), <span>pp. 32</span>.
+</span>
+</p></div>
+<section id="A1">
+<h2><span>Appendix A </span>Additional Details</h2>
+<section id="A1.SS1">
+<h3><span>A.1. </span>Unified Embedding Table</h3>
+<div id="A1.SS1.p1">
+<p id="A1.SS1.p1.1">We used a unified embedding table with <math alttext="1.6\times 10^{7}" class="ltx_Math" display="inline" id="A1.SS1.p1.m1" intent=":literal"><semantics><mrow><mn>1.6</mn><mo lspace="0.222em" rspace="0.222em">×</mo><msup><mn>10</mn><mn>7</mn></msup></mrow><annotation encoding="application/x-tex">1.6\times 10^{7}</annotation></semantics></math> entries and embedding dimension 1. For each example, we used 6 seeds for the listing ID, 4 seeds for the host ID, and 2 seeds for the s2cell ID. Since we have 14 s2cell levels, this yields <math alttext="14\times 2=28" class="ltx_Math" display="inline" id="A1.SS1.p1.m2" intent=":literal"><semantics><mrow><mrow><mn>14</mn><mo lspace="0.222em" rspace="0.222em">×</mo><mn>2</mn></mrow><mo>=</mo><mn>28</mn></mrow><annotation encoding="application/x-tex">14\times 2=28</annotation></semantics></math> s2cell-related entries retrieved from the unified embedding table.</p>
+</div>
+<div id="A1.SS1.p2">
+<p id="A1.SS1.p2.1">Based on (<a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#reference-8">Coleman et al., 2023</a>), inter-feature collisions can be mitigated by a single-layer neural network because different features are processed by different model parameters. Here, we focus on the intra-feature collision rates for each ID feature given a table of size <math alttext="N=1.6\times 10^{7}" class="ltx_Math" display="inline" id="A1.SS1.p2.m1" intent=":literal"><semantics><mrow><mi>N</mi><mo>=</mo><mrow><mn>1.6</mn><mo lspace="0.222em" rspace="0.222em">×</mo><msup><mn>10</mn><mn>7</mn></msup></mrow></mrow><annotation encoding="application/x-tex">N=1.6\times 10^{7}</annotation></semantics></math>:</p>
+</div>
+<div id="A1.SS1.p3">
+<ul id="A1.I1">
+<li id="A1.I1.i1"><span>•</span>
+<div id="A1.I1.i1.p1">
+<p id="A1.I1.i1.p1.1"><span id="A1.I1.i1.p1.1.1">Listing ID:</span> With approximately <math alttext="M=10^{7}" class="ltx_Math" display="inline" id="A1.I1.i1.p1.m1" intent=":literal"><semantics><mrow><mi>M</mi><mo>=</mo><msup><mn>10</mn><mn>7</mn></msup></mrow><annotation encoding="application/x-tex">M=10^{7}</annotation></semantics></math> listings, the load factor is</p>
+<p><math alttext="\lambda=\frac{M}{N}=0.625." class="ltx_Math" display="block" id="A1.Ex1.m1" intent=":literal"><semantics><mrow><mrow><mi>λ</mi><mo>=</mo><mfrac><mi>M</mi><mi>N</mi></mfrac><mo>=</mo><mn>0.625</mn></mrow><mo lspace="0em">.</mo></mrow><annotation encoding="application/x-tex">\lambda=\frac{M}{N}=0.625.</annotation></semantics></math></p>
+<p id="A1.I1.i1.p1.2">The expected collision rate (fraction of entries that collide) under the balls-into-bins approximation is</p>
+<p><math alttext="1-\frac{1}{\lambda}\left(1-e^{-\lambda}\right)\approx 0.256." class="ltx_Math" display="block" id="A1.Ex2.m1" intent=":literal"><semantics><mrow><mrow><mrow><mn>1</mn><mo>−</mo><mrow><mfrac><mn>1</mn><mi>λ</mi></mfrac><mo lspace="0em" rspace="0em">​</mo><mrow><mo>(</mo><mrow><mn>1</mn><mo>−</mo><msup><mi>e</mi><mrow><mo>−</mo><mi>λ</mi></mrow></msup></mrow><mo>)</mo></mrow></mrow></mrow><mo>≈</mo><mn>0.256</mn></mrow><mo lspace="0em">.</mo></mrow><annotation encoding="application/x-tex">1-\frac{1}{\lambda}\left(1-e^{-\lambda}\right)\approx 0.256.</annotation></semantics></math></p>
+<p id="A1.I1.i1.p1.3">With 6 seeds, the probability that all 6 retrieved embeddings collide is</p>
+<p><math alttext="0.256^{6}\approx 2.9\times 10^{-4}." class="ltx_Math" display="block" id="A1.Ex3.m1" intent=":literal"><semantics><mrow><mrow><msup><mn>0.256</mn><mn>6</mn></msup><mo>≈</mo><mrow><mn>2.9</mn><mo lspace="0.222em" rspace="0.222em">×</mo><msup><mn>10</mn><mrow><mo>−</mo><mn>4</mn></mrow></msup></mrow></mrow><mo lspace="0em">.</mo></mrow><annotation encoding="application/x-tex">0.256^{6}\approx 2.9\times 10^{-4}.</annotation></semantics></math></p>
+</div></li>
+<li id="A1.I1.i2"><span>•</span>
+<div id="A1.I1.i2.p1">
+<p id="A1.I1.i2.p1.1"><span id="A1.I1.i2.p1.1.1">Host ID:</span> With approximately <math alttext="M=5\times 10^{6}" class="ltx_Math" display="inline" id="A1.I1.i2.p1.m1" intent=":literal"><semantics><mrow><mi>M</mi><mo>=</mo><mrow><mn>5</mn><mo lspace="0.222em" rspace="0.222em">×</mo><msup><mn>10</mn><mn>6</mn></msup></mrow></mrow><annotation encoding="application/x-tex">M=5\times 10^{6}</annotation></semantics></math> hosts, the load factor is</p>
+<p><math alttext="\lambda=\frac{M}{N}=0.3125." class="ltx_Math" display="block" id="A1.Ex4.m1" intent=":literal"><semantics><mrow><mrow><mi>λ</mi><mo>=</mo><mfrac><mi>M</mi><mi>N</mi></mfrac><mo>=</mo><mn>0.3125</mn></mrow><mo lspace="0em">.</mo></mrow><annotation encoding="application/x-tex">\lambda=\frac{M}{N}=0.3125.</annotation></semantics></math></p>
+<p id="A1.I1.i2.p1.2">The expected collision rate is</p>
+<p><math alttext="1-\frac{1}{\lambda}\left(1-e^{-\lambda}\right)\approx 0.144." class="ltx_Math" display="block" id="A1.Ex5.m1" intent=":literal"><semantics><mrow><mrow><mrow><mn>1</mn><mo>−</mo><mrow><mfrac><mn>1</mn><mi>λ</mi></mfrac><mo lspace="0em" rspace="0em">​</mo><mrow><mo>(</mo><mrow><mn>1</mn><mo>−</mo><msup><mi>e</mi><mrow><mo>−</mo><mi>λ</mi></mrow></msup></mrow><mo>)</mo></mrow></mrow></mrow><mo>≈</mo><mn>0.144</mn></mrow><mo lspace="0em">.</mo></mrow><annotation encoding="application/x-tex">1-\frac{1}{\lambda}\left(1-e^{-\lambda}\right)\approx 0.144.</annotation></semantics></math></p>
+<p id="A1.I1.i2.p1.3">With 4 seeds, the probability that all 4 retrieved embeddings collide is</p>
+<p><math alttext="0.144^{4}\approx 4.3\times 10^{-4}." class="ltx_Math" display="block" id="A1.Ex6.m1" intent=":literal"><semantics><mrow><mrow><msup><mn>0.144</mn><mn>4</mn></msup><mo>≈</mo><mrow><mn>4.3</mn><mo lspace="0.222em" rspace="0.222em">×</mo><msup><mn>10</mn><mrow><mo>−</mo><mn>4</mn></mrow></msup></mrow></mrow><mo lspace="0em">.</mo></mrow><annotation encoding="application/x-tex">0.144^{4}\approx 4.3\times 10^{-4}.</annotation></semantics></math></p>
+</div></li>
+<li id="A1.I1.i3"><span>•</span>
+<div id="A1.I1.i3.p1">
+<p id="A1.I1.i3.p1.1"><span id="A1.I1.i3.p1.1.1">s2cell ID:</span> With approximately <math alttext="M=10^{6}" class="ltx_Math" display="inline" id="A1.I1.i3.p1.m1" intent=":literal"><semantics><mrow><mi>M</mi><mo>=</mo><msup><mn>10</mn><mn>6</mn></msup></mrow><annotation encoding="application/x-tex">M=10^{6}</annotation></semantics></math> s2cells, the load factor is</p>
+<p><math alttext="\lambda=\frac{M}{N}=0.0625." class="ltx_Math" display="block" id="A1.Ex7.m1" intent=":literal"><semantics><mrow><mrow><mi>λ</mi><mo>=</mo><mfrac><mi>M</mi><mi>N</mi></mfrac><mo>=</mo><mn>0.0625</mn></mrow><mo lspace="0em">.</mo></mrow><annotation encoding="application/x-tex">\lambda=\frac{M}{N}=0.0625.</annotation></semantics></math></p>
+<p id="A1.I1.i3.p1.2">The expected collision rate is</p>
+<p><math alttext="1-\frac{1}{\lambda}\left(1-e^{-\lambda}\right)\approx 0.030." class="ltx_Math" display="block" id="A1.Ex8.m1" intent=":literal"><semantics><mrow><mrow><mrow><mn>1</mn><mo>−</mo><mrow><mfrac><mn>1</mn><mi>λ</mi></mfrac><mo lspace="0em" rspace="0em">​</mo><mrow><mo>(</mo><mrow><mn>1</mn><mo>−</mo><msup><mi>e</mi><mrow><mo>−</mo><mi>λ</mi></mrow></msup></mrow><mo>)</mo></mrow></mrow></mrow><mo>≈</mo><mn>0.030</mn></mrow><mo lspace="0em">.</mo></mrow><annotation encoding="application/x-tex">1-\frac{1}{\lambda}\left(1-e^{-\lambda}\right)\approx 0.030.</annotation></semantics></math></p>
+<p id="A1.I1.i3.p1.3">With 2 seeds, the probability that both retrieved embeddings collide is</p>
+<p><math alttext="0.030^{2}\approx 9.0\times 10^{-4}." class="ltx_Math" display="block" id="A1.Ex9.m1" intent=":literal"><semantics><mrow><mrow><msup><mn>0.030</mn><mn>2</mn></msup><mo>≈</mo><mrow><mn>9.0</mn><mo lspace="0.222em" rspace="0.222em">×</mo><msup><mn>10</mn><mrow><mo>−</mo><mn>4</mn></mrow></msup></mrow></mrow><mo lspace="0em">.</mo></mrow><annotation encoding="application/x-tex">0.030^{2}\approx 9.0\times 10^{-4}.</annotation></semantics></math></p>
+</div></li>
+</ul>
+</div>
+<div id="A1.SS1.p4">
+<p id="A1.SS1.p4.1">The overall collision rate is in the <math alttext="10^{-4}" class="ltx_Math" display="inline" id="A1.SS1.p4.m1" intent=":literal"><semantics><msup><mn>10</mn><mrow><mo>−</mo><mn>4</mn></mrow></msup><annotation encoding="application/x-tex">10^{-4}</annotation></semantics></math> level. With multiple seeds, each entity aggregates embeddings from <math alttext="s" class="ltx_Math" display="inline" id="A1.SS1.p4.m2" intent=":literal"><semantics><mi>s</mi><annotation encoding="application/x-tex">s</annotation></semantics></math> independently hashed slots, significantly reducing the effective impact of any single collision.</p>
+</div>
+<div id="A1.SS1.p5">
+<p id="A1.SS1.p5.1">To better understand how collisions affect performance, we plot the impact of the unified embedding table size and embedding dimension in Figure <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#A1.F9"><span>9</span></a>. We observe slight NDCG gains as we increase the number of entries or the dimension, but overly large tables lead to NDCG degradation due to overfitting. Since larger tables also increase training and inference cost, we use a table with dimension 1 and 16M entries for the production model as a balance.</p>
+</div>
+<figure id="A1.F9"><img alt="Figure 9 . NDCG w.r.t. the unified emebdding table size (left) and embedding table dimension (right). We report the percentage difference compared to the overall NDCG. We used a table with dimension 1 and 16M entries for the model tested in" height="791" src="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/figure-6.jpg" width="1017"/><figcaption><span><span id="A1.F9.3">Figure 9</span>. </span><span id="A1.F9.4">NDCG w.r.t. the unified emebdding table size (left) and embedding table dimension (right). We report the percentage difference compared to the overall NDCG. We used a table with dimension 1 and 16M entries for the model tested in production.</span></figcaption></figure>
+</section>
+<section id="A1.SS2">
+<h3><span>A.2. </span>A/B Testing</h3>
+<div id="A1.SS2.p1">
+<p id="A1.SS2.p1.1">We use an internal A/B testing platform at Airbnb. Traffic is assigned at the guest-ID level using a fixed hashing seed, which deterministically routes each guest to a treatment or control model. Each test usually runs for three weeks.</p>
+</div>
+<div id="A1.SS2.p2">
+<p id="A1.SS2.p2.1">During each experiment, we monitor a broad set of metrics, including key business metrics, guardrail metrics, and debugging metrics. A model can launch if it improves key business metrics with a p-value below 0.05 and does not violate guardrails. With all these requirements, new ranking model launches are very rare and typically require extensive cross-organization review to ensure the best experience for both guests and hosts.</p>
+</div>
+</section>
+</section>
+<section id="A2">
+<h2><span>Appendix B </span>Additional Discussions &amp; Results</h2>
+<section id="A2.SS1">
+<h3><span>B.1. </span>Label Attribution Window</h3>
+<figure id="A2.F10"><img alt="Figure 10 . The left figure shows the average number of searches (capped at 4 per day) as a function of days before booking. We compute the statistics for days 0–6 directly from our training data and extrapolate for days 6–30 by fitting a p" height="397" src="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/figure-7.jpg" width="973"/><figcaption><span><span id="A2.F10.3">Figure 10</span>. </span><span id="A2.F10.4">The left figure shows the average number of searches (capped at 4 per day) as a function of days before booking. We compute the statistics for days 0–6 directly from our training data and extrapolate for days 6–30 by fitting a power-law distribution. The right figure shows the corresponding cumulative percentage of searches over the 30 days preceding a booking, combining both observed and extrapolated values.</span></figcaption></figure>
+<div id="A2.SS1.p1">
+<p id="A2.SS1.p1.1">Recall that we use a 7-day attribution window. Here, we discuss the trade-offs of using larger or smaller windows. For accuracy, we base this analysis on our training data rather than raw logs, since multiple capping and filtering steps have been applied in our training data. In Figure <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#A2.F10"><span>10</span></a>, we compute the average number of searches (capped at 4 per day) for days 0–6 before a booking using the training data, then fit a power-law distribution to estimate searches for days 6–30. The results show that a 7-day window covers over 90% of searches, as most guests make booking decisions within a few days.</p>
+</div>
+<div id="A2.SS1.p2">
+<p id="A2.SS1.p2.1">A larger attribution window may capture more relevant searches and potentially improve performance. However, it also increases data sparsity and significantly lengthens training time, since we batch searches across days. We therefore choose a 7-day window as a practical trade-off between effectiveness and efficiency.</p>
+</div>
+<figure id="A2.F11"><img alt="Figure 11 . NDCG w.r.t. the total number of events. We report the percentage difference compared to the overall NDCG. To reduce variance and better visualize trends, we bucket sequence lengths, since some lengths are extremely rare. For ins" height="503" src="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/figure-8.jpg" width="654"/><figcaption><span><span id="A2.F11.3">Figure 11</span>. </span><span id="A2.F11.4">NDCG w.r.t. the total number of events. We report the percentage difference compared to the overall NDCG. To reduce variance and better visualize trends, we bucket sequence lengths, since some lengths are extremely rare. For instance, it is very uncommon for a guest to book a listing after fewer than two prior events (i.e., no past bookings and a decision made after viewing fewer than two listings in the past 21 days). After bucketization, each bucket contains at least 1% of the data.</span></figcaption></figure>
+</section>
+<section id="A2.SS2">
+<h3><span>B.2. </span>Cold Start Problem</h3>
+<div id="A2.SS2.p1">
+<p id="A2.SS2.p1.1">Cold-start is a long-standing challenge in recommendation and ranking. Here, we focus on offline NDCG across guest segments with different sequence lengths (Figure <a href="https://theopinard.github.io/vrac/articles/journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling/#A2.F11"><span>11</span></a>). To reduce variance and better visualize trends, we bucket sequence lengths, since some lengths are extremely rare. For instance, it is very uncommon for a guest to book a listing after fewer than two prior events (i.e., no past bookings and a decision made after viewing fewer than two listings in the past 21 days). After bucketization, each bucket contains at least 1% of the data.</p>
+</div>
+<div id="A2.SS2.p2">
+<p id="A2.SS2.p2.1">We observe that offline performance degrades for both very short histories (cold-start) and very long histories (likely due to increased noise in long sequences). A key limitation of this analysis is that NDCG is computed only on sequences that end in a booking, which represent about 5% of all sequences. It is difficult to assess the impact on the remaining 95% of non-booking sequences, since we lack labels for them. In future work, we plan to develop better evaluation strategies for cold-start.</p>
+</div>
+</section>
+</section>
+</article></body></html>

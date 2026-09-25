@@ -69,6 +69,11 @@
       "source_type": "arxiv",
       "source_url": "https://arxiv.org/abs/2607.26073",
       "slug": "guess-where-you-go-generative-next-point-of-interest-recommendation-in-amap"
+    },
+    {
+      "source_type": "arxiv",
+      "source_url": "https://arxiv.org/html/2606.19108v1",
+      "slug": "journeyformer-encoding-airbnb-guest-journey-with-sequence-modeling"
     }
   ]
 }
